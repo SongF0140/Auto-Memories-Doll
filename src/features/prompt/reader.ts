@@ -1,12 +1,26 @@
-/**
- * 提示词读取器
- *
- * 调用关系：
- * - 被调用：features/prompt/manager.ts
- * - 调用：lib/storage/* （读取提示词文件）
- *
- * 作用：
- * - 从本地存储读取提示词
- * - 解析提示词模板和变量
- * - 加载个性标签和偏好参数
- */
+import { PromptManager } from "./manager";
+import { PromptTemplate } from "../../lib/prompt/template-manager";
+
+export class PromptReader {
+  private manager: PromptManager;
+
+  constructor() {
+    this.manager = new PromptManager();
+  }
+
+  getTemplate(templateId: string): PromptTemplate | undefined {
+    return this.manager.getTemplate(templateId);
+  }
+
+  getAllTemplates(): PromptTemplate[] {
+    return this.manager.listTemplates();
+  }
+
+  getAvailableTemplateIds(): string[] {
+    return this.manager.listTemplates().map(t => t.id);
+  }
+
+  hasTemplate(templateId: string): boolean {
+    return this.manager.getTemplate(templateId) !== undefined;
+  }
+}

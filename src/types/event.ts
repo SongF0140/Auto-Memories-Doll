@@ -1,12 +1,31 @@
-/**
- * 事件数据类型定义
- *
- * 调用关系：
- * - 袂引用：features/ingest/* （数据接入）
- * - 袂引用：server/pipelines/* （JSON 处理流水线）
- *
- * 作用：
- * - 定义标准化事件对象类型
- * - 定义事件来源类型（chat, ingest, manual, mcp, skill）
- * - 定义事件字段约束和校验
- */
+export type EventSource = "chat" | "ingest" | "manual" | "mcp" | "skill" | "unknown";
+
+export type EventType = 
+  | "memory.created"
+  | "memory.updated"
+  | "memory.deleted"
+  | "memory.accessed"
+  | "chat.completed"
+  | "ingest.received"
+  | "audit.completed"
+  | "vector.updated"
+  | "graph.updated";
+
+export type SystemEvent = {
+  id: string;
+  type: EventType;
+  source: EventSource;
+  timestamp: string;
+  payload: Record<string, any>;
+  metadata?: Record<string, any>;
+};
+
+export type InputEvent = {
+  id: string;
+  source: EventSource;
+  sourceType: EventSource;
+  content: string;
+  timestamp: string;
+  sessionId?: string;
+  metadata?: Record<string, any>;
+};

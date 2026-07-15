@@ -1,11 +1,82 @@
-/**
+/*
  * 全局样式
  *
- * 调用关系：
- * - 袂引用：app/layout.tsx （全局布局）
- *
- * 作用：
- * - 定义全局 CSS 样式
- * - 配置 Tailwind CSS 基础样式
- * - 定义通用样式变量和类
+ * 设计原则参考 killaislop.com：
+ * - 一个主色，克制的强调色
+ * - 系统字体栈，不默认 Inter
+ * - 小圆角统一，避免毛玻璃和渐变
+ * - 层级由字号、字重、留白决定
+ * - 动效仅用于真实的状态变化
  */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #fafafa;
+  --color-surface: #ffffff;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #525252;
+  --color-text-tertiary: #737373;
+  --color-border: #e5e5e5;
+  --color-border-strong: #d4d4d4;
+  --color-accent: #171717;
+  --color-accent-text: #ffffff;
+  --color-error: #991b1b;
+  --color-error-bg: #fef2f2;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+/* 聚焦样式：统一用 outline，不用 ring 光晕 */
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline-offset: -2px;
+}
+
+::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

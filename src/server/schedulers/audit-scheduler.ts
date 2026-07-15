@@ -1,12 +1,27 @@
-/**
- * 审计调度器
- *
- * 调用关系：
- * - 调用：server/workers/audit-worker.ts （审计任务）
- * - 调用：features/audit/queue.ts （待审计队列）
- *
- * 作用：
- * - 定期调度审计任务
- * - 管理审计队列的消费
- * - 处理任务的重试和失败恢复
- */
+import { AuditWorker } from "../workers/audit-worker";
+
+export class AuditScheduler {
+  private worker: AuditWorker;
+  private intervalId: number | null = null;
+
+  constructor() {
+    this.worker = new AuditWorker();
+  }
+
+  start(): void {
+    this.worker.start();
+    
+    this.intervalId = setInterval(async () => {
+      await this.worker.retryFailedEvents();
+    }, 60000) as unknown as number;
+  }
+
+  stop(): void {
+    this.worker.stop();
+    
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+}

@@ -1,20 +1,62 @@
-/**
- * 快轨对话入口 API 路由
- *
- * 调用关系：
- * - 接收：前端 POST 请求（messages, mode, sessionId）
- * - 调用：lib/ai/* （Vercel AI SDK 与模型适配）
- * - 调用：features/chat/* （快轨逻辑）
- * - 返回：流式输出（Streaming Response）
- *
- * 作用：
- * - 处理即时对话请求
- * - 维持低延迟流式回复
- * - 只消费标准化事件的即时字段，不直接修改最终落盘文件
- * - 调用 Mini LLM 进行快轨抽取、分类和摘要
- *
- * 约束：
- * - 请求体 schema：{ messages: Message[], mode: string, sessionId: string, ... }
- * - 响应体 schema：{ stream: ReadableStream, ... }
- * - 错误码表：需要定义
- */
+import { NextRequest, NextResponse } from "next/server";
+import { ChatHandler } from "../../../features/chat/handler";
+import { ChatClassifier } from "../../../features/chat/classifier";
+import { ChatExtractor } from "../../../features/chat/extractor";
+import { MemoryService } from "../../../server/services/memory-service";
+import { ChatMessage, ChatMode } from "../../../types/api";
+
+export async function POST(request: NextRequest) {
+  try {
+    const { messages, mode = "chat", sessionId } = await request.json();
+    
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return NextResponse.json(
+        { error: "messages is required and must be an array" },
+        { status: 400 }
+      );
+    }
+
+    const handler = new ChatHandler();
+    const classifier = new ChatClassifier();
+    const extractor = new ChatExtractor();
+    const memoryService = new MemoryService();
+
+    const lastMessage = messages[messages.length - 1];
+    const intent = classifier.classify(lastMessage.content);
+
+    if (intent.type === "memory_create") {
+      const memoryRecord = extractor.buildMemoryRecord(
+        "chat",
+        "chat",
+        messages
+      );
+      const memoryId = await memoryService.createMemory(
+        memoryRecord.source,
+        memoryRecord.sourceType,
+        memoryRecord.title,
+        memoryRecord.content,
+        memoryRecord.summary,
+        memoryRecord.tags
+      );
+      memoryService.close();
+      handler.close();
+      
+      return NextResponse.json({
+        content: `已保存记忆: ${memoryRecord.title}`,
+        memoryId,
+      });
+    }
+
+    const result = await handler.generateResponse(messages, mode as ChatMode, sessionId);
+    
+    handler.close();
+    memoryService.close();
+
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { error: (error as Error).message },
+      { status: 500 }
+    );
+  }
+}

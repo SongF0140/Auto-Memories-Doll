@@ -1,12 +1,106 @@
-/**
- * 向量索引管理器
- *
- * 调用关系：
- * - 被调用：lib/vector/generator.ts
- * - 调用：lib/storage/* （向量索引持久化）
- *
- * 作用：
- * - 管理向量索引的创建、更新、删除
- * - 维护向量索引的持久化（本地文件系统）
- * - 支持索引重建和同步
- */
+import { VectorRecord } from "../../types/memory";
+import { getDatabasePath } from "../storage/path-resolver";
+import Database from "better-sqlite3";
+
+export class VectorIndex {
+  private db: Database.Database;
+
+  constructor() {
+    this.db = new Database(getDatabasePath());
+    this.init();
+  }
+
+  private init(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS vector_records (
+        memoryId TEXT PRIMARY KEY,
+        embedding BLOB,
+        model TEXT,
+        dimensions INTEGER,
+        updatedAt TEXT
+      )
+    `);
+  }
+
+  create(record: VectorRecord): void {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO vector_records (memoryId, embedding, model, dimensions, updatedAt)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      record.memoryId,
+      JSON.stringify(record.embedding),
+      record.model,
+      record.dimensions,
+      record.updatedAt
+    );
+  }
+
+  read(memoryId: string): VectorRecord | null {
+    const stmt = this.db.prepare("SELECT * FROM vector_records WHERE memoryId = ?");
+    const row = stmt.get(memoryId) as any;
+    if (!row) return null;
+    
+    return {
+      memoryId: row.memoryId,
+      embedding: JSON.parse(row.embedding),
+      model: row.model,
+      dimensions: row.dimensions,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  update(record: VectorRecord): void {
+    this.create(record);
+  }
+
+  delete(memoryId: string): void {
+    const stmt = this.db.prepare("DELETE FROM vector_records WHERE memoryId = ?");
+    stmt.run(memoryId);
+  }
+
+  search(embedding: number[], limit: number): { memoryId: string; similarity: number }[] {
+    const stmt = this.db.prepare("SELECT * FROM vector_records");
+    const rows = stmt.all() as any[];
+
+    const results = rows.map(row => {
+      const rowEmbedding = JSON.parse(row.embedding as string);
+      const similarity = this.cosineSimilarity(embedding, rowEmbedding);
+      return { memoryId: row.memoryId, similarity };
+    });
+
+    return results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
+  }
+
+  list(): VectorRecord[] {
+    const stmt = this.db.prepare("SELECT * FROM vector_records");
+    const rows = stmt.all() as any[];
+    return rows.map(row => ({
+      memoryId: row.memoryId,
+      embedding: JSON.parse(row.embedding),
+      model: row.model,
+      dimensions: row.dimensions,
+      updatedAt: row.updatedAt,
+    }));
+  }
+
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+    
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}

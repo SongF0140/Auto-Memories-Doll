@@ -1,14 +1,52 @@
-/**
- * 审计任务执行器
- *
- * 调用关系：
- * - 被调用：server/services/audit-service.ts
- * - 调用：features/audit/* （审计处理）
- * - 调用：lib/storage/* （文件写回）
- *
- * 作用：
- * - 执行审计任务
- * - 处理差异比对、冲突解决、版本写回
- * - 管理任务的重试和失败恢复
- * - 记录失败上下文到 memory-root/archive/failures/
- */
+import { Orchestrator } from "../services/orchestrator";
+import { RETRY_DELAYS } from "../../config/constants";
+
+export class AuditWorker {
+  private orchestrator: Orchestrator;
+  private isRunning: boolean = false;
+
+  constructor() {
+    this.orchestrator = new Orchestrator();
+  }
+
+  async start(): Promise<void> {
+    this.isRunning = true;
+    await this.processLoop();
+  }
+
+  stop(): void {
+    this.isRunning = false;
+  }
+
+  private async processLoop(): Promise<void> {
+    while (this.isRunning) {
+      try {
+        await this.orchestrator.processQueue();
+      } catch (error) {
+        console.error("Audit worker error:", error);
+      }
+      await this.sleep(10000);
+    }
+  }
+
+  async retryFailedEvents(): Promise<void> {
+    const stmt = this.orchestrator["memoryService"]["db"].prepare(
+      "SELECT * FROM pending_events WHERE status = 'failed' AND retryCount < 3"
+    );
+    const rows = stmt.all() as any[];
+
+    for (const row of rows) {
+      const delay = RETRY_DELAYS[row.retryCount] || 60000;
+      await this.sleep(delay);
+      
+      const stmtUpdate = this.orchestrator["memoryService"]["db"].prepare(
+        "UPDATE pending_events SET status = 'pending' WHERE eventId = ?"
+      );
+      stmtUpdate.run(row.eventId);
+    }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}

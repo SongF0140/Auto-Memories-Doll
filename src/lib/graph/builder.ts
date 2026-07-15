@@ -1,12 +1,42 @@
-/**
- * 关系构建器
- *
- * 调用关系：
- * - 被调用：lib/graph/manager.ts
- * - 调用：lib/ai/* （关系提取）
- *
- * 作用：
- * - 从记忆内容中提取关系边
- * - 生成 GraphEdge（from, to, relation, weight）
- * - 计算关系权重
- */
+import { GraphEdge } from "../../types/memory";
+import { getCurrentTime } from "../utils/date";
+
+export const buildGraphEdge = (
+  from: string,
+  to: string,
+  relation: string,
+  weight: number = 1
+): GraphEdge => {
+  return {
+    from,
+    to,
+    relation,
+    weight,
+    updatedAt: getCurrentTime(),
+  };
+};
+
+export const calculateRelationWeight = (
+  frequency: number,
+  recencyScore: number
+): number => {
+  return frequency * 0.5 + recencyScore * 0.5;
+};
+
+export const extractRelations = (
+  content: string,
+  memoryId: string,
+  existingMemoryIds: string[]
+): GraphEdge[] => {
+  const edges: GraphEdge[] = [];
+  
+  existingMemoryIds.forEach(otherId => {
+    if (otherId === memoryId) return;
+    
+    if (content.includes(otherId)) {
+      edges.push(buildGraphEdge(memoryId, otherId, "mentions", 0.8));
+    }
+  });
+
+  return edges;
+};

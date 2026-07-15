@@ -1,21 +1,52 @@
-/**
- * 记忆读写入口 API 路由
- *
- * 调用关系：
- * - 接收：前端 POST/GET 请求（记忆 CRUD 操作）
- * - 调用：features/memory/* （记忆处理、分类、评分）
- * - 调用：lib/storage/* （本地存储与文件写回）
- * - 调用：lib/vector/* （向量索引与检索）
- * - 调用：lib/graph/* （图索引与关系图）
- *
- * 作用：
- * - 处理记忆的创建、读取、更新、删除操作
- * - 调用记忆处理、分类、评分逻辑
- * - 写入待审计队列（不直接写入最终文件）
- *
- * 约束：
- * - 写入模式：默认采用合并写入，冲突时进入审计持久化层处理
- * - 请求体 schema：需要定义
- * - 响应体 schema：需要定义
- * - 错误码表：需要定义
- */
+import { NextRequest, NextResponse } from "next/server";
+import { MemoryService } from "../../../server/services/memory-service";
+import { MemoryExtractor } from "../../../features/memory/extractor";
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const page = parseInt(searchParams.get("page") || "1");
+  const pageSize = parseInt(searchParams.get("pageSize") || "20");
+  const tag = searchParams.get("tag");
+  const sortBy = searchParams.get("sortBy") || "updatedAt";
+  const sortOrder = searchParams.get("sortOrder") || "desc";
+
+  const service = new MemoryService();
+  
+  try {
+    const result = service.listMemories();
+    return NextResponse.json(result);
+  } finally {
+    service.close();
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const { source, sourceType, content, title, tags } = await request.json();
+  
+  if (!content) {
+    return NextResponse.json({ error: "content is required" }, { status: 400 });
+  }
+
+  const service = new MemoryService();
+  const extractor = new MemoryExtractor();
+  
+  try {
+    const memoryRecord = extractor.extractFromStructuredData(
+      source || "manual",
+      (sourceType || "manual") as any,
+      { title: title || "", content, tags }
+    );
+    
+    const memoryId = await service.createMemory(
+      memoryRecord.source,
+      memoryRecord.sourceType,
+      memoryRecord.title,
+      memoryRecord.content,
+      memoryRecord.summary,
+      memoryRecord.tags
+    );
+    return NextResponse.json({ ...memoryRecord, id: memoryId });
+  } finally {
+    service.close();
+  }
+}

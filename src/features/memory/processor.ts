@@ -1,16 +1,59 @@
-/**
- * 记忆处理器
- *
- * 调用关系：
- * - 被调用：app/api/memory/route.ts
- * - 被调用：server/pipelines/* （后台加工流水线）
- * - 调用：features/memory/classifier.ts （记忆分类）
- * - 调用：features/memory/scorer.ts （记忆评分）
- * - 调用：features/memory/extractor.ts （记忆提取）
- *
- * 作用：
- * - 处理记忆的创建、更新、删除
- * - 调用分类、评分、提取逻辑
- * - 生成候选记忆和标签索引
- * - 将结果写入待审计队列
- */
+import { MemoryRecord } from "../../types/memory";
+import { calculateHeatScore } from "../../config/scoring.config";
+import { MemoryService } from "../../server/services/memory-service";
+import { readProfileTags } from "../../lib/storage/index-writer";
+
+export class MemoryProcessor {
+  private memoryService: MemoryService;
+
+  constructor() {
+    this.memoryService = new MemoryService();
+  }
+
+  async processMemory(memory: MemoryRecord): Promise<MemoryRecord> {
+    const allMemories = this.memoryService.listMemories();
+    
+    const maxAccessCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+    const maxExposureCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+    
+    const profileTags = await readProfileTags();
+    
+    const heatScore = calculateHeatScore(
+      memory.accessCount,
+      memory.updatedAt,
+      memory.accessCount,
+      memory.tags,
+      profileTags,
+      maxAccessCount,
+      maxExposureCount
+    );
+
+    return { ...memory, heatScore };
+  }
+
+  async updateHeatScores(): Promise<void> {
+    const allMemories = this.memoryService.listMemories();
+    const profileTags = await readProfileTags();
+    
+    const maxAccessCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+    const maxExposureCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+
+    for (const memory of allMemories) {
+      const heatScore = calculateHeatScore(
+        memory.accessCount,
+        memory.updatedAt,
+        memory.accessCount,
+        memory.tags,
+        profileTags,
+        maxAccessCount,
+        maxExposureCount
+      );
+      
+      this.memoryService.updateMemory(memory.id, { heatScore });
+    }
+  }
+
+  close(): void {
+    this.memoryService.close();
+  }
+}

@@ -1,19 +1,28 @@
-/**
- * 提示词更新入口 API 路由
- *
- * 调用关系：
- * - 接收：前端 POST 请求（提示词更新）
- * - 调用：features/prompt/* （提示词读写与回写）
- * - 调用：lib/prompt/* （提示词模板与处理）
- * - 调用：lib/storage/* （本地存储与文件写回）
- *
- * 作用：
- * - 处理提示词的读取和更新操作
- * - 管理个性标签和偏好参数
- * - 同步更新 profile.md
- *
- * 约束：
- * - 请求体 schema：需要定义
- * - 响应体 schema：需要定义
- * - 错误码表：需要定义
- */
+import { NextRequest, NextResponse } from "next/server";
+import { PromptManager } from "../../../features/prompt/manager";
+
+export async function GET() {
+  const manager = new PromptManager();
+  const templates = manager.listTemplates();
+  return NextResponse.json(templates);
+}
+
+export async function POST(request: NextRequest) {
+  const { id, name, content, variables, description } = await request.json();
+  
+  if (!id || !content) {
+    return NextResponse.json(
+      { error: "id and content are required" },
+      { status: 400 }
+    );
+  }
+
+  const manager = new PromptManager();
+  
+  try {
+    manager.addTemplate({ id, name: name || id, content, variables: variables || [], description: description || "" });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+  }
+}

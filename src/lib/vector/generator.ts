@@ -1,12 +1,25 @@
-/**
- * 向量生成器
- *
- * 调用关系：
- * - 被调用：features/memory/processor.ts
- * - 调用：外部 Embedding API（text-embedding-3-small）
- *
- * 作用：
- * - 生成记忆内容的 embedding
- * - 使用 text-embedding-3-small 模型（默认）
- * - 生成 VectorRecord 并同步向量索引
- */
+import { ModelAdapter } from "../ai/model-adapter";
+import { apiConfig } from "../../config/api.config";
+import { VectorRecord } from "../../types/memory";
+import { getCurrentTime } from "../utils/date";
+
+export const generateEmbedding = async (text: string): Promise<number[]> => {
+  const response = await ModelAdapter.generateEmbedding(text);
+  return response.embedding;
+};
+
+export const buildVectorRecord = async (memoryId: string, text: string): Promise<VectorRecord> => {
+  const embedding = await generateEmbedding(text);
+  
+  return {
+    memoryId,
+    embedding,
+    model: apiConfig.embedding.name,
+    dimensions: apiConfig.embedding.dimensions,
+    updatedAt: getCurrentTime(),
+  };
+};
+
+export const isEmbeddingEmpty = (embedding: number[]): boolean => {
+  return embedding.length === 0 || embedding.every(v => v === 0);
+};

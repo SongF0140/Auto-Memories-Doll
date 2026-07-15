@@ -1,13 +1,32 @@
-/**
- * 提示词构建器
- *
- * 调用关系：
- * - 被调用：features/prompt/manager.ts
- * - 调用：lib/prompt/template-manager.ts
- *
- * 作用：
- * - 构建完整的提示词
- * - 注入记忆检索结果（摘要、来源、引用路径）
- * - 注入个性标签和偏好参数
- * - 处理变量替换和格式化
- */
+import { TemplateManager } from "./template-manager";
+
+export const buildChatPrompt = (
+  messages: { role: string; content: string }[],
+  memoryContent: string = "",
+  templateManager: TemplateManager
+): string => {
+  const chatMemory = templateManager.render("chat-memory", {
+    memory: memoryContent,
+    question: messages[messages.length - 1]?.content || "",
+  });
+
+  const conversationHistory = messages
+    .slice(-10)
+    .map(msg => `${msg.role}: ${msg.content}`)
+    .join("\n");
+
+  return `${chatMemory}\n\n对话历史：\n${conversationHistory}\n\n助手回答：`;
+};
+
+export const buildMemoryExtractionPrompt = (text: string, templateManager: TemplateManager): string => {
+  return templateManager.render("memory-extraction", { text });
+};
+
+export const buildConflictResolutionPrompt = (
+  existing: string,
+  candidate: string,
+  field: string,
+  templateManager: TemplateManager
+): string => {
+  return templateManager.render("conflict-resolution", { existing, candidate, field });
+};

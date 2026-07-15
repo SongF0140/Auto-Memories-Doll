@@ -1,11 +1,155 @@
-/**
+/*
  * 组件样式
  *
- * 调用关系：
- * - 袂引用：各组件
- *
- * 作用：
- * - 定义组件特定的 CSS 样式
- * - 配置组件主题和样式变量
- * - 提供可复用的样式类
+ * 设计原则参考 killaislop.com：
+ * - 小圆角、细边框、克制的阴影
+ * - 状态变化用文字和字重表达
+ * - 避免图标容器、渐变、大弥散阴影
  */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.5;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background-color: var(--color-accent);
+    color: var(--color-accent-text);
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  }
+
+  .btn:hover:not(:disabled) {
+    background-color: #404040;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border-strong);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-bg);
+    border-color: var(--color-text-tertiary);
+  }
+
+  .input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-text);
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    transition: border-color 150ms ease;
+  }
+
+  .input:hover {
+    border-color: var(--color-text-tertiary);
+  }
+
+  .input:focus {
+    border-color: var(--color-text);
+    outline: none;
+  }
+
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+  }
+
+  .nav-tab {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    border-radius: 6px;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .nav-tab:hover {
+    color: var(--color-text);
+    background-color: var(--color-bg);
+  }
+
+  .nav-tab-active {
+    color: var(--color-accent-text);
+    background-color: var(--color-accent);
+  }
+
+  .nav-tab-active:hover {
+    color: var(--color-accent-text);
+    background-color: #404040;
+  }
+
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--color-text-tertiary);
+    font-size: 0.875rem;
+  }
+
+  .loading-dots {
+    display: inline-flex;
+    gap: 0.25rem;
+  }
+
+  .loading-dots span {
+    width: 6px;
+    height: 6px;
+    background-color: var(--color-text-tertiary);
+    border-radius: 50%;
+    animation: bounce 1.4s ease-in-out infinite both;
+  }
+
+  .loading-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+
+  .loading-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+  }
+
+  @keyframes bounce {
+    0%, 80%, 100% {
+      transform: scale(0.6);
+      opacity: 0.6;
+    }
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+}

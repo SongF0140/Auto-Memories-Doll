@@ -1,13 +1,22 @@
-/**
- * 全局布局
- *
- * 调用关系：
- * - 引用：components/common/* （公共组件）
- * - 引用：styles/* （全局样式）
- *
- * 作用：
- * - 定义应用的全局布局结构
- * - 提供统一的页面容器和导航
- * - 管理全局状态上下文（React Context）
- * - 处理跨页面持久状态
- */
+import type { Metadata } from "next";
+import "../styles/globals.css";
+import "../styles/components.css";
+
+export const metadata: Metadata = {
+  title: "Auto-Memories-Doll",
+  description: "A memory management system for AI conversations.",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="zh-CN">
+      <body className="antialiased">
+        {children}
+      </body>
+    </html>
+  );
+}

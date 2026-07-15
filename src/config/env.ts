@@ -1,12 +1,7 @@
-/**
- * 环境配置
- *
- * 调用关系：
- * - 袂引用：lib/ai/* （AI 模型适配）
- * - 袂引用：lib/storage/* （本地存储）
- *
- * 作用：
- * - 管理环境变量配置
- * - 提供配置加载和校验
- * - 支持不同环境（开发、生产）的配置切换
- */
+export const env = {
+  NODE_ENV: process.env.NODE_ENV || "development",
+  MODEL_API_KEY: process.env.MODEL_API_KEY || "",
+  MODEL_BASE_URL: process.env.MODEL_BASE_URL || "http://localhost:8080",
+  MEMORY_ROOT: process.env.MEMORY_ROOT || "./memory-root",
+  PORT: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+};

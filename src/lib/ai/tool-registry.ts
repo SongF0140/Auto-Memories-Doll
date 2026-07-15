@@ -1,12 +1,27 @@
-/**
- * 工具注册表
- *
- * 调用关系：
- * - 被调用：lib/ai/tool-caller.ts
- * - 调用：各业务功能模块
- *
- * 作用：
- * - 注册和管理可用工具
- * - 提供工具查找和调用接口
- * - 管理工具权限和约束
- */
+import { ToolCaller } from "./tool-caller";
+
+export const registerDefaultTools = (): void => {
+  ToolCaller.registerTool("search_memory", async (args: Record<string, any>) => {
+    const query = String(args.query || "");
+    const limit = Number(args.limit) || 10;
+    return { query, limit, results: [] as any[] };
+  });
+
+  ToolCaller.registerTool("create_memory", async (args: Record<string, any>) => {
+    const title = String(args.title || "");
+    const content = String(args.content || "");
+    const tags = Array.isArray(args.tags) ? args.tags : [];
+    return { success: true, title, content, tags };
+  });
+
+  ToolCaller.registerTool("update_memory", async (args: Record<string, any>) => {
+    const id = String(args.id || "");
+    const updates = args.updates as Record<string, any> || {};
+    return { success: true, id, updates };
+  });
+
+  ToolCaller.registerTool("delete_memory", async (args: Record<string, any>) => {
+    const id = String(args.id || "");
+    return { success: true, id };
+  });
+};

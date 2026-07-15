@@ -1,11 +1,38 @@
-/**
- * 记忆评分器
- *
- * 调用关系：
- * - 被调用：features/memory/processor.ts
- *
- * 作用：
- * - 计算记忆的热度分数（heatScore）
- * - 公式：heatScore = accessCount * 0.35 + recencyScore * 0.25 + exposureScore * 0.25 + tagAffinityScore * 0.15
- * - 归一化各项指标到 0-1 区间
- */
+import { MemoryRecord } from "../../types/memory";
+import { calculateHeatScore } from "../../config/scoring.config";
+import { readProfileTags } from "../../lib/storage/index-writer";
+
+export class MemoryScorer {
+  async calculateScore(memory: MemoryRecord, allMemories: MemoryRecord[]): Promise<number> {
+    const maxAccessCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+    const maxExposureCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+    
+    const profileTags = await readProfileTags();
+    
+    return calculateHeatScore(
+      memory.accessCount,
+      memory.updatedAt,
+      memory.accessCount,
+      memory.tags,
+      profileTags,
+      maxAccessCount,
+      maxExposureCount
+    );
+  }
+
+  calculateRecencyScore(updatedAt: string): number {
+    const hoursSinceUpdate = (Date.now() - new Date(updatedAt).getTime()) / (1000 * 60 * 60);
+    return Math.exp(-0.01 * hoursSinceUpdate);
+  }
+
+  calculateAccessScore(accessCount: number, maxAccessCount: number): number {
+    if (maxAccessCount <= 0) return 0;
+    return Math.log(1 + accessCount) / Math.log(1 + maxAccessCount);
+  }
+
+  calculateTagAffinityScore(tags: string[], profileTags: string[]): number {
+    const intersection = tags.filter(t => profileTags.includes(t)).length;
+    const union = tags.length + profileTags.length - intersection;
+    return union > 0 ? intersection / union : 0;
+  }
+}

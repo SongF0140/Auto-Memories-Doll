@@ -1,17 +1,72 @@
-/**
- * 记忆数据类型定义
- *
- * 调用关系：
- * - 被引用：features/memory/* （记忆处理）
- * - 被引用：lib/memory/* （记忆抽象）
- * - 被引用：lib/storage/* （本地存储）
- * - 袂引用：lib/vector/* （向量索引）
- * - 袂引用：lib/graph/* （图谱关系）
- *
- * 作用：
- * - 定义 MemoryRecord 主记录类型
- * - 定义 VectorRecord 向量索引类型
- * - 定义 GraphEdge 关系边类型
- * - 定义 MemoryVersion 历史快照类型
- * - 提供类型校验和约束
- */
+export type MemoryRecord = {
+  id: string;
+  version: number;
+  source: string;
+  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill";
+  title: string;
+  content: string;
+  summary: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  accessedAt: string;
+  accessCount: number;
+  heatScore: number;
+  vectorId?: string;
+  graphLinks: string[];
+};
+
+export type VectorRecord = {
+  memoryId: string;
+  embedding: number[];
+  model: string;
+  dimensions: number;
+  updatedAt: string;
+};
+
+export type GraphEdge = {
+  from: string;
+  to: string;
+  relation: string;
+  weight: number;
+  updatedAt: string;
+};
+
+export type MemoryVersion = {
+  versionId: string;
+  memoryId: string;
+  snapshotPath: string;
+  createdAt: string;
+  reason: string;
+};
+
+export type EmbeddingModelConfig = {
+  name: string;
+  dimensions: number;
+  maxTokens: number;
+  batchSize: number;
+};
+
+export type PendingEvent = {
+  eventId: string;
+  memoryId: string;
+  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill";
+  candidate: string;
+  changedFields: string[];
+  createdAt: string;
+  status: "pending" | "processing" | "done" | "failed";
+  retryCount: number;
+};
+
+export type ConflictRecord = {
+  conflictId: string;
+  memoryId: string;
+  eventId: string;
+  field: string;
+  existingValue: string;
+  candidateValue: string;
+  status: "pending" | "resolved_accept" | "resolved_keep" | "resolved_manual";
+  resolution?: string;
+  createdAt: string;
+  resolvedAt?: string;
+};

@@ -1,16 +1,54 @@
-/**
- * 索引写回器
- *
- * 调用关系：
- * - 被调用：features/audit/auditor.ts
- * - 调用：lib/storage/file-manager.ts
- *
- * 作用：
- * - 更新 index-map.md（目录总索引、父子关系、标签入口、引用路径）
- * - 更新 profile.md（个性标签、偏好参数、检索偏置）
- * - 更新 Agent.md 文件（短时记忆要点）
- * - 维护索引的同步和一致性
- */
+import { writeFile, readFile } from "./file-manager";
+import { getIndexMapPath, getProfilePath } from "./path-resolver";
+import { MemoryRecord } from "../../types/memory";
 
-// TODO: 实现索引写回器逻辑
-export {}
+export const updateIndexMap = async (memories: MemoryRecord[]): Promise<void> => {
+  const topics = new Map<string, string[]>();
+  const tags = new Set<string>();
+
+  memories.forEach(memory => {
+    const topic = memory.sourceType;
+    if (!topics.has(topic)) {
+      topics.set(topic, []);
+    }
+    topics.get(topic)!.push(memory.id);
+    memory.tags.forEach(tag => tags.add(tag));
+  });
+
+  let content = "# 索引地图\n\n";
+  content += "## 目录索引\n";
+  topics.forEach((memoryIds, topic) => {
+    content += `\n### ${topic}\n`;
+    memoryIds.forEach(id => {
+      content += `- [${id}](./notes/${topic}/${id}.md)\n`;
+    });
+  });
+
+  content += "\n## 标签索引\n";
+  tags.forEach(tag => {
+    content += `- ${tag}\n`;
+  });
+
+  await writeFile(getIndexMapPath(), content);
+};
+
+export const updateProfile = async (tags: string[]): Promise<void> => {
+  let content = "# 个性标签\n\n";
+  content += "## 偏好标签\n";
+  tags.forEach(tag => {
+    content += `- ${tag}\n`;
+  });
+  await writeFile(getProfilePath(), content);
+};
+
+export const readProfileTags = async (): Promise<string[]> => {
+  const content = await readFile(getProfilePath());
+  const lines = content.split("\n");
+  const tags: string[] = [];
+  lines.forEach(line => {
+    if (line.startsWith("- ")) {
+      tags.push(line.substring(2).trim());
+    }
+  });
+  return tags;
+};

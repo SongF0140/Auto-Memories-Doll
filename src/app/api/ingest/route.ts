@@ -1,21 +1,45 @@
-/**
- * 后台数据接入入口 API 路由
- *
- * 调用关系：
- * - 接收：外部数据源接入请求（MCP、skills、浏览器侧采集等）
- * - 调用：features/ingest/* （后台输入接入与解析）
- * - 调用：server/pipelines/* （JSON 处理流水线）
- * - 调用：features/memory/* （记忆处理、分类、评分）
- *
- * 作用：
- * - 接收归一化后的事件对象
- * - 清洗、分类、打分
- * - 生成记忆 JSON、标签索引和向量索引
- * - 将处理结果写入待审计队列
- *
- * 约束：
- * - 输入归一化：src/server/pipelines/* 负责将多源输入整理为标准事件对象
- * - 请求体 schema：需要定义
- * - 响应体 schema：需要定义
- * - 错误码表：需要定义
- */
+import { NextRequest, NextResponse } from "next/server";
+import { InputParser } from "../../../features/ingest/parser";
+import { InputNormalizer } from "../../../features/ingest/normalizer";
+import { IngestAdapter } from "../../../features/ingest/adapter";
+import { MemoryService } from "../../../server/services/memory-service";
+
+export async function POST(request: NextRequest) {
+  const { content, format = "text" } = await request.json();
+  
+  if (!content) {
+    return NextResponse.json({ error: "content is required" }, { status: 400 });
+  }
+
+  const parser = new InputParser();
+  const normalizer = new InputNormalizer();
+  const adapter = new IngestAdapter();
+  const memoryService = new MemoryService();
+  
+  try {
+    let events;
+    if (format === "json") {
+      events = parser.parseJson(content);
+    } else {
+      events = [parser.parseText(content)];
+    }
+    
+    const normalizedEvents = normalizer.normalize(events);
+    const memoryRecords = adapter.adaptBatch(normalizedEvents);
+    
+    const results = await Promise.all(memoryRecords.map(record =>
+      memoryService.createMemory(
+        record.source,
+        record.sourceType,
+        record.title,
+        record.content,
+        record.summary,
+        record.tags
+      )
+    ));
+    
+    return NextResponse.json({ success: true, memories: results });
+  } finally {
+    memoryService.close();
+  }
+}

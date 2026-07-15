@@ -1,11 +1,19 @@
-/**
- * 日期时间工具
- *
- * 调用关系：
- * - 被调用：各模块
- *
- * 作用：
- * - 提供日期时间格式化函数
- * - 计算时间衰减分数（recencyScore）
- * - 使用指数衰减归一化到 0-1 区间
- */
+export const getCurrentTime = (): string => {
+  return new Date().toISOString();
+};
+
+export const formatDate = (date: string | Date): string => {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+export const isExpired = (date: string, hours: number): boolean => {
+  const expiryTime = new Date(date).getTime() + hours * 60 * 60 * 1000;
+  return Date.now() > expiryTime;
+};

@@ -1,12 +1,36 @@
-/**
- * 清理任务执行器
- *
- * 调用关系：
- * - 被调用：server/schedulers/cleanup-scheduler.ts
- * - 调用：lib/storage/* （文件管理）
- *
- * 作用：
- * - 执行定期清理任务
- * - 清理过期记忆、失败记录、临时文件
- * - 维护 archive/* 目录的归档管理
- */
+import { getDatabasePath } from "../../lib/storage/path-resolver";
+import Database from "better-sqlite3";
+
+export class CleanupWorker {
+  private db: Database.Database;
+
+  constructor() {
+    this.db = new Database(getDatabasePath());
+  }
+
+  async cleanupOldEvents(): Promise<void> {
+    const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const stmt = this.db.prepare(
+      "DELETE FROM pending_events WHERE status = 'done' AND createdAt < ?"
+    );
+    stmt.run(cutoffTime);
+  }
+
+  async cleanupResolvedConflicts(): Promise<void> {
+    const cutoffTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    
+    const stmt = this.db.prepare(
+      "DELETE FROM conflict_records WHERE status LIKE 'resolved_%' AND resolvedAt < ?"
+    );
+    stmt.run(cutoffTime);
+  }
+
+  async vacuum(): Promise<void> {
+    this.db.exec("VACUUM");
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}

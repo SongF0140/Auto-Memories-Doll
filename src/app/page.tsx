@@ -1,16 +1,36 @@
-/**
- * 入口页 - 前端 UI 主入口
- *
- * 调用关系：
- * - 引用：components/chat/* （人机交互组件）
- * - 引用：components/prompt/* （提示词编辑组件）
- * - 引用：components/memory/* （记忆模式相关组件）
- * - 调用：features/chat/* （快轨逻辑）
- * - 调用：features/prompt/* （提示词读写）
- *
- * 作用：
- * - 负责收集用户输入
- * - 控制记忆模式切换
- * - 编辑和同步提示词
- * - 协调 chat、prompt、memory 三大功能模块的前端交互
- */
+"use client";
+
+import { useState } from "react";
+import Navbar from "../components/common/Navbar";
+import ChatInterface from "../components/chat/ChatInterface";
+import MemoryList from "../components/memory/MemoryList";
+import MemorySearch from "../components/memory/MemorySearch";
+import PromptList from "../components/prompt/PromptList";
+
+export default function HomePage() {
+  const [activeTab, setActiveTab] = useState("chat");
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case "chat":
+        return <ChatInterface />;
+      case "memory":
+        return <MemoryList />;
+      case "search":
+        return <MemorySearch />;
+      case "prompt":
+        return <PromptList />;
+      default:
+        return <ChatInterface />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-bg">
+      <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {renderContent()}
+      </main>
+    </div>
+  );
+}

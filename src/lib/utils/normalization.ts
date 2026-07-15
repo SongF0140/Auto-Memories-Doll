@@ -1,12 +1,15 @@
-/**
- * 数据归一化工具
- *
- * 调用关系：
- * - 被调用：features/memory/scorer.ts
- * - 被调用：lib/vector/ranker.ts
- *
- * 作用：
- * - 提供数据归一化函数
- * - 将不同范围的数值归一化到 0-1 区间
- * - 支持指数衰减、线性归一化等算法
- */
+export const normalizeText = (text: string): string => {
+  return text
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\n+/g, "\n");
+};
+
+export const truncateText = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength - 3) + "...";
+};
+
+export const sanitizeFilename = (filename: string): string => {
+  return filename.replace(/[\\/:*?"<>|]/g, "_");
+};

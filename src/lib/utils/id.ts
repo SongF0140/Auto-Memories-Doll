@@ -1,10 +1,7 @@
-/**
- * ID 生成工具
- *
- * 调用关系：
- * - 被调用：各模块
- *
- * 作用：
- * - 生成全局唯一 ID
- * - 支持不同类型的 ID 生成（记忆 ID、版本 ID、向量 ID 等）
- */
+export const generateId = (): string => {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
+
+export const generateVersionId = (): string => {
+  return `v${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+};
