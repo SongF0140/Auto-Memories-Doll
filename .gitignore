@@ -1,1 +1,28 @@
+# Dependencies
 node_modules
+
+# Next.js build output
+.next
+
+# Local data & databases
+memory-root
+
+# Environment variables (may contain API keys)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
