@@ -1,23 +1,33 @@
-import { apiConfig } from "../../config/api.config";
+import { ConfigService } from "../../server/services/config-service";
 
 export class StreamHandler {
-  static async *stream(prompt: string, modelType: "mini" | "pro"): AsyncGenerator<string> {
-    const model = modelType === "mini" ? apiConfig.miniLlmModel : apiConfig.proLlmModel;
+  private static getConfig() {
+    const service = new ConfigService();
+    try {
+      return service.getAiConfig() || service.getDefaultAiConfig();
+    } finally {
+      service.close();
+    }
+  }
+
+  static async *stream(prompt: string, _modelType: "mini" | "pro"): AsyncGenerator<string> {
+    const config = this.getConfig();
 
     try {
-      const response = await fetch(`${apiConfig.baseURL}/v1/completions`, {
+      const response = await fetch(`${config.baseURL}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiConfig.apiKey}`,
+          "Authorization": `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
-          model,
-          prompt,
-          max_tokens: 2048,
+          model: config.chatModel,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: config.maxTokens,
+          temperature: config.temperature,
           stream: true,
         }),
-        signal: AbortSignal.timeout(apiConfig.timeout),
+        signal: AbortSignal.timeout(config.timeout),
       });
 
       if (!response.ok) {
@@ -45,10 +55,10 @@ export class StreamHandler {
           if (line.startsWith("data: ")) {
             const data = line.substring(6);
             if (data === "[DONE]") continue;
-            
+
             try {
               const json = JSON.parse(data);
-              const text = json.choices?.[0]?.text || "";
+              const text = json.choices?.[0]?.delta?.content || json.choices?.[0]?.text || "";
               if (text) yield text;
             } catch {
               // Ignore parsing errors

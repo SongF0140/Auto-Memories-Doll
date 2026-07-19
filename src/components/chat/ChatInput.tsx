@@ -5,9 +5,10 @@ import { useState, KeyboardEvent } from "react";
 interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
-export default function ChatInput({ onSend, disabled }: ChatInputProps) {
+export default function ChatInput({ onSend, disabled, placeholder = "Message..." }: ChatInputProps) {
   const [content, setContent] = useState("");
 
   const handleSubmit = () => {
@@ -26,22 +27,22 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="border-t border-border bg-surface p-4">
-      <div className="flex gap-3 max-w-3xl mx-auto items-end">
+    <div className="border-t border-border bg-surface p-5">
+      <div className="max-w-3xl mx-auto flex gap-3 items-end">
         <textarea
           value={content}
           onChange={e => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder="Type a message..."
+          placeholder={placeholder}
           className="input flex-1 resize-none"
           rows={1}
-          style={{ minHeight: "44px", maxHeight: "160px" }}
+          style={{ minHeight: "52px", maxHeight: "180px" }}
         />
         <button
           onClick={handleSubmit}
           disabled={disabled || !content.trim()}
-          className="btn h-[44px] px-5"
+          className="btn h-[52px] px-6"
         >
           Send
         </button>

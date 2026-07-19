@@ -1,8 +1,17 @@
 import { env } from "../../config/env";
 import { join } from "path";
+import { existsSync, mkdirSync } from "fs";
+
+const ensureDir = (dirPath: string): void => {
+  if (!existsSync(dirPath)) {
+    mkdirSync(dirPath, { recursive: true });
+  }
+};
 
 export const getMemoryRoot = (): string => {
-  return env.MEMORY_ROOT;
+  const root = env.MEMORY_ROOT;
+  ensureDir(root);
+  return root;
 };
 
 export const getIndexMapPath = (): string => {
@@ -14,7 +23,8 @@ export const getProfilePath = (): string => {
 };
 
 export const getDatabasePath = (): string => {
-  return join(getMemoryRoot(), "memory.db");
+  const root = getMemoryRoot();
+  return join(root, "memory.db");
 };
 
 export const getNotesPath = (): string => {

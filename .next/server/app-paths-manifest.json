@@ -1,3 +1,8 @@
 {
-  "/page": "app/page.js"
+  "/page": "app/page.js",
+  "/api/memory/route": "app/api/memory/route.js",
+  "/api/prompt/route": "app/api/prompt/route.js",
+  "/api/config/ai/route": "app/api/config/ai/route.js",
+  "/api/config/mcp/route": "app/api/config/mcp/route.js",
+  "/api/config/skills/route": "app/api/config/skills/route.js"
 }

@@ -1,4 +1,4 @@
-import { apiConfig } from "../../config/api.config";
+import { ConfigService } from "../../server/services/config-service";
 import { getCurrentTime } from "../utils/date";
 
 export type ModelType = "mini" | "pro";
@@ -24,23 +24,33 @@ export class ModelAdapter {
     return this.isDegraded;
   }
 
-  static async generate(prompt: string, modelType: ModelType): Promise<LlmResponse> {
-    const model = modelType === "mini" ? apiConfig.miniLlmModel : apiConfig.proLlmModel;
-    
+  private static getConfig() {
+    const service = new ConfigService();
     try {
-      const response = await fetch(`${apiConfig.baseURL}/v1/completions`, {
+      return service.getAiConfig() || service.getDefaultAiConfig();
+    } finally {
+      service.close();
+    }
+  }
+
+  static async generate(prompt: string, _modelType: ModelType): Promise<LlmResponse> {
+    const config = this.getConfig();
+
+    try {
+      const response = await fetch(`${config.baseURL}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiConfig.apiKey}`,
+          "Authorization": `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
-          model,
-          prompt,
-          max_tokens: 2048,
+          model: config.chatModel,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: config.maxTokens,
+          temperature: config.temperature,
           stream: false,
         }),
-        signal: AbortSignal.timeout(apiConfig.timeout),
+        signal: AbortSignal.timeout(config.timeout),
       });
 
       if (!response.ok) {
@@ -49,40 +59,42 @@ export class ModelAdapter {
 
       const data = await response.json();
       this.isDegraded = false;
-      
+
       return {
-        content: data.choices?.[0]?.text || "",
+        content: data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "",
         finishReason: data.choices?.[0]?.finish_reason || "unknown",
-        model,
+        model: config.chatModel,
         timestamp: getCurrentTime(),
       };
     } catch (error) {
       this.isDegraded = true;
       this.lastFailureTime = Date.now();
       console.error("LLM API call failed:", error);
-      
+
       return {
         content: this.getFallbackResponse(prompt),
         finishReason: "degraded",
-        model,
+        model: config.chatModel,
         timestamp: getCurrentTime(),
       };
     }
   }
 
   static async generateEmbedding(text: string): Promise<EmbeddingResponse> {
+    const config = this.getConfig();
+
     try {
-      const response = await fetch(`${apiConfig.baseURL}/v1/embeddings`, {
+      const response = await fetch(`${config.baseURL}/embeddings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiConfig.apiKey}`,
+          "Authorization": `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
-          model: apiConfig.embedding.name,
+          model: config.embeddingModel,
           input: text,
         }),
-        signal: AbortSignal.timeout(apiConfig.timeout),
+        signal: AbortSignal.timeout(config.timeout),
       });
 
       if (!response.ok) {
@@ -91,20 +103,20 @@ export class ModelAdapter {
 
       const data = await response.json();
       this.isDegraded = false;
-      
+
       return {
         embedding: data.data?.[0]?.embedding || [],
-        model: apiConfig.embedding.name,
+        model: config.embeddingModel,
         timestamp: getCurrentTime(),
       };
     } catch (error) {
       this.isDegraded = true;
       this.lastFailureTime = Date.now();
       console.error("Embedding API call failed:", error);
-      
+
       return {
-        embedding: Array(apiConfig.embedding.dimensions).fill(0),
-        model: apiConfig.embedding.name,
+        embedding: Array(config.embeddingDimensions).fill(0),
+        model: config.embeddingModel,
         timestamp: getCurrentTime(),
       };
     }
@@ -112,8 +124,8 @@ export class ModelAdapter {
 
   private static getFallbackResponse(prompt: string): string {
     if (prompt.toLowerCase().includes("memory") || prompt.toLowerCase().includes("记忆")) {
-      return "当前处于降级模式，我无法访问外部模型。您可以尝试查看本地记忆或稍后再试。";
+      return "当前处于降级模式，我无法访问外部模型。您可以尝试查看本地记忆或检查 API 配置。";
     }
-    return "当前处于降级模式，我无法生成智能回复。请检查网络连接或稍后再试。";
+    return "当前处于降级模式，我无法生成智能回复。请检查 API 配置或网络连接。";
   }
 }

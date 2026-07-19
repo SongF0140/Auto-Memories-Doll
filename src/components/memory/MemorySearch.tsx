@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
+import EmptyState from "../common/EmptyState";
 
 export default function MemorySearch() {
   const [query, setQuery] = useState("");
@@ -34,16 +35,21 @@ export default function MemorySearch() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex gap-3 mb-6">
+    <div className="flex-1 overflow-y-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-8">
+          <h2 className="section-title">Search Memories</h2>
+          <p className="section-subtitle mt-1">Find memories by meaning, not just keywords</p>
+        </div>
+
+        <div className="card p-2 flex gap-2 mb-8 max-w-2xl">
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search memories..."
-            className="input"
+            placeholder="What are you looking for?"
+            className="input border-0 shadow-none"
           />
           <button
             onClick={handleSearch}
@@ -54,33 +60,30 @@ export default function MemorySearch() {
           </button>
         </div>
 
-        {loading && (
-          <div className="empty-state py-12">
-            <div className="loading-dots">
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
-        )}
+        {loading && <EmptyState title="Searching" description={`Finding memories related to "${query}"...`} />}
 
         {!loading && searched && (
           <>
-            <div className="flex items-baseline justify-between mb-4">
-              <h2 className="text-base font-medium text-text-primary">Results</h2>
-              <span className="text-sm text-text-tertiary">{results.length} found</span>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-text-primary">
+                {results.length > 0 ? "Results" : "No matches"}
+              </h3>
+              <span className="text-sm text-text-tertiary">
+                {results.length} result{results.length !== 1 ? "s" : ""}
+              </span>
             </div>
 
             {results.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {results.map(memory => (
                   <MemoryCard key={memory.id} memory={memory} />
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-text-tertiary py-8 text-center">
-                No results for "{query}"
-              </p>
+              <div className="text-center py-16">
+                <p className="text-text-secondary mb-2">No results for "{query}"</p>
+                <p className="text-sm text-text-tertiary">Try a different phrase or check your spelling</p>
+              </div>
             )}
           </>
         )}

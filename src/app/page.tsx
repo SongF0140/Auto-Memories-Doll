@@ -6,6 +6,7 @@ import ChatInterface from "../components/chat/ChatInterface";
 import MemoryList from "../components/memory/MemoryList";
 import MemorySearch from "../components/memory/MemorySearch";
 import PromptList from "../components/prompt/PromptList";
+import SettingsPanel from "../components/settings/SettingsPanel";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("chat");
@@ -20,6 +21,8 @@ export default function HomePage() {
         return <MemorySearch />;
       case "prompt":
         return <PromptList />;
+      case "settings":
+        return <SettingsPanel />;
       default:
         return <ChatInterface />;
     }
