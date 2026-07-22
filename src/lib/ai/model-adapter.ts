@@ -1,5 +1,7 @@
-import { ConfigService } from "../../server/services/config-service";
+import { generateText, embed } from "ai";
+import { createLanguageModel, createEmbeddingModel } from "./provider";
 import { getCurrentTime } from "../utils/date";
+import { ConfigService } from "../../server/services/config-service";
 
 export type ModelType = "mini" | "pro";
 
@@ -16,59 +18,42 @@ export type EmbeddingResponse = {
   timestamp: string;
 };
 
+function getConfig() {
+  const service = new ConfigService();
+  try {
+    return service.getAiConfig() || service.getDefaultAiConfig();
+  } finally {
+    service.close();
+  }
+}
+
 export class ModelAdapter {
   private static isDegraded = false;
-  private static lastFailureTime = 0;
 
   static get isDegradedMode(): boolean {
     return this.isDegraded;
   }
 
-  private static getConfig() {
-    const service = new ConfigService();
-    try {
-      return service.getAiConfig() || service.getDefaultAiConfig();
-    } finally {
-      service.close();
-    }
-  }
-
   static async generate(prompt: string, _modelType: ModelType): Promise<LlmResponse> {
-    const config = this.getConfig();
+    const config = getConfig();
 
     try {
-      const response = await fetch(`${config.baseURL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: config.chatModel,
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: config.maxTokens,
-          temperature: config.temperature,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(config.timeout),
+      const model = createLanguageModel();
+      const result = await generateText({
+        model,
+        messages: [{ role: "user", content: prompt }],
       });
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
       this.isDegraded = false;
 
       return {
-        content: data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "",
-        finishReason: data.choices?.[0]?.finish_reason || "unknown",
+        content: result.text,
+        finishReason: result.finishReason || "unknown",
         model: config.chatModel,
         timestamp: getCurrentTime(),
       };
     } catch (error) {
       this.isDegraded = true;
-      this.lastFailureTime = Date.now();
       console.error("LLM API call failed:", error);
 
       return {
@@ -81,41 +66,28 @@ export class ModelAdapter {
   }
 
   static async generateEmbedding(text: string): Promise<EmbeddingResponse> {
-    const config = this.getConfig();
+    const config = getConfig();
 
     try {
-      const response = await fetch(`${config.baseURL}/embeddings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: config.embeddingModel,
-          input: text,
-        }),
-        signal: AbortSignal.timeout(config.timeout),
+      const model = createEmbeddingModel();
+      const result = await embed({
+        model,
+        value: text,
       });
 
-      if (!response.ok) {
-        throw new Error(`Embedding API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
       this.isDegraded = false;
 
       return {
-        embedding: data.data?.[0]?.embedding || [],
+        embedding: result.embedding,
         model: config.embeddingModel,
         timestamp: getCurrentTime(),
       };
     } catch (error) {
       this.isDegraded = true;
-      this.lastFailureTime = Date.now();
       console.error("Embedding API call failed:", error);
 
       return {
-        embedding: Array(config.embeddingDimensions).fill(0),
+        embedding: [],
         model: config.embeddingModel,
         timestamp: getCurrentTime(),
       };

@@ -76,7 +76,7 @@ export default function SettingsPanel() {
     <div className="flex-1 overflow-y-auto px-6 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h2 className="section-title">Settings</h2>
+          <h2 className="section-title text-gradient">Settings</h2>
           <p className="section-subtitle mt-1">Configure AI providers, MCP servers, and skills</p>
         </div>
 

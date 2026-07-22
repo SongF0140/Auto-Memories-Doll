@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Navbar from "../components/common/Navbar";
+import { AuroraBackground } from "../components/ui/aurora-background";
 import ChatInterface from "../components/chat/ChatInterface";
 import MemoryList from "../components/memory/MemoryList";
 import MemorySearch from "../components/memory/MemorySearch";
@@ -29,11 +30,11 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg">
+    <AuroraBackground>
       <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden" key={activeTab}>
         {renderContent()}
       </main>
-    </div>
+    </AuroraBackground>
   );
 }

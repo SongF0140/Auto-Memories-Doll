@@ -48,13 +48,13 @@ export default function PromptList() {
     <div className="flex-1 overflow-y-auto px-4 py-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-baseline justify-between mb-6">
-          <h2 className="text-xl font-semibold tracking-tight text-text-primary">Prompts</h2>
+          <h2 className="text-xl font-semibold tracking-tight text-gradient">Prompts</h2>
           <span className="text-sm text-text-tertiary">{templates.length} total</span>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 stagger-list">
           {templates.map(template => (
-            <article key={template.id} className="card">
+            <article key={template.id} className="card card-hover animate-slide-up">
               <div className="flex items-baseline justify-between gap-4 mb-2">
                 <h3 className="text-base font-semibold text-text-primary">{template.name}</h3>
                 <span className="text-xs text-text-tertiary font-mono shrink-0">{template.id}</span>

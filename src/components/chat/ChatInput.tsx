@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, KeyboardEvent } from "react";
+import { MagneticButton } from "../ui/magnetic-button";
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -27,7 +28,7 @@ export default function ChatInput({ onSend, disabled, placeholder = "Message..."
   };
 
   return (
-    <div className="border-t border-border bg-surface p-5">
+    <div className="border-t border-border bg-surface/80 backdrop-blur-xl p-5">
       <div className="max-w-3xl mx-auto flex gap-3 items-end">
         <textarea
           value={content}
@@ -39,13 +40,13 @@ export default function ChatInput({ onSend, disabled, placeholder = "Message..."
           rows={1}
           style={{ minHeight: "52px", maxHeight: "180px" }}
         />
-        <button
+        <MagneticButton
           onClick={handleSubmit}
           disabled={disabled || !content.trim()}
-          className="btn h-[52px] px-6"
+          className="h-[52px] px-6"
         >
           Send
-        </button>
+        </MagneticButton>
       </div>
     </div>
   );

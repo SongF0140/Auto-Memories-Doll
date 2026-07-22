@@ -1,7 +1,8 @@
+import { streamText, StreamTextResult } from "ai";
 import { ChatMessage, ChatMode } from "../../types/api";
 import { MemoryRecord } from "../../types/memory";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
-import { StreamHandler } from "../../lib/ai/stream-handler";
+import { createLanguageModel } from "../../lib/ai/provider";
 import { TemplateManager, initializeTemplates } from "../../lib/prompt/template-manager";
 import { buildChatPrompt } from "../../lib/prompt/builder";
 import { MemoryService } from "../../server/services/memory-service";
@@ -54,11 +55,11 @@ export class ChatHandler {
     };
   }
 
-  async *streamResponse(
+  async streamResponse(
     messages: ChatMessage[],
     mode: ChatMode,
-    sessionId: string
-  ): AsyncGenerator<string> {
+    _sessionId: string
+  ): Promise<StreamTextResult<any, any, any>> {
     const processedMessages = await this.applySkills(messages);
     const memoryContent = mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
 
@@ -68,7 +69,10 @@ export class ChatHandler {
       this.templateManager
     );
 
-    yield* StreamHandler.stream(prompt, "mini");
+    return streamText({
+      model: createLanguageModel(),
+      messages: [{ role: "user", content: prompt }],
+    });
   }
 
   async executeMcpTool(serverId: string, toolName: string, args: Record<string, any>): Promise<any> {

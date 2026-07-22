@@ -9,6 +9,32 @@ import ChatModeSelector from "./ChatModeSelector";
 import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
 
+function parseDataStreamLine(line: string): { type: "text" | "error" | "unknown"; value: string } {
+  const separatorIndex = line.indexOf(":");
+  if (separatorIndex === -1) return { type: "unknown", value: "" };
+
+  const type = line.slice(0, separatorIndex);
+  const raw = line.slice(separatorIndex + 1);
+
+  if (type === "0") {
+    try {
+      return { type: "text", value: JSON.parse(raw) as string };
+    } catch {
+      return { type: "text", value: raw };
+    }
+  }
+
+  if (type === "3") {
+    try {
+      return { type: "error", value: JSON.parse(raw) as string };
+    } catch {
+      return { type: "error", value: raw };
+    }
+  }
+
+  return { type: "unknown", value: "" };
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [mode, setMode] = useState<ChatMode>("chat");
@@ -19,7 +45,8 @@ export default function ChatInterface() {
     if (!content.trim()) return;
 
     const newMessage: ChatMessage = { role: "user", content };
-    setMessages(prev => [...prev, newMessage]);
+    const currentMessages = [...messages, newMessage];
+    setMessages(currentMessages);
     setLoading(true);
 
     try {
@@ -27,28 +54,80 @@ export default function ChatInterface() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, newMessage],
+          messages: currentMessages,
           mode,
           sessionId: "default",
         }),
       });
 
-      const result = await response.json();
+      const contentType = response.headers.get("content-type") || "";
 
-      if (response.ok) {
-        setMessages(prev => [
-          ...prev,
-          { role: "assistant", content: result.content },
-        ]);
+      // 非 2xx 或 JSON 响应按错误/记忆保存处理
+      if (!response.ok || contentType.includes("application/json")) {
+        const result = await response.json();
+        if (response.ok) {
+          setMessages(prev => [...prev, { role: "assistant", content: result.content }]);
 
-        if (mode === "memory" && result.memoryReferences?.length > 0) {
-          fetchRelatedMemories(result.memoryReferences);
+          if (mode === "memory" && result.memoryReferences?.length > 0) {
+            fetchRelatedMemories(result.memoryReferences);
+          }
+        } else {
+          setMessages(prev => [...prev, { role: "system", content: `Error: ${result.error || "Unknown error"}` }]);
         }
-      } else {
-        setMessages(prev => [
-          ...prev,
-          { role: "system", content: `Error: ${result.error}` },
-        ]);
+        setLoading(false);
+        return;
+      }
+
+      // 流式响应（Vercel AI SDK 数据流格式）
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+      let streamError = "";
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line) continue;
+            const parsed = parseDataStreamLine(line);
+            if (parsed.type === "text") {
+              setMessages(prev => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                if (last && last.role === "assistant") {
+                  last.content += parsed.value;
+                }
+                return updated;
+              });
+            } else if (parsed.type === "error" && parsed.value) {
+              streamError += parsed.value;
+            }
+          }
+        }
+      }
+
+      // 若流中包含错误，将空 assistant 消息替换为 system 错误
+      if (streamError) {
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === "assistant" && !last.content.trim()) {
+            updated[updated.length - 1] = { role: "system", content: `Stream error: ${streamError}` };
+          }
+          return updated;
+        });
       }
     } catch (error) {
       setMessages(prev => [
@@ -73,10 +152,10 @@ export default function ChatInterface() {
 
   return (
     <div className="flex flex-col h-full bg-bg">
-      <div className="bg-surface border-b border-border px-6 py-4">
+      <div className="glass border-b border-border px-6 py-5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
-            <h2 className="section-title">Conversation</h2>
+            <h2 className="section-title text-gradient">Conversation</h2>
             <p className="section-subtitle mt-1">
               {mode === "memory" ? "Extract and store meaningful memories" : "Chat with your AI companion"}
             </p>

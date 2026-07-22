@@ -1,17 +1,19 @@
 "use client";
 
 import { MemoryRecord } from "../../types/memory";
+import { SpotlightCard } from "../ui/spotlight-card";
 import Badge from "../common/Badge";
 
 interface MemoryCardProps {
   memory: MemoryRecord;
   compact?: boolean;
+  className?: string;
 }
 
-export default function MemoryCard({ memory, compact = false }: MemoryCardProps) {
+export default function MemoryCard({ memory, compact = false, className = "" }: MemoryCardProps) {
   if (compact) {
     return (
-      <article className="card card-hover p-4">
+      <SpotlightCard className={`p-4 ${className}`}>
         <div className="flex items-start gap-3">
           <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary mt-2 shrink-0" />
           <div className="min-w-0">
@@ -32,12 +34,12 @@ export default function MemoryCard({ memory, compact = false }: MemoryCardProps)
             )}
           </div>
         </div>
-      </article>
+      </SpotlightCard>
     );
   }
 
   return (
-    <article className="card card-hover">
+    <SpotlightCard className={className}>
       <div className="flex items-start justify-between gap-4 mb-3">
         <h3 className="text-lg font-semibold text-text-primary leading-tight">
           {memory.title}
@@ -77,6 +79,6 @@ export default function MemoryCard({ memory, compact = false }: MemoryCardProps)
           })}
         </time>
       </div>
-    </article>
+    </SpotlightCard>
   );
 }

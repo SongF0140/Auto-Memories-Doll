@@ -44,15 +44,15 @@ export default function MemoryList() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="section-title">Your Memories</h2>
+            <h2 className="section-title text-gradient">Your Memories</h2>
             <p className="section-subtitle mt-1">A curated collection of meaningful moments</p>
           </div>
           <span className="text-sm text-text-tertiary">{memories.length} memories</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 stagger-list">
           {memories.map(memory => (
-            <MemoryCard key={memory.id} memory={memory} />
+            <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
           ))}
         </div>
       </div>
