@@ -1,7 +1,7 @@
 import { MemoryRecord, PendingEvent, ConflictRecord } from "../../types/memory";
 import { generateId } from "../../lib/utils/id";
 import { getCurrentTime } from "../../lib/utils/date";
-import { getDatabasePath } from "../../lib/storage/path-resolver";
+import { getDatabase } from "../../lib/storage/database";
 import Database from "better-sqlite3";
 
 export type ConflictLevel = "auto_merge" | "manual_decision" | "unmergeable";
@@ -10,7 +10,7 @@ export class AuditService {
   private db: Database.Database;
 
   constructor() {
-    this.db = new Database(getDatabasePath());
+    this.db = getDatabase();
     this.init();
   }
 
@@ -141,6 +141,6 @@ export class AuditService {
   }
 
   close(): void {
-    this.db.close();
+    // shared connection — no-op
   }
 }

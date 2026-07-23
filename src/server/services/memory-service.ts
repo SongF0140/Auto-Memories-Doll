@@ -5,14 +5,14 @@ import { VectorIndex } from "../../lib/vector/index";
 import { buildVectorRecord } from "../../lib/vector/generator";
 import { GraphManager } from "../../lib/graph/manager";
 import { buildGraphEdge, extractRelations } from "../../lib/graph/builder";
-import { getDatabasePath } from "../../lib/storage/path-resolver";
+import { getDatabase } from "../../lib/storage/database";
 import Database from "better-sqlite3";
 
 export class MemoryService {
   private db: Database.Database;
 
   constructor() {
-    this.db = new Database(getDatabasePath());
+    this.db = getDatabase();
     this.init();
   }
 
@@ -258,7 +258,26 @@ export class MemoryService {
     stmt.run(event.status, event.retryCount, event.eventId);
   }
 
+  getPendingEvents(): PendingEvent[] {
+    const stmt = this.db.prepare(
+      "SELECT * FROM pending_events WHERE status = 'pending'"
+    );
+    const rows = stmt.all() as any[];
+
+    return rows.map(row => ({
+      eventId: row.eventId,
+      memoryId: row.memoryId,
+      sourceType: row.sourceType as PendingEvent["sourceType"],
+      candidate: row.candidate,
+      changedFields: JSON.parse(row.changedFields),
+      createdAt: row.createdAt,
+      status: row.status as PendingEvent["status"],
+      retryCount: row.retryCount,
+    }));
+  }
+
+  /** 不再关闭共享连接，由 closeDatabase() 统一管理 */
   close(): void {
-    this.db.close();
+    // shared connection — no-op
   }
 }

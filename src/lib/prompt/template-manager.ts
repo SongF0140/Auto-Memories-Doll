@@ -1,3 +1,5 @@
+import { getDatabase } from "../storage/database";
+
 export interface PromptTemplate {
   id: string;
   name: string;
@@ -8,20 +10,79 @@ export interface PromptTemplate {
 
 export class TemplateManager {
   private templates: Map<string, PromptTemplate> = new Map();
+  private db = getDatabase();
+  private initialized = false;
+
+  private ensureTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS prompt_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        variables TEXT NOT NULL DEFAULT '[]',
+        description TEXT
+      )
+    `);
+  }
+
+  private loadFromDb(): void {
+    if (this.initialized) return;
+    this.ensureTable();
+
+    const stmt = this.db.prepare("SELECT * FROM prompt_templates");
+    const rows = stmt.all() as any[];
+    for (const row of rows) {
+      this.templates.set(row.id, {
+        id: row.id,
+        name: row.name,
+        content: row.content,
+        variables: JSON.parse(row.variables || "[]"),
+        description: row.description,
+      });
+    }
+    this.initialized = true;
+  }
 
   register(template: PromptTemplate): void {
+    this.loadFromDb();
+
     this.templates.set(template.id, template);
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO prompt_templates (id, name, content, variables, description)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      template.id,
+      template.name,
+      template.content,
+      JSON.stringify(template.variables),
+      template.description || null
+    );
   }
 
   get(templateId: string): PromptTemplate | undefined {
+    this.loadFromDb();
     return this.templates.get(templateId);
   }
 
   list(): PromptTemplate[] {
+    this.loadFromDb();
     return Array.from(this.templates.values());
   }
 
+  delete(templateId: string): boolean {
+    this.loadFromDb();
+    const existed = this.templates.delete(templateId);
+    if (existed) {
+      const stmt = this.db.prepare("DELETE FROM prompt_templates WHERE id = ?");
+      stmt.run(templateId);
+    }
+    return existed;
+  }
+
   render(templateId: string, variables: Record<string, string>): string {
+    this.loadFromDb();
     const template = this.templates.get(templateId);
     if (!template) {
       throw new Error(`Template "${templateId}" not found`);
@@ -91,6 +152,11 @@ export const defaultTemplates: PromptTemplate[] = [
   },
 ];
 
+/** 初始化内置模板（仅在模板不存在时写入） */
 export const initializeTemplates = (manager: TemplateManager): void => {
-  defaultTemplates.forEach(template => manager.register(template));
+  for (const template of defaultTemplates) {
+    if (!manager.get(template.id)) {
+      manager.register(template);
+    }
+  }
 };

@@ -1,12 +1,12 @@
 import { VectorRecord } from "../../types/memory";
-import { getDatabasePath } from "../storage/path-resolver";
+import { getDatabase } from "../storage/database";
 import Database from "better-sqlite3";
 
 export class VectorIndex {
   private db: Database.Database;
 
   constructor() {
-    this.db = new Database(getDatabasePath());
+    this.db = getDatabase();
     this.init();
   }
 
@@ -101,6 +101,6 @@ export class VectorIndex {
   }
 
   close(): void {
-    this.db.close();
+    // shared connection — no-op
   }
 }

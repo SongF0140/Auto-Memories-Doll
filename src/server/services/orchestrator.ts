@@ -129,19 +129,7 @@ export class Orchestrator {
   }
 
   private getPendingEvents(): PendingEvent[] {
-    const stmt = this.memoryService["db"].prepare("SELECT * FROM pending_events WHERE status = 'pending'");
-    const rows = stmt.all() as any[];
-    
-    return rows.map(row => ({
-      eventId: row.eventId,
-      memoryId: row.memoryId,
-      sourceType: row.sourceType as PendingEvent["sourceType"],
-      candidate: row.candidate,
-      changedFields: JSON.parse(row.changedFields),
-      createdAt: row.createdAt,
-      status: row.status as PendingEvent["status"],
-      retryCount: row.retryCount,
-    }));
+    return this.memoryService.getPendingEvents();
   }
 
   close(): void {

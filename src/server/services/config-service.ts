@@ -1,4 +1,4 @@
-import { getDatabasePath } from "../../lib/storage/path-resolver";
+import { getDatabase } from "../../lib/storage/database";
 import { AiConfig, McpServerConfig, SkillConfig } from "../../types/config";
 import Database from "better-sqlite3";
 
@@ -6,7 +6,7 @@ export class ConfigService {
   private db: Database.Database;
 
   constructor() {
-    this.db = new Database(getDatabasePath());
+    this.db = getDatabase();
     this.init();
   }
 
@@ -232,6 +232,6 @@ export class ConfigService {
   }
 
   close(): void {
-    this.db.close();
+    // shared connection — no-op
   }
 }
