@@ -40,8 +40,8 @@ export default function MemorySearch() {
     <div className="flex-1 overflow-y-auto px-6 py-8">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
-          <h2 className="section-title text-gradient">Search Memories</h2>
-          <p className="section-subtitle mt-1">Find memories by meaning, not just keywords</p>
+          <h2 className="section-title text-gradient">搜索记忆</h2>
+          <p className="section-subtitle mt-1">按语义搜索，而不仅是关键词</p>
         </div>
 
         <SpotlightCard className="p-2 mb-8 max-w-2xl">
@@ -51,7 +51,7 @@ export default function MemorySearch() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="What are you looking for?"
+              placeholder="你在找什么？"
               className="input border-0 shadow-none bg-transparent flex-1"
             />
             <MagneticButton
@@ -59,21 +59,21 @@ export default function MemorySearch() {
               disabled={loading || !query.trim()}
               className="whitespace-nowrap"
             >
-              Search
+              搜索
             </MagneticButton>
           </div>
         </SpotlightCard>
 
-        {loading && <EmptyState title="Searching" description={`Finding memories related to "${query}"...`} />}
+        {loading && <EmptyState title="搜索中" description={`正在搜索与 "${query}" 相关的记忆...`} />}
 
         {!loading && searched && (
           <>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-text-primary">
-                {results.length > 0 ? "Results" : "No matches"}
+                {results.length > 0 ? "搜索结果" : "无匹配"}
               </h3>
               <span className="text-sm text-text-tertiary">
-                {results.length} result{results.length !== 1 ? "s" : ""}
+                {results.length} 条结果
               </span>
             </div>
 
@@ -85,8 +85,8 @@ export default function MemorySearch() {
               </div>
             ) : (
               <div className="text-center py-16">
-                <p className="text-text-secondary mb-2">No results for "{query}"</p>
-                <p className="text-sm text-text-tertiary">Try a different phrase or check your spelling</p>
+                <p className="text-text-secondary mb-2">未找到关于 "{query}" 的结果</p>
+                <p className="text-sm text-text-tertiary">试试换个说法或检查拼写</p>
               </div>
             )}
           </>

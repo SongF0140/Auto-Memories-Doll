@@ -39,7 +39,7 @@ export default function PromptList() {
   if (templates.length === 0) {
     return (
       <div className="empty-state">
-        <p>No prompt templates found</p>
+        <p>暂无提示词模板</p>
       </div>
     );
   }
@@ -48,8 +48,8 @@ export default function PromptList() {
     <div className="flex-1 overflow-y-auto px-4 py-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-baseline justify-between mb-6">
-          <h2 className="text-xl font-semibold tracking-tight text-gradient">Prompts</h2>
-          <span className="text-sm text-text-tertiary">{templates.length} total</span>
+          <h2 className="text-xl font-semibold tracking-tight text-gradient">提示词</h2>
+          <span className="text-sm text-text-tertiary">{templates.length} 个模板</span>
         </div>
 
         <div className="space-y-4 stagger-list">
@@ -70,7 +70,7 @@ export default function PromptList() {
 
               {template.variables.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border">
-                  <span className="text-xs text-text-tertiary mr-2">Variables:</span>
+                  <span className="text-xs text-text-tertiary mr-2">变量:</span>
                   {template.variables.map(v => (
                     <span key={v} className="tag mr-1.5">
                       {v}

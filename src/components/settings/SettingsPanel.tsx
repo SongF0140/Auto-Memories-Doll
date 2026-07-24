@@ -55,9 +55,9 @@ export default function SettingsPanel() {
   };
 
   const tabs: { id: Tab; label: string; description: string }[] = [
-    { id: "ai", label: "AI Provider", description: "API keys & models" },
-    { id: "mcp", label: "MCP Servers", description: "External tool servers" },
-    { id: "skills", label: "Skills", description: "Trigger-based prompts" },
+    { id: "ai", label: "AI 配置", description: "API 密钥与模型" },
+    { id: "mcp", label: "MCP 服务器", description: "外部工具服务" },
+    { id: "skills", label: "技能", description: "触发式提示词" },
   ];
 
   if (loading || !aiConfig) {
@@ -76,8 +76,8 @@ export default function SettingsPanel() {
     <div className="flex-1 overflow-y-auto px-6 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h2 className="section-title text-gradient">Settings</h2>
-          <p className="section-subtitle mt-1">Configure AI providers, MCP servers, and skills</p>
+          <h2 className="section-title text-gradient">设置</h2>
+          <p className="section-subtitle mt-1">配置 AI 提供商、MCP 服务器和技能</p>
         </div>
 
         <div className="flex gap-2 mb-8 border-b border-border pb-1">
@@ -102,9 +102,9 @@ export default function SettingsPanel() {
         <div className="animate-fade-in">
           {activeTab === "ai" && (
             <div className="card">
-              <h3 className="text-lg font-semibold text-text-primary mb-1">AI Configuration</h3>
+              <h3 className="text-lg font-semibold text-text-primary mb-1">AI 配置</h3>
               <p className="text-sm text-text-tertiary mb-6">
-                Connect to your preferred AI provider. Supports OpenAI, OpenAI-compatible endpoints, and custom providers.
+                连接到你的首选 AI 提供商。支持 OpenAI、OpenAI 兼容接口和自定义提供商。
               </p>
               <AiConfigForm config={aiConfig} onSave={saveAiConfig} saving={saving} />
             </div>
@@ -113,9 +113,9 @@ export default function SettingsPanel() {
           {activeTab === "mcp" && (
             <div>
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-text-primary mb-1">MCP Servers</h3>
+                <h3 className="text-lg font-semibold text-text-primary mb-1">MCP 服务器</h3>
                 <p className="text-sm text-text-tertiary">
-                  Connect external Model Context Protocol servers to extend capabilities.
+                  连接外部 MCP 服务器来扩展能力。
                 </p>
               </div>
               <McpServerList servers={mcpServers} onChange={setMcpServers} />
@@ -125,9 +125,9 @@ export default function SettingsPanel() {
           {activeTab === "skills" && (
             <div>
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-text-primary mb-1">Skills</h3>
+                <h3 className="text-lg font-semibold text-text-primary mb-1">技能</h3>
                 <p className="text-sm text-text-tertiary">
-                  Define trigger-based skills that rewrite user input with custom prompts.
+                  定义触发式技能，通过自定义提示词改写用户输入。
                 </p>
               </div>
               <SkillList skills={skills} onChange={setSkills} />

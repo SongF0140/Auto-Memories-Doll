@@ -9,7 +9,7 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export default function ChatInput({ onSend, disabled, placeholder = "Message..." }: ChatInputProps) {
+export default function ChatInput({ onSend, disabled, placeholder = "输入消息..." }: ChatInputProps) {
   const [content, setContent] = useState("");
 
   const handleSubmit = () => {
@@ -45,7 +45,7 @@ export default function ChatInput({ onSend, disabled, placeholder = "Message..."
           disabled={disabled || !content.trim()}
           className="h-[52px] px-6"
         >
-          Send
+          发送
         </MagneticButton>
       </div>
     </div>

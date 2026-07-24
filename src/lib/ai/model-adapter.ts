@@ -96,8 +96,8 @@ export class ModelAdapter {
 
   private static getFallbackResponse(prompt: string): string {
     if (prompt.toLowerCase().includes("memory") || prompt.toLowerCase().includes("记忆")) {
-      return "当前处于降级模式，我无法访问外部模型。您可以尝试查看本地记忆或检查 API 配置。";
+      return "当前处于离线模式，无法连接 AI 服务。你可以查看本地已保存的记忆，或前往设置页面检查 API 配置是否正确。";
     }
-    return "当前处于降级模式，我无法生成智能回复。请检查 API 配置或网络连接。";
+    return "当前处于离线模式，无法生成智能回复。请检查 AI API 配置是否正确（设置 > AI 配置），确保 baseURL 和 API Key 已填写。";
   }
 }

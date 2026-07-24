@@ -33,7 +33,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-2">Provider</label>
+          <label className="block text-sm font-medium text-text-primary mb-2">提供商</label>
           <select
             value={form.provider}
             onChange={e => update("provider", e.target.value as AiProvider)}
@@ -153,7 +153,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
 
       <div className="flex justify-end">
         <button type="submit" disabled={saving} className="btn">
-          {saving ? "Saving..." : "Save AI Config"}
+          {saving ? "保存中..." : "保存 AI 配置"}
         </button>
       </div>
     </form>

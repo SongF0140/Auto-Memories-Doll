@@ -9,8 +9,8 @@ interface ChatModeSelectorProps {
 
 export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelectorProps) {
   const modes: { value: ChatMode; label: string; description: string; icon: string }[] = [
-    { value: "chat", label: "Chat", description: "General conversation", icon: "💬" },
-    { value: "memory", label: "Memory", description: "Extract & save memories", icon: "✦" },
+    { value: "chat", label: "对话", description: "通用对话", icon: "💬" },
+    { value: "memory", label: "记忆", description: "提取并保存记忆", icon: "✦" },
   ];
 
   return (

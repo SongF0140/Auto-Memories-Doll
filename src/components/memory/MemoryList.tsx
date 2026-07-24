@@ -18,7 +18,7 @@ export default function MemoryList() {
     try {
       const response = await fetch("/api/memory");
       const result = await response.json();
-      setMemories(result);
+      setMemories(result.items || []);
     } catch (error) {
       console.error("Failed to fetch memories:", error);
     } finally {
@@ -27,14 +27,14 @@ export default function MemoryList() {
   };
 
   if (loading) {
-    return <EmptyState title="Loading memories" description="Fetching your memory collection..." />;
+    return <EmptyState title="加载记忆中" description="正在获取你的记忆库..." />;
   }
 
   if (memories.length === 0) {
     return (
       <EmptyState
-        title="No memories yet"
-        description="Start chatting in Memory mode or import data to build your collection."
+        title="暂无记忆"
+        description="在记忆模式下开始对话，或导入数据来构建你的记忆库。"
       />
     );
   }
@@ -44,10 +44,10 @@ export default function MemoryList() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="section-title text-gradient">Your Memories</h2>
-            <p className="section-subtitle mt-1">A curated collection of meaningful moments</p>
+            <h2 className="section-title text-gradient">我的记忆</h2>
+            <p className="section-subtitle mt-1">精心收藏的重要时刻</p>
           </div>
-          <span className="text-sm text-text-tertiary">{memories.length} memories</span>
+          <span className="text-sm text-text-tertiary">{memories.length} 条记忆</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 stagger-list">

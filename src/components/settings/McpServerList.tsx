@@ -55,7 +55,7 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
               <div className="flex items-center gap-3 mb-1">
                 <h4 className="text-base font-semibold text-text-primary truncate">{server.name}</h4>
                 <span className={`badge ${server.enabled ? "bg-success-bg text-success" : "bg-muted text-text-secondary"}`}>
-                  {server.enabled ? "Enabled" : "Disabled"}
+                  {server.enabled ? "已启用" : "已禁用"}
                 </span>
               </div>
               <p className="text-sm text-text-secondary font-mono mb-2 truncate">
@@ -70,13 +70,13 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
                 onClick={() => setEditing(server)}
                 className="btn btn-secondary px-3 py-1.5 text-sm"
               >
-                Edit
+                编辑
               </button>
               <button
                 onClick={() => remove(server.id)}
                 className="btn btn-ghost px-3 py-1.5 text-sm text-error hover:text-error hover:bg-error-bg"
               >
-                Delete
+                删除
               </button>
             </div>
           </div>
@@ -96,7 +96,7 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
           onClick={() => setEditing({ name: "", command: "", args: [], env: {}, enabled: true })}
           className="w-full py-4 border-2 border-dashed border-border rounded-xl text-text-secondary hover:border-border-strong hover:text-text-primary transition-colors"
         >
-          + Add MCP Server
+          + 添加 MCP 服务器
         </button>
       )}
     </div>
@@ -136,14 +136,14 @@ function McpServerEditor({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <input
           type="text"
-          placeholder="Server name"
+          placeholder="服务器名称"
           value={form.name || ""}
           onChange={e => setForm({ ...form, name: e.target.value })}
           className="input"
         />
         <input
           type="text"
-          placeholder="Command (e.g. npx, node)"
+          placeholder="命令 (如 npx, node)"
           value={form.command || ""}
           onChange={e => setForm({ ...form, command: e.target.value })}
           className="input"
@@ -151,20 +151,20 @@ function McpServerEditor({
       </div>
       <input
         type="text"
-        placeholder="Arguments separated by space"
+        placeholder="参数，用空格分隔"
         value={argsText}
         onChange={e => setArgsText(e.target.value)}
         className="input"
       />
       <textarea
-        placeholder="Environment variables (KEY=VALUE per line)"
+        placeholder="环境变量 (每行一个 KEY=VALUE)"
         value={envText}
         onChange={e => setEnvText(e.target.value)}
         className="input min-h-[80px]"
       />
       <input
         type="text"
-        placeholder="Description"
+        placeholder="描述"
         value={form.description || ""}
         onChange={e => setForm({ ...form, description: e.target.value })}
         className="input"
@@ -176,11 +176,11 @@ function McpServerEditor({
           onChange={e => setForm({ ...form, enabled: e.target.checked })}
           className="w-4 h-4 rounded border-border-strong"
         />
-        Enabled
+        已启用
       </label>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSave} className="btn">Save</button>
+        <button onClick={onCancel} className="btn btn-secondary">取消</button>
+        <button onClick={handleSave} className="btn">保存</button>
       </div>
     </div>
   );

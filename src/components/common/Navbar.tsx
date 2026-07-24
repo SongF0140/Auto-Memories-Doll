@@ -7,11 +7,11 @@ interface NavbarProps {
 
 export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
   const tabs = [
-    { id: "chat", label: "Chat" },
-    { id: "memory", label: "Memories" },
-    { id: "search", label: "Search" },
-    { id: "prompt", label: "Prompts" },
-    { id: "settings", label: "Settings" },
+    { id: "chat", label: "对话" },
+    { id: "memory", label: "记忆" },
+    { id: "search", label: "搜索" },
+    { id: "prompt", label: "提示词" },
+    { id: "settings", label: "设置" },
   ];
 
   return (
@@ -26,7 +26,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
               <h1 className="text-base font-semibold tracking-tight text-gradient leading-none">
                 Auto-Memories-Doll
               </h1>
-              <p className="text-xs text-text-tertiary mt-0.5">AI memory companion</p>
+              <p className="text-xs text-text-tertiary mt-0.5">AI 记忆伴侣</p>
             </div>
           </div>
 

@@ -80,7 +80,7 @@ export default function ChatInterface() {
 
       // 流式响应（Vercel AI SDK 数据流格式）
       if (!response.body) {
-        throw new Error("No response body");
+        throw new Error("无响应体");
       }
 
       setMessages(prev => [...prev, { role: "assistant", content: "" }]);
@@ -132,7 +132,7 @@ export default function ChatInterface() {
     } catch (error) {
       setMessages(prev => [
         ...prev,
-        { role: "system", content: `Network error: ${(error as Error).message}` },
+        { role: "system", content: `网络错误: ${(error as Error).message}` },
       ]);
     } finally {
       setLoading(false);
@@ -155,9 +155,9 @@ export default function ChatInterface() {
       <div className="glass border-b border-border px-6 py-5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
-            <h2 className="section-title text-gradient">Conversation</h2>
+            <h2 className="section-title text-gradient">对话</h2>
             <p className="section-subtitle mt-1">
-              {mode === "memory" ? "Extract and store meaningful memories" : "Chat with your AI companion"}
+              {mode === "memory" ? "提取并保存有意义的记忆" : "与你的 AI 伙伴对话"}
             </p>
           </div>
           <ChatModeSelector mode={mode} onModeChange={setMode} />
@@ -170,8 +170,8 @@ export default function ChatInterface() {
             <div className="max-w-3xl mx-auto space-y-6">
               {messages.length === 0 ? (
                 <EmptyState
-                  title="Start a conversation"
-                  description="Ask anything or switch to Memory mode to extract and save important details."
+                  title="开始对话"
+                  description="随意提问，或切换到记忆模式提取并保存重要信息。"
                 />
               ) : (
                 messages.map((message, index) => (
@@ -197,16 +197,16 @@ export default function ChatInterface() {
           <ChatInput
             onSend={handleSend}
             disabled={loading}
-            placeholder={mode === "memory" ? "Share something worth remembering..." : "Type your message..."}
+            placeholder={mode === "memory" ? "分享值得记住的内容..." : "输入你的消息..."}
           />
         </div>
 
         {mode === "memory" && (
           <div className="w-96 bg-surface border-l border-border flex flex-col hidden xl:flex">
             <div className="px-5 py-4 border-b border-border">
-              <h3 className="text-sm font-semibold text-text-primary">Related Memories</h3>
+              <h3 className="text-sm font-semibold text-text-primary">相关记忆</h3>
               <p className="text-xs text-text-tertiary mt-0.5">
-                {relatedMemories.length > 0 ? `${relatedMemories.length} memory connected` : "Memories will appear here"}
+                {relatedMemories.length > 0 ? `${relatedMemories.length} 条关联记忆` : "记忆将显示在这里"}
               </p>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -215,8 +215,8 @@ export default function ChatInterface() {
                   <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
                     <span className="text-text-tertiary text-lg">+</span>
                   </div>
-                  <p className="text-sm text-text-secondary">No related memories yet</p>
-                  <p className="text-xs text-text-tertiary mt-1">Send a message to extract memories</p>
+                  <p className="text-sm text-text-secondary">暂无相关记忆</p>
+                  <p className="text-xs text-text-tertiary mt-1">发送消息以提取记忆</p>
                 </div>
               ) : (
                 relatedMemories.map(memory => (

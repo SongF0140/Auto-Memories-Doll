@@ -35,7 +35,7 @@ export default function ChatMessageItem({ message }: ChatMessageItemProps) {
           <p className="whitespace-pre-wrap">{message.content}</p>
         </div>
         <span className="text-xs text-text-tertiary px-1">
-          {isUser ? "You" : "Assistant"}
+          {isUser ? "你" : "助手"}
         </span>
       </div>
     </div>

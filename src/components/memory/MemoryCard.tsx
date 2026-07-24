@@ -63,11 +63,11 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
 
       <div className="flex items-center justify-between pt-4 border-t border-border text-sm text-text-tertiary">
         <div className="flex items-center gap-2">
-          <span>Version {memory.version}</span>
+          <span>版本 {memory.version}</span>
           {memory.heatScore > 0 && (
             <>
               <span className="w-1 h-1 rounded-full bg-text-tertiary" />
-              <span>Heat {memory.heatScore.toFixed(1)}</span>
+              <span>热度 {memory.heatScore.toFixed(1)}</span>
             </>
           )}
         </div>
