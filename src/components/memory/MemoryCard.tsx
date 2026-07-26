@@ -1,7 +1,7 @@
 "use client";
 
 import { MemoryRecord } from "../../types/memory";
-import { SpotlightCard } from "../ui/spotlight-card";
+import { MagicCard } from "../ui/magic-card";
 import Badge from "../common/Badge";
 
 interface MemoryCardProps {
@@ -13,20 +13,20 @@ interface MemoryCardProps {
 export default function MemoryCard({ memory, compact = false, className = "" }: MemoryCardProps) {
   if (compact) {
     return (
-      <SpotlightCard className={`p-4 ${className}`}>
+      <MagicCard className={`p-4 ${className}`}>
         <div className="flex items-start gap-3">
-          <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary mt-2 shrink-0" />
+          <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[radial-gradient(circle,#b88735_0%,#8a6aa4_70%)] shadow-[0_0_18px_rgba(184,135,53,0.45)]" />
           <div className="min-w-0">
-            <h4 className="text-sm font-semibold text-text-primary leading-tight mb-1 truncate">
+            <h4 className="mb-1 truncate text-sm font-semibold leading-tight text-text-primary">
               {memory.title}
             </h4>
-            <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">
+            <p className="line-clamp-2 text-xs leading-relaxed text-text-secondary">
               {memory.summary}
             </p>
             {memory.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
+              <div className="mt-2 flex flex-wrap gap-1">
                 {memory.tags.slice(0, 3).map(tag => (
-                  <span key={tag} className="tag text-[10px] px-2 py-0.5">
+                  <span key={tag} className="tag px-2 py-0.5 text-[10px]">
                     {tag}
                   </span>
                 ))}
@@ -34,25 +34,25 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
             )}
           </div>
         </div>
-      </SpotlightCard>
+      </MagicCard>
     );
   }
 
   return (
-    <SpotlightCard className={className}>
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <h3 className="text-lg font-semibold text-text-primary leading-tight">
+    <MagicCard className={`p-5 ${className}`}>
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <h3 className="text-lg font-semibold leading-tight text-text-primary">
           {memory.title}
         </h3>
         <Badge>{memory.sourceType}</Badge>
       </div>
 
-      <p className="text-base text-text-secondary leading-relaxed mb-4">
+      <p className="mb-4 text-base leading-relaxed text-text-secondary">
         {memory.summary}
       </p>
 
       {memory.tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-5">
+        <div className="mb-5 flex flex-wrap gap-2">
           {memory.tags.map(tag => (
             <span key={tag} className="tag">
               {tag}
@@ -61,24 +61,24 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-4 border-t border-border text-sm text-text-tertiary">
+      <div className="flex items-center justify-between border-t border-border pt-4 text-sm text-text-tertiary">
         <div className="flex items-center gap-2">
           <span>版本 {memory.version}</span>
           {memory.heatScore > 0 && (
             <>
-              <span className="w-1 h-1 rounded-full bg-text-tertiary" />
+              <span className="h-1 w-1 rounded-full bg-text-tertiary" />
               <span>热度 {memory.heatScore.toFixed(1)}</span>
             </>
           )}
         </div>
         <time dateTime={memory.updatedAt}>
-          {new Date(memory.updatedAt).toLocaleDateString(undefined, {
+          {new Date(memory.updatedAt).toLocaleDateString("zh-CN", {
             year: "numeric",
             month: "short",
             day: "numeric",
           })}
         </time>
       </div>
-    </SpotlightCard>
+    </MagicCard>
   );
 }

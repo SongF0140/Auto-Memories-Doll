@@ -15,31 +15,31 @@
 @tailwind utilities;
 
 :root {
-  /* 超淡卡其色主题 */
-  --color-bg: #f5f2eb;
-  --color-bg-warm: #efeadd;
-  --color-surface: rgba(253, 252, 250, 0.82);
-  --color-surface-elevated: rgba(255, 255, 255, 0.92);
-  --color-text: #2a2720;
-  --color-text-secondary: #6b6558;
-  --color-text-tertiary: #9e9686;
-  --color-border: rgba(216, 210, 196, 0.6);
-  --color-border-strong: rgba(192, 184, 168, 0.8);
-  --color-accent: #5c5346;
-  --color-accent-hover: #4a4237;
-  --color-accent-text: #faf9f6;
-  --color-muted: rgba(238, 233, 222, 0.6);
+  /* 淡紫金色信纸主题 */
+  --color-bg: #f6f0df;
+  --color-bg-warm: #fbf4df;
+  --color-surface: rgba(255, 250, 238, 0.78);
+  --color-surface-elevated: rgba(255, 252, 244, 0.92);
+  --color-text: #2b241d;
+  --color-text-secondary: #6c5d51;
+  --color-text-tertiary: #9b8d82;
+  --color-border: rgba(190, 149, 72, 0.22);
+  --color-border-strong: rgba(142, 113, 166, 0.38);
+  --color-accent: #6f5a8f;
+  --color-accent-hover: #574570;
+  --color-accent-text: #fffaf2;
+  --color-muted: rgba(239, 225, 196, 0.52);
   --color-error: #8b3a3a;
   --color-error-bg: #fdf2f0;
   --color-success: #3d6b4a;
   --color-success-bg: #f0f7f1;
 
-  /* 艺术感渐变 */
-  --gradient-warm: linear-gradient(135deg, #f5f2eb 0%, #efeadd 50%, #e8e3d8 100%);
-  --gradient-glow-1: radial-gradient(circle at 20% 30%, rgba(200, 185, 160, 0.35) 0%, transparent 45%);
-  --gradient-glow-2: radial-gradient(circle at 80% 70%, rgba(180, 165, 140, 0.3) 0%, transparent 50%);
-  --gradient-glow-3: radial-gradient(circle at 50% 50%, rgba(220, 205, 180, 0.25) 0%, transparent 40%);
-  --gradient-text: linear-gradient(135deg, #2a2720 0%, #5c5346 50%, #4a4237 100%);
+  /* 淡紫金色美术渐变 */
+  --gradient-warm: linear-gradient(135deg, #fbf4df 0%, #f1e5cf 42%, #ece0f3 100%);
+  --gradient-glow-1: radial-gradient(circle at 18% 22%, rgba(142, 113, 166, 0.30) 0%, transparent 44%);
+  --gradient-glow-2: radial-gradient(circle at 84% 72%, rgba(205, 159, 71, 0.28) 0%, transparent 48%);
+  --gradient-glow-3: radial-gradient(circle at 50% 42%, rgba(248, 215, 146, 0.22) 0%, transparent 42%);
+  --gradient-text: linear-gradient(135deg, #2b241d 0%, #6f5a8f 46%, #b88735 100%);
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -214,6 +214,26 @@ textarea:focus-visible {
   }
 }
 
+@keyframes gridDrift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(28px, 28px, 0);
+  }
+}
+
+@keyframes letterGlow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-8px) scale(1.04);
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -252,6 +272,14 @@ textarea:focus-visible {
   .animate-gradient {
     background-size: 200% 200%;
     animation: gradientShift 8s var(--ease-smooth) infinite;
+  }
+
+  .animate-grid-drift {
+    animation: gridDrift 18s linear infinite;
+  }
+
+  .animate-letter-glow {
+    animation: letterGlow 7s var(--ease-smooth) infinite;
   }
 
   .text-gradient {

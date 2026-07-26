@@ -4,10 +4,19 @@ import { useState, useEffect } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
 import EmptyState from "../common/EmptyState";
+import { MagicCard } from "../ui/magic-card";
+import { ShimmerButton } from "../ui/shimmer-button";
+
+const memoryGardenImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(
+  "masterpiece, high quality original anime background, elegant violet flower garden beside a sunlit European writing desk, handwritten letters, brass typewriter, warm golden morning light, soft lavender and khaki palette, cinematic composition, painterly detail, no existing characters, no text"
+)}&image_size=landscape_16_9`;
 
 export default function MemoryList() {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [importContent, setImportContent] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
 
   useEffect(() => {
     fetchMemoryList();
@@ -26,35 +35,95 @@ export default function MemoryList() {
     }
   };
 
-  if (loading) {
-    return <EmptyState title="加载记忆中" description="正在获取你的记忆库..." />;
-  }
+  const handleImport = async () => {
+    const content = importContent.trim();
+    if (!content || importing) return;
 
-  if (memories.length === 0) {
-    return (
-      <EmptyState
-        title="暂无记忆"
-        description="在记忆模式下开始对话，或导入数据来构建你的记忆库。"
-      />
-    );
-  }
+    setImporting(true);
+    setImportMessage("");
+
+    try {
+      const response = await fetch("/api/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, format: "text" }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "导入失败");
+      }
+
+      setImportContent("");
+      setImportMessage(`已导入 ${result.memories?.length || 0} 条记忆`);
+      await fetchMemoryList();
+    } catch (error) {
+      setImportMessage(`导入失败: ${(error as Error).message}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="section-title text-gradient">我的记忆</h2>
-            <p className="section-subtitle mt-1">精心收藏的重要时刻</p>
-          </div>
-          <span className="text-sm text-text-tertiary">{memories.length} 条记忆</span>
-        </div>
+      <div className="mx-auto max-w-6xl space-y-8">
+        <MagicCard className="overflow-hidden p-0">
+          <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="p-6 sm:p-8">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-tertiary">
+                Memory Archive
+              </p>
+              <h2 className="section-title text-gradient">我的记忆</h2>
+              <p className="section-subtitle mt-2 max-w-xl">
+                把片段、想法和重要经历整理成长期记忆。粘贴文本后点击导入，系统会自动生成标题、摘要和标签。
+              </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 stagger-list">
-          {memories.map(memory => (
-            <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
-          ))}
-        </div>
+              <div className="mt-6 space-y-3">
+                <textarea
+                  value={importContent}
+                  onChange={event => setImportContent(event.target.value)}
+                  placeholder="粘贴要导入的记忆内容..."
+                  className="input min-h-[112px] resize-y"
+                />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-text-tertiary">
+                    {importMessage || `${memories.length} 条记忆已保存`}
+                  </p>
+                  <ShimmerButton
+                    onClick={handleImport}
+                    disabled={importing || !importContent.trim()}
+                    className="h-11 px-5"
+                  >
+                    {importing ? "导入中..." : "导入记忆"}
+                  </ShimmerButton>
+                </div>
+              </div>
+            </div>
+            <div className="relative min-h-[260px] overflow-hidden lg:min-h-full">
+              <img
+                src={memoryGardenImage}
+                alt="淡紫花园中的信纸与打字机"
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#f6f0df]/10 to-[#f6f0df]/55 lg:bg-gradient-to-r" />
+            </div>
+          </div>
+        </MagicCard>
+
+        {loading ? (
+          <EmptyState title="加载记忆中" description="正在获取你的记忆库..." />
+        ) : memories.length === 0 ? (
+          <EmptyState
+            title="暂无记忆"
+            description="先在上方导入一段文字，或在记忆模式下开始对话。"
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-5 stagger-list md:grid-cols-2 xl:grid-cols-3">
+            {memories.map(memory => (
+              <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

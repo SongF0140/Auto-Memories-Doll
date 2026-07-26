@@ -8,6 +8,11 @@ import ChatInput from "./ChatInput";
 import ChatModeSelector from "./ChatModeSelector";
 import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
+import { MagicCard } from "../ui/magic-card";
+
+const chatGardenImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(
+  "masterpiece, high quality original anime background, elegant blonde automemory doll inspired atmosphere without existing characters, violet flowers, antique postal office, brass typewriter, handwritten letters, warm golden light, soft lavender and khaki palette, cinematic painterly composition, no text"
+)}&image_size=landscape_16_9`;
 
 function parseDataStreamLine(line: string): { type: "text" | "error" | "unknown"; value: string } {
   const separatorIndex = line.indexOf(":");
@@ -72,7 +77,7 @@ export default function ChatInterface() {
             fetchRelatedMemories(result.memoryReferences);
           }
         } else {
-          setMessages(prev => [...prev, { role: "system", content: `Error: ${result.error || "Unknown error"}` }]);
+          setMessages(prev => [...prev, { role: "system", content: `错误: ${result.error || "未知错误"}` }]);
         }
         setLoading(false);
         return;
@@ -124,7 +129,7 @@ export default function ChatInterface() {
           const updated = [...prev];
           const last = updated[updated.length - 1];
           if (last && last.role === "assistant" && !last.content.trim()) {
-            updated[updated.length - 1] = { role: "system", content: `Stream error: ${streamError}` };
+            updated[updated.length - 1] = { role: "system", content: `流式响应错误: ${streamError}` };
           }
           return updated;
         });
@@ -151,17 +156,36 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg">
-      <div className="glass border-b border-border px-6 py-5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h2 className="section-title text-gradient">对话</h2>
-            <p className="section-subtitle mt-1">
-              {mode === "memory" ? "提取并保存有意义的记忆" : "与你的 AI 伙伴对话"}
-            </p>
+    <div className="flex h-full flex-col bg-transparent">
+      <div className="px-6 py-5">
+        <MagicCard className="mx-auto max-w-6xl overflow-hidden p-0">
+          <div className="grid items-stretch gap-0 lg:grid-cols-[1fr_320px]">
+            <div className="flex items-center justify-between gap-6 p-5">
+              <div className="flex items-center gap-4">
+                <div className="violet-letter-mark hidden h-20 w-28 shrink-0 md:block">
+                  <div className="absolute left-5 top-5 h-1.5 w-12 rounded-full bg-accent/25" />
+                  <div className="absolute left-5 top-9 h-1.5 w-16 rounded-full bg-[#b88735]/25" />
+                  <div className="absolute left-5 top-[52px] h-1.5 w-10 rounded-full bg-accent/20" />
+                </div>
+                <div>
+                  <h2 className="section-title text-gradient">对话</h2>
+                  <p className="section-subtitle mt-1">
+                    {mode === "memory" ? "提取并保存有意义的记忆" : "与你的 AI 伙伴对话"}
+                  </p>
+                </div>
+              </div>
+              <ChatModeSelector mode={mode} onModeChange={setMode} />
+            </div>
+            <div className="relative hidden min-h-[132px] overflow-hidden lg:block">
+              <img
+                src={chatGardenImage}
+                alt="淡紫花园、信件与打字机的动漫感背景"
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#f6f0df]/72 via-[#f6f0df]/18 to-transparent" />
+            </div>
           </div>
-          <ChatModeSelector mode={mode} onModeChange={setMode} />
-        </div>
+        </MagicCard>
       </div>
 
       <div className="flex-1 flex overflow-hidden">

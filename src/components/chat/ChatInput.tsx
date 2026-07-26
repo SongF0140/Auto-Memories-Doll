@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, KeyboardEvent } from "react";
-import { MagneticButton } from "../ui/magnetic-button";
+import { ShimmerButton } from "../ui/shimmer-button";
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -40,13 +40,13 @@ export default function ChatInput({ onSend, disabled, placeholder = "输入消�
           rows={1}
           style={{ minHeight: "52px", maxHeight: "180px" }}
         />
-        <MagneticButton
+        <ShimmerButton
           onClick={handleSubmit}
           disabled={disabled || !content.trim()}
           className="h-[52px] px-6"
         >
           发送
-        </MagneticButton>
+        </ShimmerButton>
       </div>
     </div>
   );
