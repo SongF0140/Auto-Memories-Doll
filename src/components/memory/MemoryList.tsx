@@ -6,10 +6,10 @@ import MemoryCard from "./MemoryCard";
 import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
 import { ShimmerButton } from "../ui/shimmer-button";
+import MemoryViewer from "./MemoryViewer";
 
-const memoryGardenImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(
-  "masterpiece, high quality original anime background, elegant violet flower garden beside a sunlit European writing desk, handwritten letters, brass typewriter, warm golden morning light, soft lavender and khaki palette, cinematic composition, painterly detail, no existing characters, no text"
-)}&image_size=landscape_16_9`;
+// Photo by Léonard Cotte on Unsplash (free to use, no attribution required)
+const memoryGardenImage = "https://images.unsplash.com/photo-1499002238440-d264edd596ec?w=1200&q=80";
 
 export default function MemoryList() {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
@@ -17,6 +17,7 @@ export default function MemoryList() {
   const [importContent, setImportContent] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMemoryList();
@@ -120,11 +121,22 @@ export default function MemoryList() {
         ) : (
           <div className="grid grid-cols-1 gap-5 stagger-list md:grid-cols-2 xl:grid-cols-3">
             {memories.map(memory => (
-              <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
+              <div key={memory.id} onClick={() => setSelectedMemoryId(memory.id)} className="cursor-pointer">
+                <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {selectedMemoryId && (
+        <MemoryViewer
+          memoryId={selectedMemoryId}
+          onClose={() => setSelectedMemoryId(null)}
+          onDeleted={fetchMemoryList}
+          onUpdated={fetchMemoryList}
+        />
+      )}
     </div>
   );
 }

@@ -3,9 +3,10 @@
 interface BadgeProps {
   children: React.ReactNode;
   variant?: "default" | "success" | "error";
+  className?: string;
 }
 
-export default function Badge({ children, variant = "default" }: BadgeProps) {
+export default function Badge({ children, variant = "default", className = "" }: BadgeProps) {
   const variantClasses = {
     default: "bg-muted text-text-secondary",
     success: "bg-success-bg text-success",
@@ -13,7 +14,7 @@ export default function Badge({ children, variant = "default" }: BadgeProps) {
   };
 
   return (
-    <span className={`badge ${variantClasses[variant]}`}>
+    <span className={`badge ${variantClasses[variant]} ${className}`}>
       {children}
     </span>
   );

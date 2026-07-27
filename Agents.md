@@ -21,17 +21,21 @@
 - AI 编排：Vercel AI SDK
 - 样式：Tailwind CSS
 - 状态管理：React Context
-- 本地持久化主线：文件系统（记忆正文、索引地图、归档）+ SQLite（向量索引、关系图谱、待审计队列、冲突记录）
-- 本地笔记存储：`src/lib/storage/*`，负责文件读写、路径组织和版本落盘
-- 向量存储：SQLite + `sqlite-vec` 扩展，承载 `vector_records` 表，支持余弦相似度查询；预期规模几千到上万条
-- 图谱存储：SQLite 表 `graph_edges`，承载 `GraphEdge` 关系边，支持邻接查询和关系遍历
+- **主存储：LLMWiki（Markdown + YAML frontmatter）**——每条记忆自包含，人类和 LLM 均可直读
+- 加速层：SQLite（`better-sqlite3`）仅做向量索引和全文搜索缓存，主数据源是 Markdown 文件
+- 向量存储：SQLite 承载 `vector_records` 表，JavaScript 内存余弦相似度计算
+- 关系管理：`[[wikilink]]` 内嵌在 Markdown 正文中，替代传统图数据库边表
+- 图谱查询：`src/lib/graph/wiki-graph.ts` 从文件扫描 wikilink 构建内存索引
 - 队列存储：SQLite 表 `pending_events`，承载 `PendingEvent` 待审计队列，支持按 `memoryId` 串行消费
 - 记忆索引：Markdown 索引地图、JSON 元数据、标签索引
 - 向量检索：`src/lib/vector/*`，负责 embedding 生成、向量更新、召回和重排
-- 图谱关系：`src/lib/graph/*`，负责记忆关系边和关系查询
+- 图谱关系：`src/lib/graph/wiki-graph.ts`，基于文件 [[wikilink]] 扫描的关系查询（替代 SQLite graph_edges 表）
+- 文件格式：`src/lib/storage/markdown-formatter.ts` + `markdown-parser.ts`，负责 YAML frontmatter 序列化/反序列化
 - 模型适配：`src/lib/ai/*`，通过中转站适配层调用 LLM 和 embedding API，统一请求格式、响应格式和错误处理
 - API 配置管理：`src/config/api.config.ts`，管理中转站 URL、API Key（从环境变量读取，不硬编码）、模型名称和降级开关
 - SQLite 驱动：`better-sqlite3`（同步 API，适合本地单机场景）
+- 文件监听：`chokidar`，监控 `memory-root/` 目录下 Markdown 文件变化，自动触发记忆导入与更新
+- 后台 API 监听：`/api/listen` 端点，接收来自 Trae IDE、浏览器 AI 会话等外部工具的对话数据，自动提炼为结构化笔记
 - 后台任务：Route Handlers、Node.js 任务、站内调度器；Cron 仅作为可选部署形态
 - 外部能力接入：MCP 和 skills 兼具双重角色——既是数据采集输入源（从 Notion、浏览器历史、邮件等外部数据源采集信息生成记忆），又是能力调用输出方（把记忆检索结果提供给其他工具和上下文）；浏览器侧采集接口作为补充输入源
 
@@ -52,20 +56,34 @@ src/
 │  ├─ layout.tsx                # 全局布局
 │  └─ api/
 │     ├─ chat/route.ts          # 快轨对话入口
+│     ├─ chat/stream/route.ts   # 流式对话入口
 │     ├─ memory/route.ts        # 记忆读写入口
+│     ├─ memory/[id]/route.ts   # 单条记忆操作
+│     ├─ memory/search/route.ts # 记忆搜索
 │     ├─ prompt/route.ts        # 提示词更新入口
+│     ├─ prompt/[id]/route.ts   # 单条提示词操作
 │     ├─ ingest/route.ts        # 后台数据接入入口
-│     └─ audit/route.ts         # 审计入口
+│     ├─ listen/route.ts        # 外部工具监听入口（Trae/浏览器 AI 会话）
+│     ├─ audit/route.ts         # 审计入口
+│     ├─ audit/conflicts/route.ts # 冲突管理
+│     └─ config/                # 配置管理（AI/MCP/Skills）
 ├─ components/
 │  ├─ chat/                     # 人机交互组件
 │  ├─ prompt/                   # 提示词编辑组件
 │  ├─ memory/                   # 记忆模式相关组件
-│  └─ common/                   # 公共组件
+│  ├─ settings/                 # 设置页面组件（AI 配置、MCP、Skills）
+│  ├─ common/                   # 公共组件
+│  ├─ ui/                       # Magic UI / Aceternity UI 炫酷组件
+│  └─ audit/                    # 审计相关组件
 ├─ features/
 │  ├─ chat/                     # 快轨逻辑
 │  ├─ prompt/                   # 提示词读写与回写
 │  ├─ memory/                   # 记忆处理、分类、评分
 │  ├─ ingest/                   # 后台输入接入与解析
+│  │  ├─ parser.ts
+│  │  ├─ normalizer.ts
+│  │  ├─ adapter.ts
+│  │  └─ conversation-processor.ts  # AI 对话专用处理器
 │  └─ audit/                    # 审计、diff、冲突处理
 ├─ lib/
 │  ├─ ai/                       # Vercel AI SDK 与模型适配
@@ -73,20 +91,36 @@ src/
 │  ├─ skills/                   # skills 接入
 │  ├─ memory/                   # 记忆抽象
 │  ├─ vector/                   # 向量索引与检索
-│  ├─ graph/                    # 图索引与关系图
+│  ├─ graph/
+│  │  ├─ wiki-graph.ts          # 文件级 wikilink 图谱（主）
+│  │  ├─ manager.ts             # SQLite 图谱（已废弃，保留兼容）
+│  │  ├─ query.ts               # 图查询工具
+│  │  └─ builder.ts             # 图构建工具
 │  ├─ storage/                  # 本地存储与文件写回
+│  │  ├─ markdown-formatter.ts  # LLMWiki 序列化
+│  │  ├─ markdown-parser.ts     # LLMWiki 反序列化
+│  │  ├─ path-resolver.ts
+│  │  ├─ database.ts
+│  │  ├─ file-manager.ts
+│  │  ├─ lock.ts
+│  │  └─ index-writer.ts
 │  ├─ prompt/                   # 提示词模板与处理
 │  └─ utils/                    # 通用工具
 ├─ server/
 │  ├─ services/                 # 服务编排
 │  ├─ workers/                  # 异步任务
 │  ├─ pipelines/                # JSON 处理流水线
+│  ├─ watchers/                 # 文件系统监听器（chokidar）
+│  ├─ listener/                 # 后台监听服务（API 端口监听）
 │  └─ schedulers/               # 定时任务
 ├─ types/
 ├─ config/
 ├─ styles/
 public/
+│  └─ bridge/capture.js         # 浏览器桥接脚本（捕获 AI 聊天页面）
 docs/
+instrumentation.ts              # Next.js 插桩入口，启动后台监听器
+next.config.js                  # Next.js 配置，启用 instrumentationHook
 ```
 
 入口层 -> `src/app/page.tsx` -> `src/components/chat/*` / `src/components/prompt/*` -> `src/features/chat/*` / `src/features/prompt/*`
@@ -99,14 +133,21 @@ docs/
 
 持久化层属于审计持久化层的落盘子链路：`src/lib/storage/*` -> 本地文件 / 索引 / 标签 -> `src/features/prompt/*` -> `src/components/prompt/*` -> 前端状态同步
 
+文件监听链路 -> `instrumentation.ts` -> `src/server/listener/listener-service.ts` -> `src/server/watchers/file-watcher.ts` -> `src/features/ingest/*` -> `src/server/services/memory-service.ts` -> 记忆写入 + 向量生成
+
+外部工具监听链路 -> 外部工具 POST -> `/api/listen` -> `src/features/ingest/conversation-processor.ts` -> 对话格式化 + 话题提取 + 目录创建 + `MemoryService.createMemory()` -> 返回知识卡片 + memoryId
+
 ### 4.3 术语定义
 - 中转站适配层：用于封装模型供应商差异的本地适配模块，统一请求格式、响应格式和错误处理。
-- 监听窗口：系统可接收外部输入的来源窗口，包含前端会话、MCP 工具调用、skills 调用和浏览器侧采集接口。
+- 监听窗口：系统可接收外部输入的来源窗口，包含三种渠道：
+  - **API 监听**：`/api/listen` 端点，Trae IDE、浏览器 AI 页面等外部工具通过 HTTP POST 发送结构化对话数据
+  - **文件监听**：`memory-root/` 目录，自动检测 Markdown 文件新增/修改并导入
+  - **前端交互**：Web UI 的聊天面板、记忆导入、设置页面
 - 短时记忆：当前主题下的高频摘要与要点，存放在 `notes/*/Agent.md`。
 - 长时记忆：可追溯的具体事实与事件，存放在 `notes/*/note-*.md`。
 - 索引地图：记录目录、标签、关系入口和引用路径的 `index-map.md`。
-- 关系映射层：描述记忆之间关系的本地图结构，使用 SQLite 表实现邻接存储，不等于图数据库。
-- 向量索引适配层：负责 embedding 生成、更新、检索和重排的本地模块，底层使用 SQLite + `sqlite-vec`。
+- 关系映射层：描述记忆之间关系的本地图结构，使用文件内 `[[wikilink]]` 替代数据库边表；`wiki-graph.ts` 从文件扫描构建索引
+- 向量索引适配层：负责 embedding 生成、更新、检索和重排的本地模块，底层使用 SQLite 存储向量 + JavaScript 内存余弦相似度计算（后续可升级为 `sqlite-vec`）。
 - 待审计队列：后台加工层产出的候选记忆事件在写入最终文件前暂存的持久化队列，存储于 SQLite 表 `pending_events`，按 `memoryId` 串行消费。
 - 冲突分级：审计持久化层对候选记忆与现有记忆进行差异比对后的分级判断，分为自动可合并、需人工裁决和不可合并三级。
 - API 降级：当模型 API（LLM 或 embedding）不可用时，系统自动切换到有限功能的备用模式，保证本地数据操作不受影响。
@@ -160,10 +201,85 @@ docs/
 - 关系存储：`src/lib/graph/*`，负责记忆关系边和关系查询
 - 更新策略：短时记忆要点更新 `notes/*/Agent.md`，长时记忆更新 `notes/*/note-*.md`，索引地图更新 `index-map.md`，推荐权重更新 `profile.md`
 - 落盘与版本：记忆正文用 Node.js 文件系统 API 写入 Markdown 文件；向量、图谱、队列和冲突记录用 SQLite 事务写入
-- 向量存储：`src/lib/vector/*` 使用 SQLite + `sqlite-vec` 扩展（`better-sqlite3` 驱动），通过 `vector_records` 表存储；召回时先做向量近邻查询再做内存重排
+- 向量存储：`src/lib/vector/*` 使用 SQLite + `better-sqlite3` 驱动，通过 `vector_records` 表存储；召回时先做向量近邻查询（JavaScript 内存余弦相似度）再做内存重排
 - 图谱存储：`src/lib/graph/*` 使用 SQLite 表 `graph_edges` 存储关系边，支持按 `from` 或 `to` 的邻接查询
 - 队列存储：`src/lib/storage/queue.ts` 使用 SQLite 表 `pending_events` 存储待审计事件，支持按 `memoryId` 分组串行消费
 - 冲突记录：`src/features/audit/*` 使用 SQLite 表 `conflict_records` 存储需人工裁决的冲突，支持按 `status` 过滤
+- 文件监听：`src/server/watchers/file-watcher.ts` 使用 `chokidar` 监控 `memory-root/` 目录，在 `.md` 文件新增/修改时自动走 ingest 管线导入/更新记忆（详见 4.6.1）
+
+### 4.6.1 文件监听子系统
+文件监听器在 Next.js 服务端启动时通过 `instrumentation.ts` 注册，使用 `chokidar` 库监控 `memory-root/` 目录下的 Markdown 文件变化。
+
+**监听范围**：
+- 监控路径：`memory-root/` 下所有 `.md` 文件
+- 排除：`memory.db*`、`archive/**`、`index-map.md`、`profile.md`
+
+**触发行为**：
+- `add` 事件（新文件）：读取内容，经 `InputParser -> InputNormalizer -> IngestAdapter` 管线处理后，通过 `MemoryService.createMemory()` 写入记忆库并生成向量
+- `change` 事件（文件更新）：同上流程，重新解析并更新已有记忆
+
+**启动方式**：
+- `next.config.js` 启用 `experimental.instrumentationHook`
+- `instrumentation.ts` 在 `NEXT_RUNTIME === "nodejs"` 时调用 `startFileWatcher()`
+- 服务端启动时自动运行，无需手动触发
+
+**注意事项**：
+- 文件内容少于 10 字符时跳过处理
+- 使用 `awaitWriteFinish` 选项（500ms 稳定窗口）避免半写入文件触发
+- 导入失败时输出日志但不阻塞后续监听
+
+### 4.6.2 后台 API 监听子系统
+后台 API 监听器是系统的核心对外接口，允许 Trae IDE、浏览器 AI 会话等外部工具将对话数据通过 HTTP POST 发送到 `/api/listen`，自动完成提炼和归档。
+
+**API 端点**：
+- `POST /api/listen` — 接收对话数据，自动提取话题、创建目录、生成记忆
+- `GET  /api/listen` — 查询监听器状态和统计信息
+
+**请求格式** (POST)：
+```json
+{
+  "source": "trae-ide",
+  "sourceType": "listen",
+  "messages": [
+    { "role": "user", "content": "帮我实现一个排序算法" },
+    { "role": "assistant", "content": "好的，这是快速排序的实现..." }
+  ],
+  "tags": ["ai-coding", "algorithm"],
+  "topic": "ai-coding",
+  "metadata": {
+    "platform": "Trae IDE",
+    "model": "claude-sonnet-4-20250514",
+    "url": "optional-source-url"
+  }
+}
+```
+
+**处理流程**：
+1. Zod 校验请求体 → 消息列表、来源必填
+2. `ConversationProcessor.formatConversation()` → 格式化对话为 Markdown，自动提取话题分类
+3. `ConversationProcessor.saveConversationFile()` → 保存到 `memory-root/notes/{topic}/note-{timestamp}.md`
+4. `MemoryService.createMemory()` → 创建记忆记录 + 生成向量 + 构建图谱关系
+5. 返回 `{ success, memoryId, topic, filePath, knowledgeCard }`
+
+**自动话题分类**：
+`MemoryExtractor.extractTopic()` 基于关键词匹配自动分类：
+| 关键词 | 话题目录 |
+|--------|---------|
+| 代码/编程/react/typescript/api/bug | `ai-coding` |
+| 日记/今天/心情/生活 | `daily-notes` |
+| 项目/需求/架构/规划 | `project-planning` |
+| 学习/教程/笔记/知识 | `learning` |
+| 会议/讨论/决策 | `meetings` |
+| 阅读/书籍/论文 | `reading` |
+| 无匹配 | `uncategorized` |
+
+**浏览器桥接**：
+`public/bridge/capture.js` — 可作为浏览器书签或 Tampermonkey 用户脚本使用，自动捕获 ChatGPT、Claude、Gemini 等 AI 平台当前页面的对话内容，弹窗确认后 POST 到 `/api/listen`。
+
+**集成方式**：
+- **Trae IDE**：在 AI 对话完成后，调用 `POST /api/listen` 发送对话数据
+- **浏览器**：安装 `capture.js` 书签，点击即可捕获当前 AI 页面
+- **任意工具**：只需发送符合格式的 HTTP POST 请求即可接入
 
 ### 4.7 记忆目录结构
 记忆系统使用本地文件夹承载，建议结构如下：
@@ -242,8 +358,8 @@ memory-root/
 - API 降级策略：当 LLM API 不可用时（网络错误、超时、认证失败），快轨层切换为基于本地检索的模板回复（不调用 LLM 生成），后台加工层暂停记忆提取任务并排队等待恢复；当 embedding API 不可用时，向量召回降级为关键词召回，新记忆仍写入文件但标记为"向量待生成"，恢复后批量补建。
 - 降级状态必须在前端展示明确提示，告知用户当前处于降级模式及影响范围。
 - 向量模型默认使用 `text-embedding-3-small`（维度 1536）；embedding 模型配置通过 `EmbeddingModelConfig`（见 5.5）管理，更换模型时必须同步更新维度约束和重建全部向量索引。
-- 向量索引持久化使用 SQLite + `sqlite-vec` 扩展，存储于 `memory-root/memory.db` 的 `vector_records` 表；重建任务必须保持同一 `memory-root/` 根目录。
-- 图谱存储使用 SQLite 表 `graph_edges`，支持按 `from` 或 `to` 的邻接查询和关系遍历。
+- 向量索引持久化使用 SQLite，存储于 `memory-root/memory.db` 的 `vector_records` 表
+- 图谱关系通过文件内 `[[wikilink]]` 维护，`WikiGraph` 从文件扫描构建索引，无需独立图数据库
 - 检索重排默认采用 `MMR`；当需要更高精度时可在实现层切换为交叉编码器重排，但必须保持结果可回写。
 - 检索结果写回前必须保留召回来源、重排得分和最终入选理由，方便审计和调试。
 
@@ -272,7 +388,7 @@ export type MemoryRecord = {
   id: string;
   version: number;
   source: string;
-  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill";
+  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen";
   title: string;
   content: string;
   summary: string;
@@ -365,7 +481,7 @@ export type EmbeddingModelConfig = {
 export type PendingEvent = {
   eventId: string;
   memoryId: string;
-  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill";
+  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen";
   candidate: string; // 候选 MemoryRecord 的 JSON 序列化
   changedFields: string[];
   createdAt: string;

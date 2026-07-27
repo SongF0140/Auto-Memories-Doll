@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "../styles/globals.css";
 import "../styles/components.css";
+import ErrorBoundary from "../components/common/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: "Auto-Memories-Doll",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className="antialiased">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );

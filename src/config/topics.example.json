@@ -1,0 +1,11 @@
+[
+  {
+    "_说明": "规则列表：pattern=匹配正则，topic=分类目录名",
+    "pattern": "健身|运动|跑步|gym|workout",
+    "topic": "fitness"
+  },
+  {
+    "pattern": "旅行|旅游|攻略|travel|trip",
+    "topic": "travel"
+  }
+]

@@ -3,9 +3,45 @@ node_modules
 
 # Next.js build output
 .next
+out/
+dist/
 
-# Local data & databases
-memory-root
+# ═══════════════════════════════════════
+# 本地记忆、数据库、用户数据 —— 严禁上传
+# ═══════════════════════════════════════
+memory-root/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 个人文档和笔记
+docs/
+notes/
+*.private.md
+*.local.md
+
+# 用户话题自定义配置（可能含个人偏好）
+**/topics.json
+!src/config/topics.example.json
+
+# 用户画像
+profile.md
+
+# 导出与备份
+backup/
+backups/
+export/
+archive/
+snapshots/
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.cache
+
+# ═══════════════════════════════════════
 
 # Environment variables (may contain API keys)
 .env
@@ -27,5 +63,12 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# TypeScript incremental build info
-tsconfig.tsbuildinfo
+# TypeScript / Build
+*.tsbuildinfo
+*.js.map
+
+# Test coverage
+coverage/
+
+# Turbo (monorepo)
+.turbo

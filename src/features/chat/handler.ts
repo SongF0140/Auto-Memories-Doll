@@ -4,7 +4,7 @@ import { MemoryRecord } from "../../types/memory";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
 import { createLanguageModel } from "../../lib/ai/provider";
 import { TemplateManager, initializeTemplates } from "../../lib/prompt/template-manager";
-import { buildChatPrompt } from "../../lib/prompt/builder";
+import { PromptCache } from "../../lib/prompt/cache";
 import { MemoryService } from "../../server/services/memory-service";
 import { VectorRetriever } from "../../lib/vector/retriever";
 import { Ranker } from "../../lib/vector/ranker";
@@ -13,6 +13,10 @@ import { SkillManager } from "../../lib/skills/manager";
 import { McpManager } from "../../lib/mcp/manager";
 import { ToolCaller } from "../../lib/ai/tool-caller";
 import { registerDefaultTools } from "../../lib/ai/tool-registry";
+import { ProfileUpdater } from "../../server/services/profile-updater";
+
+/** 模板内容哈希，模板变更时缓存自动失效 */
+const TEMPLATE_HASH = "chat-memory-v3";
 
 export class ChatHandler {
   private templateManager: TemplateManager;
@@ -41,13 +45,15 @@ export class ChatHandler {
     const processedMessages = await this.applySkills(messages);
     const memoryContent = mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
 
-    const prompt = buildChatPrompt(
-      processedMessages.map(m => ({ role: m.role, content: m.content })),
-      memoryContent,
-      this.templateManager
-    );
+    const prompt = this.buildPrompt(processedMessages, memoryContent);
 
     const response = await ModelAdapter.generate(prompt, "mini");
+
+    // 对话结束后入队画像分析
+    const lastUserMsg = processedMessages.findLast(m => m.role === "user");
+    if (lastUserMsg) {
+      ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
+    }
 
     return {
       content: response.content,
@@ -63,16 +69,41 @@ export class ChatHandler {
     const processedMessages = await this.applySkills(messages);
     const memoryContent = mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
 
-    const prompt = buildChatPrompt(
-      processedMessages.map(m => ({ role: m.role, content: m.content })),
-      memoryContent,
-      this.templateManager
-    );
+    const prompt = this.buildPrompt(processedMessages, memoryContent);
+
+    // 对话结束后入队画像分析
+    const lastUserMsg = processedMessages.findLast(m => m.role === "user");
+    if (lastUserMsg) {
+      ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
+    }
 
     return streamText({
       model: createLanguageModel(),
       messages: [{ role: "user", content: prompt }],
     });
+  }
+
+  /**
+   * 构建完整 prompt：缓存前缀（系统提示词 + 用户画像）+ 动态记忆 + 对话历史
+   */
+  private buildPrompt(messages: { role: string; content: string }[], memoryContent: string): string {
+    const promptCache = PromptCache.getInstance();
+    const systemPrefix = promptCache.getSystemPrefix(TEMPLATE_HASH);
+    const memoryBlock = promptCache.getMemoryCache(memoryContent);
+
+    const conversationHistory = messages
+      .slice(-10)
+      .map(msg => `${msg.role}: ${msg.content}`)
+      .join("\n");
+
+    return `${systemPrefix}
+
+${memoryBlock}
+
+## 对话历史
+${conversationHistory}
+
+你现在要以记忆伴侣的身份，根据以上信息为用户提供最贴心的回答。`;
   }
 
   async executeMcpTool(serverId: string, toolName: string, args: Record<string, any>): Promise<any> {

@@ -5,12 +5,15 @@ import { MEMORY_VERSION } from "../../config/constants";
 
 export const buildMemoryRecord = (
   source: string,
-  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill",
+  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
   title: string,
   content: string,
   summary: string,
   tags: string[] = [],
-  id?: string
+  topic: string = "uncategorized",
+  id?: string,
+  /** 中文版本字段（可选） */
+  zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string }
 ): MemoryRecord => {
   const now = getCurrentTime();
   return {
@@ -22,6 +25,11 @@ export const buildMemoryRecord = (
     content,
     summary,
     tags,
+    topic,
+    titleZh: zhFields?.titleZh,
+    summaryZh: zhFields?.summaryZh,
+    tagsZh: zhFields?.tagsZh,
+    topicZh: zhFields?.topicZh,
     createdAt: now,
     updatedAt: now,
     accessedAt: now,
@@ -33,7 +41,7 @@ export const buildMemoryRecord = (
 
 export const buildPendingEvent = (
   memoryId: string,
-  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill",
+  sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
   candidate: MemoryRecord,
   changedFields: string[]
 ): PendingEvent => {

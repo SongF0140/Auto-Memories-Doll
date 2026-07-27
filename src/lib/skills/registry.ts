@@ -17,6 +17,10 @@ export class SkillRegistry {
     this.skills.set(skill.id, skill);
   }
 
+  unregister(skillId: string): void {
+    this.skills.delete(skillId);
+  }
+
   get(skillId: string): Skill | undefined {
     return this.skills.get(skillId);
   }
@@ -28,50 +32,32 @@ export class SkillRegistry {
   async execute(skillId: string, params: Record<string, any>): Promise<any> {
     const skill = this.skills.get(skillId);
     if (!skill) {
-      throw new Error(`Skill "${skillId}" not found`);
+      throw new Error(`Skill "${skillId}" 未找到`);
     }
-    
+
     return skill.handler(params);
   }
 }
 
-export const defaultSkills: Skill[] = [
-  {
-    id: "notion-ingest",
-    name: "Notion 数据采集",
-    description: "从 Notion 导入页面内容作为记忆",
-    parameters: {
-      pageId: { type: "string", description: "Notion 页面 ID", required: true },
-      apiKey: { type: "string", description: "Notion API Key", required: true },
-    },
-    handler: async (params) => {
-      return { success: true, message: `采集 Notion 页面 ${params.pageId}` };
-    },
+export const buildSystemSkill = (
+  id: string,
+  name: string,
+  description: string,
+  trigger: string,
+  prompt: string
+): Skill => ({
+  id,
+  name,
+  description,
+  parameters: {
+    trigger: { type: "string", description: "触发关键词", required: true },
+    prompt: { type: "string", description: "系统提示词", required: true },
   },
-  {
-    id: "browser-history",
-    name: "浏览器历史采集",
-    description: "采集浏览器历史记录作为记忆",
-    parameters: {
-      limit: { type: "number", description: "记录数量限制", required: false },
-    },
-    handler: async (params) => {
-      return { success: true, message: `采集浏览器历史 ${params.limit || 10} 条` };
-    },
+  handler: async () => {
+    return { trigger, prompt, description };
   },
-  {
-    id: "email-import",
-    name: "邮件导入",
-    description: "导入邮件内容作为记忆",
-    parameters: {
-      email: { type: "string", description: "邮箱地址", required: true },
-    },
-    handler: async (params) => {
-      return { success: true, message: `导入邮箱 ${params.email}` };
-    },
-  },
-];
+});
 
 export const initializeSkills = (registry: SkillRegistry): void => {
-  defaultSkills.forEach(skill => registry.register(skill));
+  // 默认不注册任何技能，技能由用户在设置中手动添加
 };

@@ -11,6 +11,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
     { id: "memory", label: "记忆" },
     { id: "search", label: "搜索" },
     { id: "prompt", label: "提示词" },
+    { id: "audit", label: "审计" },
     { id: "settings", label: "设置" },
   ];
 

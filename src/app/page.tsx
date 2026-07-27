@@ -8,6 +8,7 @@ import ChatInterface from "../components/chat/ChatInterface";
 import MemoryList from "../components/memory/MemoryList";
 import MemorySearch from "../components/memory/MemorySearch";
 import PromptList from "../components/prompt/PromptList";
+import AuditPanel from "../components/audit/AuditPanel";
 import SettingsPanel from "../components/settings/SettingsPanel";
 
 export default function HomePage() {
@@ -23,6 +24,8 @@ export default function HomePage() {
         return <MemorySearch />;
       case "prompt":
         return <PromptList />;
+      case "audit":
+        return <AuditPanel />;
       case "settings":
         return <SettingsPanel />;
       default:

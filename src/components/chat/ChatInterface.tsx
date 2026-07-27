@@ -10,9 +10,8 @@ import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
 
-const chatGardenImage = `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(
-  "masterpiece, high quality original anime background, elegant blonde automemory doll inspired atmosphere without existing characters, violet flowers, antique postal office, brass typewriter, handwritten letters, warm golden light, soft lavender and khaki palette, cinematic painterly composition, no text"
-)}&image_size=landscape_16_9`;
+// Photo by RetroSupply on Unsplash (free to use, no attribution required)
+const chatGardenImage = "https://images.unsplash.com/photo-1432821596592-e2c18b78144f?w=1200&q=80";
 
 function parseDataStreamLine(line: string): { type: "text" | "error" | "unknown"; value: string } {
   const separatorIndex = line.indexOf(":");

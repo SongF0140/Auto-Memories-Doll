@@ -4,11 +4,12 @@ export const validateMemoryRecord = (record: Partial<MemoryRecord>): record is M
   if (!record.id || typeof record.id !== "string") return false;
   if (!record.version || typeof record.version !== "number") return false;
   if (!record.source || typeof record.source !== "string") return false;
-  if (!record.sourceType || !["chat", "ingest", "manual", "mcp", "skill"].includes(record.sourceType)) return false;
+  if (!record.sourceType || !["chat", "ingest", "manual", "mcp", "skill", "listen"].includes(record.sourceType)) return false;
   if (!record.title || typeof record.title !== "string") return false;
   if (!record.content || typeof record.content !== "string") return false;
   if (!record.summary || typeof record.summary !== "string") return false;
   if (!record.tags || !Array.isArray(record.tags)) return false;
+  if (!record.topic || typeof record.topic !== "string") return false;
   if (!record.createdAt || typeof record.createdAt !== "string") return false;
   if (!record.updatedAt || typeof record.updatedAt !== "string") return false;
   if (!record.accessedAt || typeof record.accessedAt !== "string") return false;

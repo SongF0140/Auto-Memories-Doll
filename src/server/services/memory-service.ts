@@ -3,8 +3,6 @@ import { buildMemoryRecord, buildPendingEvent } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
 import { VectorIndex } from "../../lib/vector/index";
 import { buildVectorRecord } from "../../lib/vector/generator";
-import { GraphManager } from "../../lib/graph/manager";
-import { buildGraphEdge, extractRelations } from "../../lib/graph/builder";
 import { getDatabase } from "../../lib/storage/database";
 import Database from "better-sqlite3";
 
@@ -24,9 +22,14 @@ export class MemoryService {
         source TEXT,
         sourceType TEXT,
         title TEXT,
+        titleZh TEXT,
         content TEXT,
         summary TEXT,
+        summaryZh TEXT,
         tags TEXT,
+        tagsZh TEXT,
+        topic TEXT DEFAULT 'uncategorized',
+        topicZh TEXT,
         createdAt TEXT,
         updatedAt TEXT,
         accessedAt TEXT,
@@ -36,6 +39,16 @@ export class MemoryService {
         graphLinks TEXT
       )
     `);
+
+    // 迁移：旧数据库可能缺少 topic / zh 列
+    const migrationColumns = ["topic", "titleZh", "summaryZh", "tagsZh", "topicZh"];
+    for (const col of migrationColumns) {
+      try {
+        this.db.exec(`ALTER TABLE memories ADD COLUMN ${col} TEXT`);
+      } catch {
+        // 列已存在，跳过
+      }
+    }
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pending_events (
         eventId TEXT PRIMARY KEY,
@@ -66,13 +79,15 @@ export class MemoryService {
 
   async createMemory(
     source: string,
-    sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill",
+    sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
     title: string,
     content: string,
     summary: string,
-    tags: string[] = []
+    tags: string[] = [],
+    topic: string = "uncategorized",
+    zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string }
   ): Promise<string> {
-    const memory = buildMemoryRecord(source, sourceType, title, content, summary, tags);
+    const memory = buildMemoryRecord(source, sourceType, title, content, summary, tags, topic, undefined, zhFields);
     
     if (!validateMemoryRecord(memory)) {
       throw new Error("Invalid memory record");
@@ -80,9 +95,10 @@ export class MemoryService {
 
     const stmt = this.db.prepare(`
       INSERT INTO memories (
-        id, version, source, sourceType, title, content, summary, tags,
+        id, version, source, sourceType, title, titleZh, content, summary, summaryZh,
+        tags, tagsZh, topic, topicZh,
         createdAt, updatedAt, accessedAt, accessCount, heatScore, graphLinks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       memory.id,
@@ -90,9 +106,14 @@ export class MemoryService {
       memory.source,
       memory.sourceType,
       memory.title,
+      memory.titleZh || null,
       memory.content,
       memory.summary,
+      memory.summaryZh || null,
       JSON.stringify(memory.tags),
+      memory.tagsZh ? JSON.stringify(memory.tagsZh) : null,
+      memory.topic,
+      memory.topicZh || null,
       memory.createdAt,
       memory.updatedAt,
       memory.accessedAt,
@@ -106,11 +127,8 @@ export class MemoryService {
     vectorIndex.create(vectorRecord);
     vectorIndex.close();
 
-    const graphManager = new GraphManager();
-    const allMemories = this.listMemories();
-    const relations = extractRelations(content, memory.id, allMemories.map(m => m.id));
-    relations.forEach(edge => graphManager.create(edge));
-    graphManager.close();
+    this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?")
+      .run(memory.id, memory.id);
 
     return memory.id;
   }
@@ -126,9 +144,14 @@ export class MemoryService {
       source: row.source,
       sourceType: row.sourceType as MemoryRecord["sourceType"],
       title: row.title,
+      titleZh: row.titleZh || undefined,
       content: row.content,
       summary: row.summary,
+      summaryZh: row.summaryZh || undefined,
       tags: JSON.parse(row.tags),
+      tagsZh: row.tagsZh ? JSON.parse(row.tagsZh) : undefined,
+      topic: row.topic || "uncategorized",
+      topicZh: row.topicZh || undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       accessedAt: row.accessedAt,
@@ -149,9 +172,14 @@ export class MemoryService {
       source: row.source,
       sourceType: row.sourceType as MemoryRecord["sourceType"],
       title: row.title,
+      titleZh: row.titleZh || undefined,
       content: row.content,
       summary: row.summary,
+      summaryZh: row.summaryZh || undefined,
       tags: JSON.parse(row.tags),
+      tagsZh: row.tagsZh ? JSON.parse(row.tagsZh) : undefined,
+      topic: row.topic || "uncategorized",
+      topicZh: row.topicZh || undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       accessedAt: row.accessedAt,
@@ -170,8 +198,9 @@ export class MemoryService {
     
     const stmt = this.db.prepare(`
       UPDATE memories SET
-        version = ?, source = ?, sourceType = ?, title = ?, content = ?,
-        summary = ?, tags = ?, updatedAt = ?, accessedAt = ?, accessCount = ?,
+        version = ?, source = ?, sourceType = ?, title = ?, titleZh = ?, content = ?,
+        summary = ?, summaryZh = ?, tags = ?, tagsZh = ?, topic = ?, topicZh = ?,
+        updatedAt = ?, accessedAt = ?, accessCount = ?,
         heatScore = ?, vectorId = ?, graphLinks = ?
       WHERE id = ?
     `);
@@ -180,9 +209,14 @@ export class MemoryService {
       updated.source,
       updated.sourceType,
       updated.title,
+      updated.titleZh || null,
       updated.content,
       updated.summary,
+      updated.summaryZh || null,
       JSON.stringify(updated.tags),
+      updated.tagsZh ? JSON.stringify(updated.tagsZh) : null,
+      updated.topic,
+      updated.topicZh || null,
       updated.updatedAt,
       updated.accessedAt,
       updated.accessCount,
@@ -200,11 +234,6 @@ export class MemoryService {
     const vectorIndex = new VectorIndex();
     vectorIndex.delete(id);
     vectorIndex.close();
-
-    const graphManager = new GraphManager();
-    const edges = graphManager.getNeighbors(id);
-    edges.forEach(edge => graphManager.delete(edge.from, edge.to));
-    graphManager.close();
   }
 
   incrementAccess(id: string): void {

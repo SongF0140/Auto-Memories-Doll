@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MemoryService } from "../../../server/services/memory-service";
 import { MemoryExtractor } from "../../../features/memory/extractor";
+import { memoryCreateSchema } from "../../../lib/validation";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,12 +16,10 @@ export async function GET(request: NextRequest) {
   try {
     let result = service.listMemories();
 
-    // 标签筛选
     if (tag) {
       result = result.filter(m => m.tags.includes(tag));
     }
 
-    // 排序
     const orderMul = sortOrder === "asc" ? 1 : -1;
     result.sort((a, b) => {
       const aVal = (a as any)[sortBy] ?? "";
@@ -31,7 +30,6 @@ export async function GET(request: NextRequest) {
       return String(aVal).localeCompare(String(bVal)) * orderMul;
     });
 
-    // 分页
     const total = result.length;
     const start = (page - 1) * pageSize;
     const paged = result.slice(start, start + pageSize);
@@ -43,29 +41,37 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { source, sourceType, content, title, tags } = await request.json();
-  
-  if (!content) {
-    return NextResponse.json({ error: "content is required" }, { status: 400 });
+  const body = await request.json();
+  const parsed = memoryCreateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0].message },
+      { status: 400 }
+    );
   }
+
+  const { title, content, tags, sourceType } = parsed.data;
+  const source = sourceType === "manual" ? "manual" : sourceType;
 
   const service = new MemoryService();
   const extractor = new MemoryExtractor();
-  
+
   try {
-    const memoryRecord = extractor.extractFromStructuredData(
-      source || "manual",
-      (sourceType || "manual") as any,
-      { title: title || "", content, tags }
-    );
-    
+    const memoryRecord = extractor.extractFromStructuredData(source, sourceType, { title, content, tags });
     const memoryId = await service.createMemory(
       memoryRecord.source,
       memoryRecord.sourceType,
       memoryRecord.title,
       memoryRecord.content,
       memoryRecord.summary,
-      memoryRecord.tags
+      memoryRecord.tags,
+      memoryRecord.topic,
+      {
+        titleZh: memoryRecord.titleZh,
+        summaryZh: memoryRecord.summaryZh,
+        tagsZh: memoryRecord.tagsZh,
+        topicZh: memoryRecord.topicZh,
+      }
     );
     return NextResponse.json({ ...memoryRecord, id: memoryId });
   } finally {
