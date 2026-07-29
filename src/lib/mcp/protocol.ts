@@ -1,10 +1,6 @@
 export type McpProtocolVersion = "1.0";
 
-export type McpMessageType = 
-  | "tool_list"
-  | "tool_invoke"
-  | "tool_result"
-  | "error";
+export type McpMessageType = "tool_list" | "tool_invoke" | "tool_result" | "error";
 
 export interface McpMessage {
   version: McpProtocolVersion;
@@ -15,11 +11,14 @@ export interface McpMessage {
 export interface McpTool {
   name: string;
   description: string;
-  parameters: Record<string, {
-    type: "string" | "number" | "boolean" | "array" | "object";
-    description?: string;
-    required?: boolean;
-  }>;
+  parameters: Record<
+    string,
+    {
+      type: "string" | "number" | "boolean" | "array" | "object";
+      description?: string;
+      required?: boolean;
+    }
+  >;
 }
 
 export interface McpToolListResponse {
@@ -53,7 +52,10 @@ export const buildToolListResponse = (tools: McpTool[]): McpMessage => {
   };
 };
 
-export const buildToolInvokeRequest = (toolName: string, arguments_: Record<string, any>): McpMessage => {
+export const buildToolInvokeRequest = (
+  toolName: string,
+  arguments_: Record<string, any>,
+): McpMessage => {
   return {
     version: "1.0",
     type: "tool_invoke",
@@ -61,7 +63,11 @@ export const buildToolInvokeRequest = (toolName: string, arguments_: Record<stri
   };
 };
 
-export const buildToolResultResponse = (success: boolean, data?: any, error?: string): McpMessage => {
+export const buildToolResultResponse = (
+  success: boolean,
+  data?: any,
+  error?: string,
+): McpMessage => {
   return {
     version: "1.0",
     type: "tool_result",

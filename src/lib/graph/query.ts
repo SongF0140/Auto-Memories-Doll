@@ -8,11 +8,14 @@ export class GraphQuery {
     this.manager = new GraphManager();
   }
 
-  findRelatedMemories(memoryId: string, limit: number = 5): { memoryId: string; relation: string; weight: number }[] {
+  findRelatedMemories(
+    memoryId: string,
+    limit: number = 5,
+  ): { memoryId: string; relation: string; weight: number }[] {
     const edges = this.manager.getNeighbors(memoryId);
-    
+
     return edges
-      .map(edge => ({
+      .map((edge) => ({
         memoryId: edge.from === memoryId ? edge.to : edge.from,
         relation: edge.relation,
         weight: edge.weight,
@@ -24,20 +27,20 @@ export class GraphQuery {
   findPath(startId: string, endId: string, maxDepth: number = 3): GraphEdge[][] {
     const paths: GraphEdge[][] = [];
     const visited = new Set<string>();
-    
+
     const dfs = (currentId: string, path: GraphEdge[]) => {
       if (currentId === endId) {
         paths.push([...path]);
         return;
       }
-      
+
       if (path.length >= maxDepth) return;
       if (visited.has(currentId)) return;
-      
+
       visited.add(currentId);
       const neighbors = this.manager.getNeighbors(currentId);
-      
-      neighbors.forEach(edge => {
+
+      neighbors.forEach((edge) => {
         const nextId = edge.from === currentId ? edge.to : edge.from;
         if (!visited.has(nextId)) {
           path.push(edge);
@@ -45,10 +48,10 @@ export class GraphQuery {
           path.pop();
         }
       });
-      
+
       visited.delete(currentId);
     };
-    
+
     dfs(startId, []);
     return paths;
   }

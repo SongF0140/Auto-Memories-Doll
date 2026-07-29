@@ -9,7 +9,11 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export default function ChatInput({ onSend, disabled, placeholder = "输入消息..." }: ChatInputProps) {
+export default function ChatInput({
+  onSend,
+  disabled,
+  placeholder = "输入消息...",
+}: ChatInputProps) {
   const [content, setContent] = useState("");
 
   const handleSubmit = () => {
@@ -32,7 +36,7 @@ export default function ChatInput({ onSend, disabled, placeholder = "输入消�
       <div className="max-w-3xl mx-auto flex gap-3 items-end">
         <textarea
           value={content}
-          onChange={e => setContent(e.target.value)}
+          onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder={placeholder}

@@ -23,7 +23,7 @@ export class VectorScheduler {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    
+
     this.worker.close();
   }
 

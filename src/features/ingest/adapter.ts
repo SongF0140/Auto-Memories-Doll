@@ -21,11 +21,11 @@ export class IngestAdapter {
     return this.extractor.extractFromText(
       event.source,
       event.source as MemoryRecord["sourceType"],
-      event.content
+      event.content,
     );
   }
 
   adaptBatch(events: InputEvent[]): MemoryRecord[] {
-    return events.map(event => this.adapt(event));
+    return events.map((event) => this.adapt(event));
   }
 }

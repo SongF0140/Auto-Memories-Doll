@@ -17,7 +17,7 @@ export class AuditReviewer {
   async resolveConflict(
     conflictId: string,
     resolution: ConflictResolution,
-    manualValue?: string
+    manualValue?: string,
   ): Promise<void> {
     this.auditService.resolveConflict(conflictId, resolution, manualValue);
   }

@@ -20,12 +20,12 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
   const [form, setForm] = useState<AiConfig>(config);
 
   const update = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => {
-    setForm(prev => ({ ...prev, [key]: value }));
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   return (
     <form
-      onSubmit={e => {
+      onSubmit={(e) => {
         e.preventDefault();
         onSave(form);
       }}
@@ -36,11 +36,13 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <label className="block text-sm font-medium text-text-primary mb-2">提供商</label>
           <select
             value={form.provider}
-            onChange={e => update("provider", e.target.value as AiProvider)}
+            onChange={(e) => update("provider", e.target.value as AiProvider)}
             className="input"
           >
-            {providers.map(p => (
-              <option key={p.value} value={p.value}>{p.label}</option>
+            {providers.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
             ))}
           </select>
         </div>
@@ -50,7 +52,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <input
             type="url"
             value={form.baseURL}
-            onChange={e => update("baseURL", e.target.value)}
+            onChange={(e) => update("baseURL", e.target.value)}
             placeholder="https://api.openai.com/v1"
             className="input"
             required
@@ -62,7 +64,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <input
             type="password"
             value={form.apiKey}
-            onChange={e => update("apiKey", e.target.value)}
+            onChange={(e) => update("apiKey", e.target.value)}
             placeholder="sk-..."
             className="input"
           />
@@ -73,7 +75,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <input
             type="text"
             value={form.chatModel}
-            onChange={e => update("chatModel", e.target.value)}
+            onChange={(e) => update("chatModel", e.target.value)}
             placeholder="gpt-4o-mini"
             className="input"
             required
@@ -81,11 +83,13 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-2">Embedding Model</label>
+          <label className="block text-sm font-medium text-text-primary mb-2">
+            Embedding Model
+          </label>
           <input
             type="text"
             value={form.embeddingModel}
-            onChange={e => update("embeddingModel", e.target.value)}
+            onChange={(e) => update("embeddingModel", e.target.value)}
             placeholder="text-embedding-3-small"
             className="input"
             required
@@ -93,11 +97,13 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-2">Embedding Dimensions</label>
+          <label className="block text-sm font-medium text-text-primary mb-2">
+            Embedding Dimensions
+          </label>
           <input
             type="number"
             value={form.embeddingDimensions}
-            onChange={e => update("embeddingDimensions", parseInt(e.target.value) || 1536)}
+            onChange={(e) => update("embeddingDimensions", parseInt(e.target.value) || 1536)}
             className="input"
             required
           />
@@ -108,7 +114,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <input
             type="number"
             value={form.maxTokens}
-            onChange={e => update("maxTokens", parseInt(e.target.value) || 2048)}
+            onChange={(e) => update("maxTokens", parseInt(e.target.value) || 2048)}
             className="input"
             required
           />
@@ -122,7 +128,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
             min="0"
             max="2"
             value={form.temperature}
-            onChange={e => update("temperature", parseFloat(e.target.value) || 0.7)}
+            onChange={(e) => update("temperature", parseFloat(e.target.value) || 0.7)}
             className="input"
             required
           />
@@ -133,7 +139,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <input
             type="number"
             value={form.timeout}
-            onChange={e => update("timeout", parseInt(e.target.value) || 30000)}
+            onChange={(e) => update("timeout", parseInt(e.target.value) || 30000)}
             className="input"
             required
           />
@@ -144,7 +150,7 @@ export default function AiConfigForm({ config, onSave, saving }: AiConfigFormPro
           <input
             type="number"
             value={form.maxRetries}
-            onChange={e => update("maxRetries", parseInt(e.target.value) || 2)}
+            onChange={(e) => update("maxRetries", parseInt(e.target.value) || 2)}
             className="input"
             required
           />

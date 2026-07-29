@@ -20,8 +20,7 @@ export class VectorWorker {
       try {
         const vectorRecord = await buildVectorRecord(row.id, row.content);
         vectorIndex.create(vectorRecord);
-        this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?")
-          .run(row.id, row.id);
+        this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(row.id, row.id);
       } catch (error) {
         console.error(`Failed to build vector for memory ${row.id}:`, error);
       }
@@ -36,8 +35,7 @@ export class VectorWorker {
     try {
       const vectorRecord = await buildVectorRecord(memoryId, content);
       vectorIndex.create(vectorRecord);
-      this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?")
-        .run(memoryId, memoryId);
+      this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memoryId, memoryId);
     } finally {
       vectorIndex.close();
     }

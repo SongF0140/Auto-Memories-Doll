@@ -1,5 +1,11 @@
 import { promises as fs } from "fs";
-import { getMemoryRoot, getNotesPath, getArchivePath, getFailuresPath, getDeletedPath } from "./path-resolver";
+import {
+  getMemoryRoot,
+  getNotesPath,
+  getArchivePath,
+  getFailuresPath,
+  getDeletedPath,
+} from "./path-resolver";
 import { sanitizeFilename } from "../utils/normalization";
 
 export const ensureDirectory = async (path: string): Promise<void> => {
@@ -47,7 +53,7 @@ export const deleteFile = async (path: string): Promise<void> => {
 export const listFiles = async (directory: string): Promise<string[]> => {
   try {
     const files = await fs.readdir(directory);
-    return files.filter(f => f.endsWith(".md"));
+    return files.filter((f) => f.endsWith(".md"));
   } catch {
     return [];
   }
@@ -58,16 +64,24 @@ export const moveFile = async (source: string, destination: string): Promise<voi
   await fs.rename(source, destination);
 };
 
-export const createFailureRecord = async (memoryId: string, stage: string, error: Error): Promise<string> => {
+export const createFailureRecord = async (
+  memoryId: string,
+  stage: string,
+  error: Error,
+): Promise<string> => {
   const filename = `${memoryId}-${stage}-${Date.now()}.json`;
   const path = `${getFailuresPath()}/${sanitizeFilename(filename)}`;
-  const content = JSON.stringify({
-    memoryId,
-    stage,
-    error: error.message,
-    stack: error.stack,
-    timestamp: new Date().toISOString(),
-  }, null, 2);
+  const content = JSON.stringify(
+    {
+      memoryId,
+      stage,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString(),
+    },
+    null,
+    2,
+  );
   await writeFile(path, content);
   return path;
 };

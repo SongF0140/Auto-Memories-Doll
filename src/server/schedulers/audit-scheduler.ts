@@ -10,7 +10,7 @@ export class AuditScheduler {
 
   start(): void {
     this.worker.start();
-    
+
     this.intervalId = setInterval(async () => {
       await this.worker.retryFailedEvents();
     }, 60000) as unknown as number;
@@ -18,7 +18,7 @@ export class AuditScheduler {
 
   stop(): void {
     this.worker.stop();
-    
+
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;

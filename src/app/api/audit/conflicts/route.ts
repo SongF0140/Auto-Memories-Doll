@@ -9,16 +9,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const { conflictId, resolution, mergedContent } = await request.json();
-  
+
   if (!conflictId || !resolution) {
-    return NextResponse.json(
-      { error: "conflictId and resolution are required" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "conflictId and resolution are required" }, { status: 400 });
   }
 
   const reviewer = new AuditReviewer();
-  
+
   try {
     await reviewer.resolveConflict(conflictId, resolution as any, mergedContent);
     return NextResponse.json({ success: true });

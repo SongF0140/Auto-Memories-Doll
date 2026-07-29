@@ -1,4 +1,10 @@
-import { MemoryRecord, VectorRecord, GraphEdge, PendingEvent, ConflictRecord } from "../../types/memory";
+import {
+  MemoryRecord,
+  VectorRecord,
+  GraphEdge,
+  PendingEvent,
+  ConflictRecord,
+} from "../../types/memory";
 
 export interface MemoryStore {
   create(memory: MemoryRecord): Promise<void>;
@@ -53,4 +59,4 @@ export interface StorageManager {
   graph: GraphStore;
   queue: QueueStore;
   conflict: ConflictStore;
-};
+}

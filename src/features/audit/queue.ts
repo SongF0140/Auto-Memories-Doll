@@ -18,7 +18,7 @@ export class AuditQueue {
     const queue = this.events.get(memoryId);
     if (!queue || queue.length === 0) return null;
 
-    const next = queue.find(e => e.status === "pending");
+    const next = queue.find((e) => e.status === "pending");
     if (!next) return null;
 
     next.status = "processing";
@@ -27,7 +27,7 @@ export class AuditQueue {
 
   hasPending(memoryId: string): boolean {
     const queue = this.events.get(memoryId);
-    return queue ? queue.some(e => e.status === "pending") : false;
+    return queue ? queue.some((e) => e.status === "pending") : false;
   }
 
   removeProcessed(memoryId: string): void {
@@ -35,14 +35,14 @@ export class AuditQueue {
     if (!queue) return;
     this.events.set(
       memoryId,
-      queue.filter(e => e.status !== "done")
+      queue.filter((e) => e.status !== "done"),
     );
   }
 
   size(): number {
     let count = 0;
     for (const queue of this.events.values()) {
-      count += queue.filter(e => e.status === "pending").length;
+      count += queue.filter((e) => e.status === "pending").length;
     }
     return count;
   }

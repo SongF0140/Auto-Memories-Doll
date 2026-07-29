@@ -1,5 +1,6 @@
 import { McpServerConfig } from "../../types/config";
 import { ConfigService } from "../../server/services/config-service";
+import { McpNotFoundError, McpNotConfiguredError } from "../errors";
 
 export type McpTool = {
   name: string;
@@ -15,7 +16,7 @@ export class McpManager {
   }
 
   listEnabledServers(): McpServerConfig[] {
-    return this.configService.listMcpServers().filter(s => s.enabled);
+    return this.configService.listMcpServers().filter((s) => s.enabled);
   }
 
   getServer(id: string): McpServerConfig | null {
@@ -39,12 +40,10 @@ export class McpManager {
   async callTool(serverId: string, toolName: string, args: Record<string, any>): Promise<any> {
     const server = this.getServer(serverId);
     if (!server || !server.enabled) {
-      throw new Error(`MCP 服务器 "${serverId}" 未找到或未启用`);
+      throw new McpNotFoundError(serverId);
     }
 
-    throw new Error(
-      `MCP 服务器 "${server.name}" 尚未配置通信协议。请在设置中为该 MCP 服务器提供有效的 stdio 命令或 SSE 端点。`
-    );
+    throw new McpNotConfiguredError(server.name);
   }
 
   close(): void {

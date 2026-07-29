@@ -27,18 +27,18 @@ export function formatFrontmatter(record: MemoryRecord): string {
     `updatedAt: "${record.updatedAt}"`,
     `version: ${record.version}`,
     record.heatScore > 0 ? `heatScore: ${record.heatScore.toFixed(2)}` : `heatScore: 0`,
-  ].filter(l => l !== "");
+  ].filter((l) => l !== "");
 
   // tags
   if (record.tags.length > 0) {
-    lines.push(`tags: [${record.tags.map(t => `"${escapeYaml(t)}"`).join(", ")}]`);
+    lines.push(`tags: [${record.tags.map((t) => `"${escapeYaml(t)}"`).join(", ")}]`);
   } else {
     lines.push(`tags: []`);
   }
 
   // tagsZh
   if (record.tagsZh && record.tagsZh.length > 0) {
-    lines.push(`tagsZh: [${record.tagsZh.map(t => `"${escapeYaml(t)}"`).join(", ")}]`);
+    lines.push(`tagsZh: [${record.tagsZh.map((t) => `"${escapeYaml(t)}"`).join(", ")}]`);
   }
 
   // summary / summaryZh
@@ -50,9 +50,9 @@ export function formatFrontmatter(record: MemoryRecord): string {
   }
 
   // related 记忆（wikilink 关系）
-  const relatedIds = record.graphLinks.filter(id => id && id !== record.id);
+  const relatedIds = record.graphLinks.filter((id) => id && id !== record.id);
   if (relatedIds.length > 0) {
-    lines.push(`related: [${relatedIds.map(id => `"${id}"`).join(", ")}]`);
+    lines.push(`related: [${relatedIds.map((id) => `"${id}"`).join(", ")}]`);
   }
 
   lines.push(FRONTMATTER_DELIMITER);
@@ -79,9 +79,9 @@ export function formatMemoryAsMarkdown(record: MemoryRecord): string {
   ];
 
   // wikilinks
-  const relatedIds = record.graphLinks.filter(id => id && id !== record.id);
+  const relatedIds = record.graphLinks.filter((id) => id && id !== record.id);
   if (relatedIds.length > 0) {
-    relatedIds.forEach(id => {
+    relatedIds.forEach((id) => {
       body.push(`- [[${id}]]`);
     });
   } else {
@@ -94,23 +94,31 @@ export function formatMemoryAsMarkdown(record: MemoryRecord): string {
 }
 
 /** 从对话消息生成 LLMWiki Markdown（用于 /api/listen 新记忆） */
-export function formatConversationAsMarkdown(content: string, title: string, tags: string[], topic: string, relatedMemories: string[] = []): string {
+export function formatConversationAsMarkdown(
+  content: string,
+  title: string,
+  tags: string[],
+  topic: string,
+  relatedMemories: string[] = [],
+): string {
   const lines = [
     FRONTMATTER_DELIMITER,
     `title: "${escapeYaml(title)}"`,
     `topic: "${topic}"`,
-    tags.length > 0 ? `tags: [${tags.map(t => `"${escapeYaml(t)}"`).join(", ")}]` : `tags: []`,
+    tags.length > 0 ? `tags: [${tags.map((t) => `"${escapeYaml(t)}"`).join(", ")}]` : `tags: []`,
     `sourceType: "listen"`,
     `createdAt: "${new Date().toISOString()}"`,
     `updatedAt: "${new Date().toISOString()}"`,
-    relatedMemories.length > 0 ? `related: [${relatedMemories.map(id => `"${id}"`).join(", ")}]` : "",
+    relatedMemories.length > 0
+      ? `related: [${relatedMemories.map((id) => `"${id}"`).join(", ")}]`
+      : "",
     FRONTMATTER_DELIMITER,
     "",
     `# ${title}`,
     "",
     content,
     "",
-  ].filter(l => l !== "");
+  ].filter((l) => l !== "");
 
   return lines.join("\n");
 }

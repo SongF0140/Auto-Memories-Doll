@@ -1,6 +1,6 @@
 export type EventSource = "chat" | "ingest" | "manual" | "mcp" | "skill" | "unknown";
 
-export type EventType = 
+export type EventType =
   | "memory.created"
   | "memory.updated"
   | "memory.deleted"

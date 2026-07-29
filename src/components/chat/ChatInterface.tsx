@@ -9,6 +9,7 @@ import ChatModeSelector from "./ChatModeSelector";
 import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
+import { AppError } from "../../lib/errors";
 
 // Photo by RetroSupply on Unsplash (free to use, no attribution required)
 const chatGardenImage = "https://images.unsplash.com/photo-1432821596592-e2c18b78144f?w=1200&q=80";
@@ -45,108 +46,117 @@ export default function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [relatedMemories, setRelatedMemories] = useState<MemoryRecord[]>([]);
 
-  const handleSend = useCallback(async (content: string) => {
-    if (!content.trim()) return;
+  const handleSend = useCallback(
+    async (content: string) => {
+      if (!content.trim()) return;
 
-    const newMessage: ChatMessage = { role: "user", content };
-    const currentMessages = [...messages, newMessage];
-    setMessages(currentMessages);
-    setLoading(true);
+      const newMessage: ChatMessage = { role: "user", content };
+      const currentMessages = [...messages, newMessage];
+      setMessages(currentMessages);
+      setLoading(true);
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: currentMessages,
-          mode,
-          sessionId: "default",
-        }),
-      });
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: currentMessages,
+            mode,
+            sessionId: "default",
+          }),
+        });
 
-      const contentType = response.headers.get("content-type") || "";
+        const contentType = response.headers.get("content-type") || "";
 
-      // 非 2xx 或 JSON 响应按错误/记忆保存处理
-      if (!response.ok || contentType.includes("application/json")) {
-        const result = await response.json();
-        if (response.ok) {
-          setMessages(prev => [...prev, { role: "assistant", content: result.content }]);
+        // 非 2xx 或 JSON 响应按错误/记忆保存处理
+        if (!response.ok || contentType.includes("application/json")) {
+          const result = await response.json();
+          if (response.ok) {
+            setMessages((prev) => [...prev, { role: "assistant", content: result.content }]);
 
-          if (mode === "memory" && result.memoryReferences?.length > 0) {
-            fetchRelatedMemories(result.memoryReferences);
+            if (mode === "memory" && result.memoryReferences?.length > 0) {
+              fetchRelatedMemories(result.memoryReferences);
+            }
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              { role: "system", content: `错误: ${result.error || "未知错误"}` },
+            ]);
           }
-        } else {
-          setMessages(prev => [...prev, { role: "system", content: `错误: ${result.error || "未知错误"}` }]);
+          setLoading(false);
+          return;
         }
-        setLoading(false);
-        return;
-      }
 
-      // 流式响应（Vercel AI SDK 数据流格式）
-      if (!response.body) {
-        throw new Error("无响应体");
-      }
+        // 流式响应（Vercel AI SDK 数据流格式）
+        if (!response.body) {
+          throw new AppError("NO_RESPONSE_BODY", "无响应体");
+        }
 
-      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let done = false;
-      let streamError = "";
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let done = false;
+        let streamError = "";
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
 
-          for (const line of lines) {
-            if (!line) continue;
-            const parsed = parseDataStreamLine(line);
-            if (parsed.type === "text") {
-              setMessages(prev => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === "assistant") {
-                  last.content += parsed.value;
-                }
-                return updated;
-              });
-            } else if (parsed.type === "error" && parsed.value) {
-              streamError += parsed.value;
+            for (const line of lines) {
+              if (!line) continue;
+              const parsed = parseDataStreamLine(line);
+              if (parsed.type === "text") {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const last = updated[updated.length - 1];
+                  if (last && last.role === "assistant") {
+                    last.content += parsed.value;
+                  }
+                  return updated;
+                });
+              } else if (parsed.type === "error" && parsed.value) {
+                streamError += parsed.value;
+              }
             }
           }
         }
-      }
 
-      // 若流中包含错误，将空 assistant 消息替换为 system 错误
-      if (streamError) {
-        setMessages(prev => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last && last.role === "assistant" && !last.content.trim()) {
-            updated[updated.length - 1] = { role: "system", content: `流式响应错误: ${streamError}` };
-          }
-          return updated;
-        });
+        // 若流中包含错误，将空 assistant 消息替换为 system 错误
+        if (streamError) {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === "assistant" && !last.content.trim()) {
+              updated[updated.length - 1] = {
+                role: "system",
+                content: `流式响应错误: ${streamError}`,
+              };
+            }
+            return updated;
+          });
+        }
+      } catch (error) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `网络错误: ${(error as Error).message}` },
+        ]);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      setMessages(prev => [
-        ...prev,
-        { role: "system", content: `网络错误: ${(error as Error).message}` },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, [messages, mode]);
+    },
+    [messages, mode],
+  );
 
   const fetchRelatedMemories = async (ids: string[]) => {
     try {
       const memories = await Promise.all(
-        ids.map(id => fetch(`/api/memory/${id}`).then(r => r.ok ? r.json() : null))
+        ids.map((id) => fetch(`/api/memory/${id}`).then((r) => (r.ok ? r.json() : null))),
       );
       setRelatedMemories(memories.filter(Boolean) as MemoryRecord[]);
     } catch (error) {
@@ -197,9 +207,7 @@ export default function ChatInterface() {
                   description="随意提问，或切换到记忆模式提取并保存重要信息。"
                 />
               ) : (
-                messages.map((message, index) => (
-                  <ChatMessageItem key={index} message={message} />
-                ))
+                messages.map((message, index) => <ChatMessageItem key={index} message={message} />)
               )}
 
               {loading && (
@@ -229,7 +237,9 @@ export default function ChatInterface() {
             <div className="px-5 py-4 border-b border-border">
               <h3 className="text-sm font-semibold text-text-primary">相关记忆</h3>
               <p className="text-xs text-text-tertiary mt-0.5">
-                {relatedMemories.length > 0 ? `${relatedMemories.length} 条关联记忆` : "记忆将显示在这里"}
+                {relatedMemories.length > 0
+                  ? `${relatedMemories.length} 条关联记忆`
+                  : "记忆将显示在这里"}
               </p>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -242,7 +252,7 @@ export default function ChatInterface() {
                   <p className="text-xs text-text-tertiary mt-1">发送消息以提取记忆</p>
                 </div>
               ) : (
-                relatedMemories.map(memory => (
+                relatedMemories.map((memory) => (
                   <MemoryCard key={memory.id} memory={memory} compact />
                 ))
               )}

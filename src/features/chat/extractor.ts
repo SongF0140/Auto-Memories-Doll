@@ -14,8 +14,8 @@ export interface MemoryExtractionResult {
 export class ChatExtractor {
   extractMemoryFromMessages(messages: ChatMessage[]): MemoryExtractionResult {
     const relevantMessages = messages.slice(-5);
-    const content = relevantMessages.map(m => `${m.role}: ${m.content}`).join("\n");
-    
+    const content = relevantMessages.map((m) => `${m.role}: ${m.content}`).join("\n");
+
     const title = this.extractTitle(content);
     const summary = formatSummary(content, 150);
     const tags = extractTags(content);
@@ -31,23 +31,23 @@ export class ChatExtractor {
   buildMemoryRecord(
     source: string,
     sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill",
-    messages: ChatMessage[]
+    messages: ChatMessage[],
   ): MemoryRecord {
     const extraction = this.extractMemoryFromMessages(messages);
-    
+
     return buildMemoryRecord(
       source,
       sourceType,
       extraction.title,
       extraction.content,
       extraction.summary,
-      extraction.tags
+      extraction.tags,
     );
   }
 
   private extractTitle(content: string): string {
-    const lines = content.split("\n").filter(l => l.trim());
-    
+    const lines = content.split("\n").filter((l) => l.trim());
+
     for (const line of lines) {
       if (line.length > 5 && line.length < 50) {
         const cleanLine = line.replace(/^(user|assistant):\s*/i, "").trim();
@@ -56,7 +56,7 @@ export class ChatExtractor {
         }
       }
     }
-    
+
     return content.substring(0, 30).replace(/\n/g, " ") + "...";
   }
 }

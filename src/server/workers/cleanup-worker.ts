@@ -12,7 +12,7 @@ export class CleanupWorker {
     const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const stmt = this.db.prepare(
-      "DELETE FROM pending_events WHERE status = 'done' AND createdAt < ?"
+      "DELETE FROM pending_events WHERE status = 'done' AND createdAt < ?",
     );
     stmt.run(cutoffTime);
   }
@@ -21,7 +21,7 @@ export class CleanupWorker {
     const cutoffTime = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const stmt = this.db.prepare(
-      "DELETE FROM conflict_records WHERE status LIKE 'resolved_%' AND resolvedAt < ?"
+      "DELETE FROM conflict_records WHERE status LIKE 'resolved_%' AND resolvedAt < ?",
     );
     stmt.run(cutoffTime);
   }

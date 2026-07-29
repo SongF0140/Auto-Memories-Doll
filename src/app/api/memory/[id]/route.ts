@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { MemoryService } from "../../../../server/services/memory-service";
 import { memoryUpdateSchema } from "../../../../lib/validation";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const service = new MemoryService();
 
   try {
@@ -19,10 +16,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const body = await request.json();
   const parsed = memoryUpdateSchema.safeParse(body);
   if (!parsed.success) {
@@ -44,10 +38,7 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const service = new MemoryService();
 
   try {

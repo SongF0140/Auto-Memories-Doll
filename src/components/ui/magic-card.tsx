@@ -15,17 +15,19 @@ export function MagicCard({ children, className, glowClassName }: MagicCardProps
   return (
     <div
       className={cn("magic-card group", className)}
-      onMouseMove={event => {
+      onMouseMove={(event) => {
         const rect = event.currentTarget.getBoundingClientRect();
         setPosition({
           x: ((event.clientX - rect.left) / rect.width) * 100,
           y: ((event.clientY - rect.top) / rect.height) * 100,
         });
       }}
-      style={{
-        "--magic-x": `${position.x}%`,
-        "--magic-y": `${position.y}%`,
-      } as React.CSSProperties}
+      style={
+        {
+          "--magic-x": `${position.x}%`,
+          "--magic-y": `${position.y}%`,
+        } as React.CSSProperties
+      }
     >
       <div className={cn("magic-card-glow", glowClassName)} />
       <div className="relative z-10">{children}</div>

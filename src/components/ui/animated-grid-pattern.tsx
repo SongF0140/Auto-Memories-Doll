@@ -7,10 +7,7 @@ interface AnimatedGridPatternProps {
 export function AnimatedGridPattern({ className }: AnimatedGridPatternProps) {
   return (
     <div
-      className={cn(
-        "pointer-events-none absolute inset-0 overflow-hidden opacity-60",
-        className
-      )}
+      className={cn("pointer-events-none absolute inset-0 overflow-hidden opacity-60", className)}
       aria-hidden="true"
     >
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(137,110,164,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(137,110,164,0.10)_1px,transparent_1px)] bg-[size:54px_54px] [mask-image:radial-gradient(ellipse_at_center,black_0%,transparent_72%)]" />

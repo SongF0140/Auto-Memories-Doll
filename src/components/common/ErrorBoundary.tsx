@@ -56,10 +56,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
                 </pre>
               </details>
             )}
-            <button
-              onClick={this.handleRetry}
-              className="shimmer-button mx-auto h-10 px-6"
-            >
+            <button onClick={this.handleRetry} className="shimmer-button mx-auto h-10 px-6">
               重试
             </button>
             <p className="mt-3 text-xs text-text-tertiary">

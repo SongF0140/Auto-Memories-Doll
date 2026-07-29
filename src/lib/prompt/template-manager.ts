@@ -1,4 +1,5 @@
 import { getDatabase } from "../storage/database";
+import { TemplateNotFoundError } from "../errors";
 
 export interface PromptTemplate {
   id: string;
@@ -57,7 +58,7 @@ export class TemplateManager {
       template.name,
       template.content,
       JSON.stringify(template.variables),
-      template.description || null
+      template.description || null,
     );
   }
 
@@ -85,11 +86,11 @@ export class TemplateManager {
     this.loadFromDb();
     const template = this.templates.get(templateId);
     if (!template) {
-      throw new Error(`Template "${templateId}" not found`);
+      throw new TemplateNotFoundError(templateId);
     }
 
     let content = template.content;
-    template.variables.forEach(variable => {
+    template.variables.forEach((variable) => {
       const value = variables[variable] || "";
       content = content.replace(new RegExp(`{{${variable}}}`, "g"), value);
     });

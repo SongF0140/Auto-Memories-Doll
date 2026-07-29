@@ -13,16 +13,18 @@ export async function GET(request: NextRequest) {
 
   const retriever = new VectorRetriever();
   const memoryService = new MemoryService();
-  
+
   try {
     const results = await retriever.search(query, limit);
     const memories = memoryService.listMemories();
-    const memoryMap = new Map(memories.map(m => [m.id, m]));
-    
-    const formattedResults = results.map(result => ({
-      ...memoryMap.get(result.memoryId),
-      similarity: result.similarity,
-    })).filter((m): m is typeof m => m !== undefined);
+    const memoryMap = new Map(memories.map((m) => [m.id, m]));
+
+    const formattedResults = results
+      .map((result) => ({
+        ...memoryMap.get(result.memoryId),
+        similarity: result.similarity,
+      }))
+      .filter((m): m is typeof m => m !== undefined);
 
     return NextResponse.json({ results: formattedResults });
   } finally {

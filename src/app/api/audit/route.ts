@@ -11,12 +11,12 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const { action } = await request.json();
-  
+
   if (action === "replay") {
     const replayer = new AuditReplayer();
     await replayer.replayPendingEvents();
     return NextResponse.json({ success: true, action: "replay" });
   }
-  
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

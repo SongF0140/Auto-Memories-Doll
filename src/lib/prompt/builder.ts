@@ -3,11 +3,11 @@ import { TemplateManager } from "./template-manager";
 export const buildChatPrompt = (
   messages: { role: string; content: string }[],
   memoryContent: string = "",
-  templateManager: TemplateManager
+  templateManager: TemplateManager,
 ): string => {
   const conversationHistory = messages
     .slice(-10)
-    .map(msg => `${msg.role}: ${msg.content}`)
+    .map((msg) => `${msg.role}: ${msg.content}`)
     .join("\n");
 
   return templateManager.render("chat-memory", {
@@ -16,7 +16,10 @@ export const buildChatPrompt = (
   });
 };
 
-export const buildMemoryExtractionPrompt = (text: string, templateManager: TemplateManager): string => {
+export const buildMemoryExtractionPrompt = (
+  text: string,
+  templateManager: TemplateManager,
+): string => {
   return templateManager.render("memory-extraction", { text });
 };
 
@@ -24,7 +27,7 @@ export const buildConflictResolutionPrompt = (
   existing: string,
   candidate: string,
   field: string,
-  templateManager: TemplateManager
+  templateManager: TemplateManager,
 ): string => {
   return templateManager.render("conflict-resolution", { existing, candidate, field });
 };

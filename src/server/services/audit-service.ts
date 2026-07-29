@@ -34,32 +34,32 @@ export class AuditService {
   assessConflict(
     existing: MemoryRecord,
     candidate: MemoryRecord,
-    changedFields: string[]
+    changedFields: string[],
   ): ConflictLevel {
     for (const field of changedFields) {
       if (field === "version") continue;
-      
+
       const existingValue = existing[field as keyof MemoryRecord];
       const candidateValue = candidate[field as keyof MemoryRecord];
-      
+
       if (JSON.stringify(existingValue) !== JSON.stringify(candidateValue)) {
         if (field === "tags") {
           const existingTags = new Set(existing.tags);
           const candidateTags = new Set(candidate.tags);
-          const newTags = Array.from(candidateTags).filter(t => !existingTags.has(t));
+          const newTags = Array.from(candidateTags).filter((t) => !existingTags.has(t));
           if (newTags.length > 0) {
             return "auto_merge";
           }
         }
-        
+
         if (field === "graphLinks") {
           return "auto_merge";
         }
-        
+
         return "manual_decision";
       }
     }
-    
+
     return "auto_merge";
   }
 
@@ -68,7 +68,7 @@ export class AuditService {
     eventId: string,
     field: string,
     existingValue: any,
-    candidateValue: any
+    candidateValue: any,
   ): ConflictRecord {
     const conflict: ConflictRecord = {
       conflictId: generateId(),
@@ -94,7 +94,7 @@ export class AuditService {
       conflict.existingValue,
       conflict.candidateValue,
       conflict.status,
-      conflict.createdAt
+      conflict.createdAt,
     );
 
     return conflict;
@@ -103,7 +103,7 @@ export class AuditService {
   resolveConflict(
     conflictId: string,
     resolution: "accept" | "keep" | "manual",
-    manualValue?: string
+    manualValue?: string,
   ): void {
     const statusMap = {
       accept: "resolved_accept",
@@ -126,7 +126,7 @@ export class AuditService {
     }
 
     const rows = stmt.all(status) as any[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       conflictId: row.conflictId,
       memoryId: row.memoryId,
       eventId: row.eventId,

@@ -2,13 +2,16 @@ import { MemoryRecord } from "../../types/memory";
 
 export type ConflictResolution =
   | { action: "auto_merge"; merged: Partial<MemoryRecord> }
-  | { action: "manual_decision"; conflicts: { field: string; existingValue: any; candidateValue: any }[] }
+  | {
+      action: "manual_decision";
+      conflicts: { field: string; existingValue: any; candidateValue: any }[];
+    }
   | { action: "reject"; reason: string };
 
 export function resolveConflicts(
   existing: MemoryRecord,
   candidate: MemoryRecord,
-  changedFields: string[]
+  changedFields: string[],
 ): ConflictResolution {
   const conflicts: { field: string; existingValue: any; candidateValue: any }[] = [];
   const merged: Partial<MemoryRecord> = {};

@@ -10,7 +10,12 @@ export type DiffResult = {
 export function compareMemories(existing: MemoryRecord, candidate: MemoryRecord): DiffResult[] {
   const diffs: DiffResult[] = [];
   const fields: (keyof MemoryRecord)[] = [
-    "title", "content", "summary", "tags", "sourceType", "graphLinks",
+    "title",
+    "content",
+    "summary",
+    "tags",
+    "sourceType",
+    "graphLinks",
   ];
 
   for (const field of fields) {
@@ -31,5 +36,5 @@ export function compareMemories(existing: MemoryRecord, candidate: MemoryRecord)
 }
 
 export function extractChangedFields(diffs: DiffResult[]): string[] {
-  return diffs.map(d => d.field);
+  return diffs.map((d) => d.field);
 }

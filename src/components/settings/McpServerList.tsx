@@ -48,13 +48,17 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
 
   return (
     <div className="space-y-4">
-      {servers.map(server => (
+      {servers.map((server) => (
         <div key={server.id} className="card card-hover p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3 mb-1">
-                <h4 className="text-base font-semibold text-text-primary truncate">{server.name}</h4>
-                <span className={`badge ${server.enabled ? "bg-success-bg text-success" : "bg-muted text-text-secondary"}`}>
+                <h4 className="text-base font-semibold text-text-primary truncate">
+                  {server.name}
+                </h4>
+                <span
+                  className={`badge ${server.enabled ? "bg-success-bg text-success" : "bg-muted text-text-secondary"}`}
+                >
                   {server.enabled ? "已启用" : "已禁用"}
                 </span>
               </div>
@@ -84,11 +88,7 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
       ))}
 
       {editing && (
-        <McpServerEditor
-          server={editing}
-          onSave={save}
-          onCancel={() => setEditing(null)}
-        />
+        <McpServerEditor server={editing} onSave={save} onCancel={() => setEditing(null)} />
       )}
 
       {!editing && (
@@ -117,13 +117,13 @@ function McpServerEditor({
   const [envText, setEnvText] = useState(
     Object.entries(server.env || {})
       .map(([k, v]) => `${k}=${v}`)
-      .join("\n")
+      .join("\n"),
   );
 
   const handleSave = () => {
     const args = argsText.split(" ").filter(Boolean);
     const env: Record<string, string> = {};
-    envText.split("\n").forEach(line => {
+    envText.split("\n").forEach((line) => {
       const [key, ...rest] = line.split("=");
       if (key && rest.length > 0) env[key.trim()] = rest.join("=").trim();
     });
@@ -138,14 +138,14 @@ function McpServerEditor({
           type="text"
           placeholder="服务器名称"
           value={form.name || ""}
-          onChange={e => setForm({ ...form, name: e.target.value })}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="input"
         />
         <input
           type="text"
           placeholder="命令 (如 npx, node)"
           value={form.command || ""}
-          onChange={e => setForm({ ...form, command: e.target.value })}
+          onChange={(e) => setForm({ ...form, command: e.target.value })}
           className="input"
         />
       </div>
@@ -153,34 +153,38 @@ function McpServerEditor({
         type="text"
         placeholder="参数，用空格分隔"
         value={argsText}
-        onChange={e => setArgsText(e.target.value)}
+        onChange={(e) => setArgsText(e.target.value)}
         className="input"
       />
       <textarea
         placeholder="环境变量 (每行一个 KEY=VALUE)"
         value={envText}
-        onChange={e => setEnvText(e.target.value)}
+        onChange={(e) => setEnvText(e.target.value)}
         className="input min-h-[80px]"
       />
       <input
         type="text"
         placeholder="描述"
         value={form.description || ""}
-        onChange={e => setForm({ ...form, description: e.target.value })}
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
         className="input"
       />
       <label className="flex items-center gap-2 text-sm text-text-secondary">
         <input
           type="checkbox"
           checked={form.enabled !== false}
-          onChange={e => setForm({ ...form, enabled: e.target.checked })}
+          onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
           className="w-4 h-4 rounded border-border-strong"
         />
         已启用
       </label>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="btn btn-secondary">取消</button>
-        <button onClick={handleSave} className="btn">保存</button>
+        <button onClick={onCancel} className="btn btn-secondary">
+          取消
+        </button>
+        <button onClick={handleSave} className="btn">
+          保存
+        </button>
       </div>
     </div>
   );

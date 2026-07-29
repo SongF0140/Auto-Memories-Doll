@@ -10,7 +10,7 @@ export const generateEmbedding = async (text: string): Promise<number[]> => {
 
 export const buildVectorRecord = async (memoryId: string, text: string): Promise<VectorRecord> => {
   const embedding = await generateEmbedding(text);
-  
+
   return {
     memoryId,
     embedding,
@@ -21,5 +21,5 @@ export const buildVectorRecord = async (memoryId: string, text: string): Promise
 };
 
 export const isEmbeddingEmpty = (embedding: number[]): boolean => {
-  return embedding.length === 0 || embedding.every(v => v === 0);
+  return embedding.length === 0 || embedding.every((v) => v === 0);
 };

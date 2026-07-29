@@ -47,14 +47,16 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
 
   return (
     <div className="space-y-4">
-      {skills.map(skill => (
+      {skills.map((skill) => (
         <div key={skill.id} className="card card-hover p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3 mb-1">
                 <h4 className="text-base font-semibold text-text-primary truncate">{skill.name}</h4>
                 <span className="tag">{skill.trigger}</span>
-                <span className={`badge ${skill.enabled ? "bg-success-bg text-success" : "bg-muted text-text-secondary"}`}>
+                <span
+                  className={`badge ${skill.enabled ? "bg-success-bg text-success" : "bg-muted text-text-secondary"}`}
+                >
                   {skill.enabled ? "已启用" : "已禁用"}
                 </span>
               </div>
@@ -85,13 +87,7 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
         </div>
       ))}
 
-      {editing && (
-        <SkillEditor
-          skill={editing}
-          onSave={save}
-          onCancel={() => setEditing(null)}
-        />
-      )}
+      {editing && <SkillEditor skill={editing} onSave={save} onCancel={() => setEditing(null)} />}
 
       {!editing && (
         <button
@@ -123,14 +119,14 @@ function SkillEditor({
           type="text"
           placeholder="Skill 名称"
           value={form.name || ""}
-          onChange={e => setForm({ ...form, name: e.target.value })}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="input"
         />
         <input
           type="text"
           placeholder="触发关键词"
           value={form.trigger || ""}
-          onChange={e => setForm({ ...form, trigger: e.target.value })}
+          onChange={(e) => setForm({ ...form, trigger: e.target.value })}
           className="input"
         />
       </div>
@@ -138,27 +134,31 @@ function SkillEditor({
         type="text"
         placeholder="描述"
         value={form.description || ""}
-        onChange={e => setForm({ ...form, description: e.target.value })}
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
         className="input"
       />
       <textarea
         placeholder="触发匹配时应用的系统提示词"
         value={form.prompt || ""}
-        onChange={e => setForm({ ...form, prompt: e.target.value })}
+        onChange={(e) => setForm({ ...form, prompt: e.target.value })}
         className="input min-h-[120px]"
       />
       <label className="flex items-center gap-2 text-sm text-text-secondary">
         <input
           type="checkbox"
           checked={form.enabled !== false}
-          onChange={e => setForm({ ...form, enabled: e.target.checked })}
+          onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
           className="w-4 h-4 rounded border-border-strong"
         />
         已启用
       </label>
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="btn btn-secondary">取消</button>
-        <button onClick={() => onSave(form)} className="btn">保存</button>
+        <button onClick={onCancel} className="btn btn-secondary">
+          取消
+        </button>
+        <button onClick={() => onSave(form)} className="btn">
+          保存
+        </button>
       </div>
     </div>
   );

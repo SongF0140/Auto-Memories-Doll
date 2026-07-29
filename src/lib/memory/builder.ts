@@ -13,7 +13,7 @@ export const buildMemoryRecord = (
   topic: string = "uncategorized",
   id?: string,
   /** 中文版本字段（可选） */
-  zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string }
+  zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
 ): MemoryRecord => {
   const now = getCurrentTime();
   return {
@@ -43,7 +43,7 @@ export const buildPendingEvent = (
   memoryId: string,
   sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
   candidate: MemoryRecord,
-  changedFields: string[]
+  changedFields: string[],
 ): PendingEvent => {
   return {
     eventId: generateId(),
@@ -59,7 +59,7 @@ export const buildPendingEvent = (
 
 export const updateMemoryRecord = (
   existing: MemoryRecord,
-  updates: Partial<MemoryRecord>
+  updates: Partial<MemoryRecord>,
 ): MemoryRecord => {
   return {
     ...existing,

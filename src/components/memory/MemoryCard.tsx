@@ -31,7 +31,7 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
             </p>
             {displayTags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
-                {displayTags.slice(0, 3).map(tag => (
+                {displayTags.slice(0, 3).map((tag) => (
                   <span key={tag} className="tag px-2 py-0.5 text-[10px]">
                     {tag}
                   </span>
@@ -47,24 +47,18 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
   return (
     <MagicCard className={`p-5 ${className}`}>
       <div className="mb-3 flex items-start justify-between gap-4">
-        <h3 className="text-lg font-semibold leading-tight text-text-primary">
-          {displayTitle}
-        </h3>
+        <h3 className="text-lg font-semibold leading-tight text-text-primary">{displayTitle}</h3>
         <div className="flex items-center gap-2">
-          <Badge className="bg-[#e8dcc8] text-[#6b5a3e]">
-            {displayTopic}
-          </Badge>
+          <Badge className="bg-[#e8dcc8] text-[#6b5a3e]">{displayTopic}</Badge>
           <Badge>{memory.sourceType === "listen" ? "监听导入" : memory.sourceType}</Badge>
         </div>
       </div>
 
-      <p className="mb-4 text-base leading-relaxed text-text-secondary">
-        {displaySummary}
-      </p>
+      <p className="mb-4 text-base leading-relaxed text-text-secondary">{displaySummary}</p>
 
       {displayTags.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">
-          {displayTags.map(tag => (
+          {displayTags.map((tag) => (
             <span key={tag} className="tag">
               {tag}
             </span>

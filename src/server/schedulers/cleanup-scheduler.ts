@@ -25,7 +25,7 @@ export class CleanupScheduler {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    
+
     this.worker.close();
   }
 

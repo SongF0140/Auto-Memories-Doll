@@ -6,15 +6,15 @@ import { getCurrentTime } from "../../lib/utils/date";
 export class InputNormalizer {
   normalize(input: unknown): InputEvent[] {
     if (Array.isArray(input)) {
-      return input.map(item => this.normalizeItem(item));
+      return input.map((item) => this.normalizeItem(item));
     }
-    
+
     return [this.normalizeItem(input)];
   }
 
   private normalizeItem(input: unknown): InputEvent {
     const now = getCurrentTime();
-    
+
     if (typeof input === "string") {
       return {
         id: generateId(),
@@ -24,7 +24,7 @@ export class InputNormalizer {
         timestamp: now,
       };
     }
-    
+
     if (input && typeof input === "object") {
       const obj = input as Record<string, any>;
       return {
@@ -37,7 +37,7 @@ export class InputNormalizer {
         metadata: obj.metadata,
       };
     }
-    
+
     return {
       id: generateId(),
       source: "unknown",

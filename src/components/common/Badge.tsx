@@ -13,9 +13,5 @@ export default function Badge({ children, variant = "default", className = "" }:
     error: "bg-error-bg text-error",
   };
 
-  return (
-    <span className={`badge ${variantClasses[variant]} ${className}`}>
-      {children}
-    </span>
-  );
+  return <span className={`badge ${variantClasses[variant]} ${className}`}>{children}</span>;
 }

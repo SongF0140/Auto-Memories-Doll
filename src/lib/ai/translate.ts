@@ -1,6 +1,6 @@
 /**
  * AI 模型翻译层 —— 第二层翻译，接入配置模型做流式深层翻译。
- * 
+ *
  * 第一层（translator.ts）：关键词映射，毫秒级，覆盖结构性术语。
  * 第二层（本文件）：调用配置的 LLM 模型，处理复杂长句的流式翻译。
  */
@@ -27,7 +27,7 @@ Content to translate:`;
  */
 export async function translateWithAI(
   text: string,
-  options: AiTranslateOptions = {}
+  options: AiTranslateOptions = {},
 ): Promise<string> {
   // 如果已经是中文为主，跳过
   const chineseCharCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
@@ -56,7 +56,7 @@ export async function translateWithAI(
  */
 export async function streamTranslate(
   text: string,
-  options: AiTranslateOptions = {}
+  options: AiTranslateOptions = {},
 ): Promise<StreamTextResult<any, any, any> | null> {
   if (ModelAdapter.isDegradedMode) return null;
 
@@ -79,7 +79,7 @@ export async function streamTranslate(
  */
 export async function translateMemoryFields(
   title: string,
-  summary: string
+  summary: string,
 ): Promise<{ titleZh: string; summaryZh: string }> {
   const [titleZh, summaryZh] = await Promise.all([
     translateWithAI(title, { maxTokens: 100 }),

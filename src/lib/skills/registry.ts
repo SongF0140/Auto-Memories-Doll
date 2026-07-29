@@ -1,12 +1,17 @@
+import { SkillNotFoundError } from "../errors";
+
 export type Skill = {
   id: string;
   name: string;
   description: string;
-  parameters: Record<string, {
-    type: "string" | "number" | "boolean" | "array" | "object";
-    description?: string;
-    required?: boolean;
-  }>;
+  parameters: Record<
+    string,
+    {
+      type: "string" | "number" | "boolean" | "array" | "object";
+      description?: string;
+      required?: boolean;
+    }
+  >;
   handler: (params: Record<string, any>) => Promise<any>;
 };
 
@@ -32,7 +37,7 @@ export class SkillRegistry {
   async execute(skillId: string, params: Record<string, any>): Promise<any> {
     const skill = this.skills.get(skillId);
     if (!skill) {
-      throw new Error(`Skill "${skillId}" 未找到`);
+      throw new SkillNotFoundError(skillId);
     }
 
     return skill.handler(params);
@@ -44,7 +49,7 @@ export const buildSystemSkill = (
   name: string,
   description: string,
   trigger: string,
-  prompt: string
+  prompt: string,
 ): Skill => ({
   id,
   name,

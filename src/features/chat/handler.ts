@@ -14,6 +14,7 @@ import { McpManager } from "../../lib/mcp/manager";
 import { ToolCaller } from "../../lib/ai/tool-caller";
 import { registerDefaultTools } from "../../lib/ai/tool-registry";
 import { ProfileUpdater } from "../../server/services/profile-updater";
+import { WikiGraph } from "../../lib/graph/wiki-graph";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
@@ -25,6 +26,7 @@ export class ChatHandler {
   private ranker: Ranker;
   private skillManager: SkillManager;
   private mcpManager: McpManager;
+  private wikiGraph: WikiGraph;
 
   constructor() {
     this.templateManager = new TemplateManager();
@@ -34,23 +36,28 @@ export class ChatHandler {
     this.ranker = new Ranker();
     this.skillManager = new SkillManager();
     this.mcpManager = new McpManager();
+    this.wikiGraph = new WikiGraph();
     registerDefaultTools();
   }
 
   async generateResponse(
     messages: ChatMessage[],
     mode: ChatMode,
-    sessionId: string
-  ): Promise<{ content: string; memoryReferences: { memoryId: string; title: string; relevance: number }[] }> {
+    sessionId: string,
+  ): Promise<{
+    content: string;
+    memoryReferences: { memoryId: string; title: string; relevance: number }[];
+  }> {
     const processedMessages = await this.applySkills(messages);
-    const memoryContent = mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
+    const memoryContent =
+      mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
 
     const prompt = this.buildPrompt(processedMessages, memoryContent);
 
     const response = await ModelAdapter.generate(prompt, "mini");
 
     // 对话结束后入队画像分析
-    const lastUserMsg = processedMessages.findLast(m => m.role === "user");
+    const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
     if (lastUserMsg) {
       ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
     }
@@ -64,15 +71,16 @@ export class ChatHandler {
   async streamResponse(
     messages: ChatMessage[],
     mode: ChatMode,
-    _sessionId: string
+    _sessionId: string,
   ): Promise<StreamTextResult<any, any, any>> {
     const processedMessages = await this.applySkills(messages);
-    const memoryContent = mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
+    const memoryContent =
+      mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
 
     const prompt = this.buildPrompt(processedMessages, memoryContent);
 
     // 对话结束后入队画像分析
-    const lastUserMsg = processedMessages.findLast(m => m.role === "user");
+    const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
     if (lastUserMsg) {
       ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
     }
@@ -86,14 +94,17 @@ export class ChatHandler {
   /**
    * 构建完整 prompt：缓存前缀（系统提示词 + 用户画像）+ 动态记忆 + 对话历史
    */
-  private buildPrompt(messages: { role: string; content: string }[], memoryContent: string): string {
+  private buildPrompt(
+    messages: { role: string; content: string }[],
+    memoryContent: string,
+  ): string {
     const promptCache = PromptCache.getInstance();
     const systemPrefix = promptCache.getSystemPrefix(TEMPLATE_HASH);
     const memoryBlock = promptCache.getMemoryCache(memoryContent);
 
     const conversationHistory = messages
       .slice(-10)
-      .map(msg => `${msg.role}: ${msg.content}`)
+      .map((msg) => `${msg.role}: ${msg.content}`)
       .join("\n");
 
     return `${systemPrefix}
@@ -106,14 +117,18 @@ ${conversationHistory}
 你现在要以记忆伴侣的身份，根据以上信息为用户提供最贴心的回答。`;
   }
 
-  async executeMcpTool(serverId: string, toolName: string, args: Record<string, any>): Promise<any> {
+  async executeMcpTool(
+    serverId: string,
+    toolName: string,
+    args: Record<string, any>,
+  ): Promise<any> {
     return this.mcpManager.callTool(serverId, toolName, args);
   }
 
   async listAvailableTools(): Promise<string[]> {
     const defaultTools = ToolCaller.getAvailableTools();
     const mcpTools = await this.mcpManager.listAllTools();
-    const mcpToolNames = mcpTools.flatMap(t => t.tools.map(tool => tool.name));
+    const mcpToolNames = mcpTools.flatMap((t) => t.tools.map((tool) => tool.name));
     return [...defaultTools, ...mcpToolNames];
   }
 
@@ -143,19 +158,37 @@ ${conversationHistory}
     const results = await this.vectorRetriever.search(lastMessage.content, 10);
 
     const profileTags = await readProfileTags();
-    const memoryMap = new Map(memories.map(m => [m.id, m]));
+    const memoryMap = new Map(memories.map((m) => [m.id, m]));
 
     const rankedResults = this.ranker.rank(results, memoryMap, profileTags);
 
     const relevantMemories = rankedResults
       .slice(0, 5)
-      .map(r => memoryMap.get(r.memoryId))
+      .map((r) => memoryMap.get(r.memoryId))
       .filter((m): m is MemoryRecord => m !== undefined);
 
-    relevantMemories.forEach(m => this.memoryService.incrementAccess(m.id));
+    relevantMemories.forEach((m) => this.memoryService.incrementAccess(m.id));
+
+    // 图谱扩展：纳入关联记忆的邻居（wikilink）
+    const expandedIds = new Set(relevantMemories.map((m) => m.id));
+    for (const mem of relevantMemories) {
+      const neighbors = this.wikiGraph.getNeighbors(mem.id);
+      for (const neighborId of neighbors) {
+        if (!expandedIds.has(neighborId)) {
+          const neighbor = memoryMap.get(neighborId);
+          if (neighbor) {
+            relevantMemories.push(neighbor);
+            expandedIds.add(neighborId);
+          }
+        }
+      }
+    }
 
     return relevantMemories
-      .map(m => `标题: ${m.title}\n摘要: ${m.summary}\n标签: ${m.tags.join(", ")}`)
+      .map(
+        (m) =>
+          `标题: ${m.titleZh || m.title}\n摘要: ${m.summaryZh || m.summary}\n标签: ${(m.tagsZh && m.tagsZh.length > 0 ? m.tagsZh : m.tags).join(", ")}`,
+      )
       .join("\n\n---\n\n");
   }
 

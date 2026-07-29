@@ -7,22 +7,29 @@ const listenRequestSchema = z.object({
   source: z.string().min(1, "source 不能为空"),
   sourceType: z.enum(["listen", "chat", "ingest", "manual", "mcp", "skill"]).default("listen"),
   title: z.string().optional(),
-  messages: z.array(z.object({
-    role: z.enum(["user", "assistant", "system"]),
-    content: z.string().min(1),
-    timestamp: z.string().optional(),
-  })).min(1, "messages 至少需要一条消息"),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string().min(1),
+        timestamp: z.string().optional(),
+      }),
+    )
+    .min(1, "messages 至少需要一条消息"),
   tags: z.array(z.string()).optional(),
   topic: z.string().optional(),
-  metadata: z.object({
-    url: z.string().optional(),
-    platform: z.string().optional(),
-    model: z.string().optional(),
-  }).passthrough().optional(),
+  metadata: z
+    .object({
+      url: z.string().optional(),
+      platform: z.string().optional(),
+      model: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 
 // 对话监听状态
-let listenStats = {
+const listenStats = {
   totalReceived: 0,
   totalProcessed: 0,
   lastReceivedAt: null as string | null,
@@ -39,7 +46,7 @@ function updateStats(source: string, topic: string): void {
 
 /**
  * POST /api/listen
- * 
+ *
  * 外部工具（Trae IDE、浏览器 AI 会话等）通过此端点将对话数据发送到
  * Auto-Memories-Doll。系统自动完成：
  * 1. 格式化对话为 Markdown
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { success: false, error: parsed.error.issues[0].message },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest) {
         summaryZh: knowledgeCard.summary,
         tagsZh: knowledgeCard.tagsZh,
         topicZh: knowledgeCard.topicZh,
-      }
+      },
     );
 
     // 5. 更新统计
@@ -111,7 +118,7 @@ export async function POST(request: NextRequest) {
     updateStats(data.source, data.topic || "unknown");
     return NextResponse.json(
       { success: false, error: `处理失败: ${(error as Error).message}` },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     memoryService.close();

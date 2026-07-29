@@ -49,7 +49,7 @@ export default function MemorySearch() {
             <input
               type="text"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="你在找什么？"
               className="input border-0 shadow-none bg-transparent flex-1"
@@ -64,7 +64,9 @@ export default function MemorySearch() {
           </div>
         </SpotlightCard>
 
-        {loading && <EmptyState title="搜索中" description={`正在搜索与 "${query}" 相关的记忆...`} />}
+        {loading && (
+          <EmptyState title="搜索中" description={`正在搜索与 "${query}" 相关的记忆...`} />
+        )}
 
         {!loading && searched && (
           <>
@@ -72,14 +74,12 @@ export default function MemorySearch() {
               <h3 className="text-lg font-semibold text-text-primary">
                 {results.length > 0 ? "搜索结果" : "无匹配"}
               </h3>
-              <span className="text-sm text-text-tertiary">
-                {results.length} 条结果
-              </span>
+              <span className="text-sm text-text-tertiary">{results.length} 条结果</span>
             </div>
 
             {results.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 stagger-list">
-                {results.map(memory => (
+                {results.map((memory) => (
                   <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
                 ))}
               </div>

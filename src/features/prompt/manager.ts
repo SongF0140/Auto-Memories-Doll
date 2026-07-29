@@ -1,4 +1,9 @@
-import { TemplateManager, initializeTemplates, PromptTemplate } from "../../lib/prompt/template-manager";
+import {
+  TemplateManager,
+  initializeTemplates,
+  PromptTemplate,
+} from "../../lib/prompt/template-manager";
+import { TemplateNotFoundError } from "../../lib/errors";
 
 export class PromptManager {
   private templateManager: TemplateManager;
@@ -22,16 +27,16 @@ export class PromptManager {
 
   updateTemplate(templateId: string, updates: Partial<PromptTemplate>): void {
     const existing = this.templateManager.get(templateId);
-    if (!existing) throw new Error(`Template "${templateId}" not found`);
-    
+    if (!existing) throw new TemplateNotFoundError(templateId);
+
     this.templateManager.register({ ...existing, ...updates, id: templateId });
   }
 
   deleteTemplate(templateId: string): void {
     const templates = this.templateManager.list();
     this.templateManager = new TemplateManager();
-    
-    templates.forEach(t => {
+
+    templates.forEach((t) => {
       if (t.id !== templateId) {
         this.templateManager.register(t);
       }

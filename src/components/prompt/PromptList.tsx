@@ -28,7 +28,12 @@ export default function PromptList() {
     }
   };
 
-  const handleCreate = async (data: { name: string; content: string; variables: string[]; description?: string }) => {
+  const handleCreate = async (data: {
+    name: string;
+    content: string;
+    variables: string[];
+    description?: string;
+  }) => {
     try {
       const res = await fetch("/api/prompt", {
         method: "POST",
@@ -44,7 +49,12 @@ export default function PromptList() {
     }
   };
 
-  const handleUpdate = async (data: { name: string; content: string; variables: string[]; description?: string }) => {
+  const handleUpdate = async (data: {
+    name: string;
+    content: string;
+    variables: string[];
+    description?: string;
+  }) => {
     if (!editing || editing === "new") return;
     try {
       const res = await fetch(`/api/prompt/${editing.id}`, {
@@ -93,7 +103,9 @@ export default function PromptList() {
         <div className="max-w-3xl mx-auto">
           <PromptPreview template={previewing} />
           <div className="mt-4 flex justify-center">
-            <button onClick={() => setPreviewing(null)} className="btn-secondary h-10 px-6 text-sm">返回</button>
+            <button onClick={() => setPreviewing(null)} className="btn-secondary h-10 px-6 text-sm">
+              返回
+            </button>
           </div>
         </div>
       </div>
@@ -104,7 +116,9 @@ export default function PromptList() {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="loading-dots">
-          <span /><span /><span />
+          <span />
+          <span />
+          <span />
         </div>
       </div>
     );
@@ -119,7 +133,9 @@ export default function PromptList() {
               <h2 className="text-xl font-semibold tracking-tight text-gradient">提示词</h2>
               <p className="text-sm text-text-tertiary mt-1">暂无模板</p>
             </div>
-            <button onClick={() => setEditing("new")} className="shimmer-button h-10 px-5 text-sm">新建模板</button>
+            <button onClick={() => setEditing("new")} className="shimmer-button h-10 px-5 text-sm">
+              新建模板
+            </button>
           </div>
           <div className="empty-state py-16">
             <p className="text-text-tertiary">点击"新建模板"创建第一个提示词模板</p>
@@ -137,7 +153,9 @@ export default function PromptList() {
             <h2 className="text-xl font-semibold tracking-tight text-gradient">提示词</h2>
             <p className="text-xs text-text-tertiary mt-1">{templates.length} 个模板</p>
           </div>
-          <button onClick={() => setEditing("new")} className="shimmer-button h-10 px-5 text-sm">新建模板</button>
+          <button onClick={() => setEditing("new")} className="shimmer-button h-10 px-5 text-sm">
+            新建模板
+          </button>
         </div>
 
         <div className="space-y-4 stagger-list">
@@ -153,7 +171,10 @@ export default function PromptList() {
               )}
 
               <pre className="bg-bg border border-border rounded p-3 text-sm font-mono text-text-secondary overflow-x-auto max-h-32">
-                <code>{template.content.slice(0, 300)}{template.content.length > 300 ? "..." : ""}</code>
+                <code>
+                  {template.content.slice(0, 300)}
+                  {template.content.length > 300 ? "..." : ""}
+                </code>
               </pre>
 
               {template.variables.length > 0 && (

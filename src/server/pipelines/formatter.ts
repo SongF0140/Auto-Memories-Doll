@@ -2,11 +2,11 @@ import { MemoryRecord } from "../../types/memory";
 
 export const formatMemoryContent = (content: string): string => {
   let formatted = content.trim();
-  
+
   formatted = formatted.replace(/\r\n/g, "\n");
   formatted = formatted.replace(/\n{3,}/g, "\n\n");
   formatted = formatted.replace(/[ \t]+/g, " ");
-  
+
   return formatted;
 };
 
@@ -36,16 +36,16 @@ ${memory.content}
 ---
 
 ## 相关记忆
-${memory.graphLinks.map(id => `- [${id}]`).join("\n")}`;
+${memory.graphLinks.map((id) => `- [${id}]`).join("\n")}`;
 };
 
 export const formatSummary = (content: string, maxLength: number = 200): string => {
   const cleaned = content.replace(/\n/g, " ").trim();
-  
+
   if (cleaned.length <= maxLength) {
     return cleaned;
   }
-  
+
   const truncated = cleaned.substring(0, maxLength - 3);
   const lastSentenceEnd = Math.max(
     truncated.lastIndexOf("."),
@@ -53,12 +53,12 @@ export const formatSummary = (content: string, maxLength: number = 200): string 
     truncated.lastIndexOf("!"),
     truncated.lastIndexOf("！"),
     truncated.lastIndexOf("?"),
-    truncated.lastIndexOf("？")
+    truncated.lastIndexOf("？"),
   );
-  
+
   if (lastSentenceEnd > maxLength * 0.5) {
     return truncated.substring(0, lastSentenceEnd + 1);
   }
-  
+
   return truncated + "...";
 };

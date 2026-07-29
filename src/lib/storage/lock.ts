@@ -9,7 +9,7 @@ export const acquireLock = async (timeout: number = 5000): Promise<boolean> => {
   while (Date.now() - startTime < timeout) {
     try {
       await fs.access(lockPath);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     } catch {
       await fs.writeFile(lockPath, process.pid.toString());
       return true;

@@ -1,8 +1,5 @@
 export const normalizeText = (text: string): string => {
-  return text
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\n+/g, "\n");
+  return text.trim().replace(/\s+/g, " ").replace(/\n+/g, "\n");
 };
 
 export const truncateText = (text: string, maxLength: number): string => {

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
         { error: "messages is required and must be an array" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
           memoryRecord.title,
           memoryRecord.content,
           memoryRecord.summary,
-          memoryRecord.tags
+          memoryRecord.tags,
         );
         return NextResponse.json({ content: `已保存记忆: ${memoryRecord.title}`, memoryId });
       } finally {
@@ -47,21 +47,21 @@ export async function POST(request: NextRequest) {
       try {
         const all = memoryService.listMemories();
         const matched = all.filter(
-          m =>
-            m.tags.some(t => lastMessage.content.includes(t)) ||
+          (m) =>
+            m.tags.some((t) => lastMessage.content.includes(t)) ||
             m.title.includes(lastMessage.content.replace(/查询|查找|搜索|回忆/g, "").trim()) ||
-            m.summary.includes(lastMessage.content.replace(/查询|查找|搜索|回忆/g, "").trim())
+            m.summary.includes(lastMessage.content.replace(/查询|查找|搜索|回忆/g, "").trim()),
         );
         if (matched.length === 0) {
           return NextResponse.json({ content: "没有找到相关记忆。", memoryReferences: [] });
         }
-        const result = matched.slice(0, 5).map(m => ({
+        const result = matched.slice(0, 5).map((m) => ({
           memoryId: m.id,
           title: m.title,
           relevance: 1.0,
         }));
         return NextResponse.json({
-          content: `找到 ${matched.length} 条相关记忆:\n${matched.map(m => `- ${m.title}: ${m.summary}`).join("\n")}`,
+          content: `找到 ${matched.length} 条相关记忆:\n${matched.map((m) => `- ${m.title}: ${m.summary}`).join("\n")}`,
           memoryReferences: result,
         });
       } finally {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       const memoryService = new MemoryService();
       try {
         const all = memoryService.listMemories();
-        const toDelete = all.find(m => lastMessage.content.includes(m.title));
+        const toDelete = all.find((m) => lastMessage.content.includes(m.title));
         if (toDelete) {
           memoryService.deleteMemory(toDelete.id);
           return NextResponse.json({ content: `已删除记忆: ${toDelete.title}` });
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       const memoryService = new MemoryService();
       try {
         const all = memoryService.listMemories();
-        const toUpdate = all.find(m => lastMessage.content.includes(m.title));
+        const toUpdate = all.find((m) => lastMessage.content.includes(m.title));
         if (toUpdate) {
           memoryService.updateMemory(toUpdate.id, {
             updatedAt: new Date().toISOString(),
@@ -121,10 +121,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   } finally {
     handler.close();
   }

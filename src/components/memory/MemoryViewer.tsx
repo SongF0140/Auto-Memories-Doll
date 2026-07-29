@@ -20,7 +20,12 @@ interface MemoryViewerProps {
   onUpdated?: () => void;
 }
 
-export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }: MemoryViewerProps) {
+export default function MemoryViewer({
+  memoryId,
+  onClose,
+  onDeleted,
+  onUpdated,
+}: MemoryViewerProps) {
   const [memory, setMemory] = useState<MemoryRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -56,7 +61,10 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
         body: JSON.stringify({
           title: form.title,
           content: form.content,
-          tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+          tags: form.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
         }),
       });
       if (res.ok) {
@@ -86,10 +94,18 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={onClose}>
-        <div className="violet-letter-mark w-full max-w-2xl mx-4 p-8" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <div
+          className="violet-letter-mark w-full max-w-2xl mx-4 p-8"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="loading-dots flex justify-center py-8">
-            <span /><span /><span />
+            <span />
+            <span />
+            <span />
           </div>
         </div>
       </div>
@@ -98,21 +114,40 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
 
   if (!memory) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={onClose}>
-        <div className="violet-letter-mark w-full max-w-2xl mx-4 p-8 text-center" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <div
+          className="violet-letter-mark w-full max-w-2xl mx-4 p-8 text-center"
+          onClick={(e) => e.stopPropagation()}
+        >
           <p className="text-text-secondary">记忆未找到</p>
-          <button onClick={onClose} className="mt-4 text-sm text-accent underline">关闭</button>
+          <button onClick={onClose} className="mt-4 text-sm text-accent underline">
+            关闭
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 backdrop-blur-sm py-12" onClick={onClose}>
-      <div className="violet-letter-mark w-full max-w-2xl mx-4" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 backdrop-blur-sm py-12"
+      onClick={onClose}
+    >
+      <div
+        className="violet-letter-mark w-full max-w-2xl mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h3 className="text-lg font-semibold text-text-primary">记忆详情</h3>
-          <button onClick={onClose} className="text-text-tertiary hover:text-text-primary text-xl leading-none">&times;</button>
+          <button
+            onClick={onClose}
+            className="text-text-tertiary hover:text-text-primary text-xl leading-none"
+          >
+            &times;
+          </button>
         </div>
 
         <div className="p-6">
@@ -137,7 +172,9 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">标签（逗号分隔）</label>
+                <label className="block text-sm font-medium text-text-secondary mb-1">
+                  标签（逗号分隔）
+                </label>
                 <input
                   value={form.tags}
                   onChange={(e) => setForm({ ...form, tags: e.target.value })}
@@ -146,10 +183,19 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={handleSave} disabled={saving} className="shimmer-button h-10 px-6 text-sm">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="shimmer-button h-10 px-6 text-sm"
+                >
                   {saving ? "保存中..." : "保存"}
                 </button>
-                <button onClick={() => setEditing(false)} className="btn-secondary h-10 px-6 text-sm">取消</button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="btn-secondary h-10 px-6 text-sm"
+                >
+                  取消
+                </button>
               </div>
             </div>
           ) : (
@@ -169,8 +215,14 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
                 <div className="flex flex-wrap gap-4 text-xs text-text-tertiary pt-3 border-t border-border">
                   <span>ID: {memory.id}</span>
                   <span>版本: {memory.version}</span>
-                  <span>话题: <Badge className="bg-[#e8dcc8] text-[#6b5a3e]">{display(memory).topic}</Badge></span>
-                  <span>来源: <Badge>{memory.sourceType === "listen" ? "监听导入" : memory.sourceType}</Badge></span>
+                  <span>
+                    话题:{" "}
+                    <Badge className="bg-[#e8dcc8] text-[#6b5a3e]">{display(memory).topic}</Badge>
+                  </span>
+                  <span>
+                    来源:{" "}
+                    <Badge>{memory.sourceType === "listen" ? "监听导入" : memory.sourceType}</Badge>
+                  </span>
                   {memory.heatScore > 0 && <span>热度: {memory.heatScore.toFixed(1)}</span>}
                   <span>创建: {new Date(memory.createdAt).toLocaleString("zh-CN")}</span>
                 </div>
@@ -180,7 +232,9 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
                     <p className="text-xs font-medium text-text-tertiary mb-2">关联记忆</p>
                     <div className="flex flex-wrap gap-2">
                       {memory.graphLinks.map((link) => (
-                        <span key={link} className="tag text-xs">{link.slice(0, 12)}...</span>
+                        <span key={link} className="tag text-xs">
+                          {link.slice(0, 12)}...
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -188,7 +242,10 @@ export default function MemoryViewer({ memoryId, onClose, onDeleted, onUpdated }
               </div>
 
               <div className="mt-6 flex gap-3 pt-4 border-t border-border">
-                <button onClick={() => setEditing(true)} className="shimmer-button h-10 px-6 text-sm">
+                <button
+                  onClick={() => setEditing(true)}
+                  className="shimmer-button h-10 px-6 text-sm"
+                >
                   编辑
                 </button>
                 <button onClick={handleDelete} className="btn-danger h-10 px-6 text-sm">

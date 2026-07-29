@@ -11,13 +11,13 @@ export const registerDefaultTools = (): void => {
       // 简单的关键词匹配搜索
       const results = all
         .filter(
-          m =>
+          (m) =>
             m.title.includes(query) ||
             m.summary.includes(query) ||
-            m.tags.some(t => t.includes(query))
+            m.tags.some((t) => t.includes(query)),
         )
         .slice(0, limit)
-        .map(m => ({
+        .map((m) => ({
           id: m.id,
           title: m.title,
           summary: m.summary,
@@ -46,7 +46,7 @@ export const registerDefaultTools = (): void => {
     const service = new MemoryService();
     try {
       const id = String(args.id || "");
-      const updates = args.updates as Record<string, any> || {};
+      const updates = (args.updates as Record<string, any>) || {};
       const existing = service.getMemory(id);
       if (!existing) {
         return { success: false, error: "Memory not found", id };

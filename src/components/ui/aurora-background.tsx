@@ -9,12 +9,7 @@ interface AuroraBackgroundProps {
 
 export function AuroraBackground({ className, children }: AuroraBackgroundProps) {
   return (
-    <div
-      className={cn(
-        "relative flex flex-col min-h-screen overflow-hidden bg-bg",
-        className
-      )}
-    >
+    <div className={cn("relative flex flex-col min-h-screen overflow-hidden bg-bg", className)}>
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div
           className="absolute -top-[40%] -left-[20%] w-[80%] h-[80%] rounded-full opacity-40 animate-glow-pulse"

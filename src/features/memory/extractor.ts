@@ -24,7 +24,7 @@ export class MemoryExtractor {
     source: string,
     sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
     text: string,
-    options: MemoryExtractionOptions = {}
+    options: MemoryExtractionOptions = {},
   ): MemoryRecord {
     const title = this.extractTitle(text);
     const summary = formatSummary(text, options.maxSummaryLength || 200);
@@ -32,13 +32,23 @@ export class MemoryExtractor {
     const topic = this.extractTopic(text);
     const zhFields = generateZhFields(title, summary, tags, topic);
 
-    return buildMemoryRecord(source, sourceType, title, text, summary, tags, topic, undefined, zhFields);
+    return buildMemoryRecord(
+      source,
+      sourceType,
+      title,
+      text,
+      summary,
+      tags,
+      topic,
+      undefined,
+      zhFields,
+    );
   }
 
   extractFromStructuredData(
     source: string,
     sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
-    data: { title: string; content: string; tags?: string[]; summary?: string; topic?: string }
+    data: { title: string; content: string; tags?: string[]; summary?: string; topic?: string },
   ): MemoryRecord {
     const title = data.title || this.extractTitle(data.content);
     const summary = data.summary || formatSummary(data.content);
@@ -46,24 +56,34 @@ export class MemoryExtractor {
     const topic = data.topic || this.extractTopic(data.content);
     const zhFields = generateZhFields(title, summary, tags, topic);
 
-    return buildMemoryRecord(source, sourceType, title, data.content, summary, tags, topic, undefined, zhFields);
+    return buildMemoryRecord(
+      source,
+      sourceType,
+      title,
+      data.content,
+      summary,
+      tags,
+      topic,
+      undefined,
+      zhFields,
+    );
   }
 
   private extractTitle(text: string): string {
-    const lines = text.split("\n").filter(l => l.trim());
-    
+    const lines = text.split("\n").filter((l) => l.trim());
+
     for (const line of lines) {
       if (line.startsWith("# ")) {
         return line.substring(2).trim();
       }
     }
-    
+
     for (const line of lines) {
       if (line.length > 5 && line.length < 80) {
         return line.trim();
       }
     }
-    
+
     return text.substring(0, 50).replace(/\n/g, " ").trim() + "...";
   }
 

@@ -4,6 +4,8 @@ import { validateMemoryRecord } from "../../lib/memory/validator";
 import { VectorIndex } from "../../lib/vector/index";
 import { buildVectorRecord } from "../../lib/vector/generator";
 import { getDatabase } from "../../lib/storage/database";
+import { withLock } from "../../lib/storage/lock";
+import { MemoryNotFoundError, MemoryValidationError } from "../../lib/errors";
 import Database from "better-sqlite3";
 
 export class MemoryService {
@@ -85,52 +87,63 @@ export class MemoryService {
     summary: string,
     tags: string[] = [],
     topic: string = "uncategorized",
-    zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string }
+    zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
   ): Promise<string> {
-    const memory = buildMemoryRecord(source, sourceType, title, content, summary, tags, topic, undefined, zhFields);
-    
-    if (!validateMemoryRecord(memory)) {
-      throw new Error("Invalid memory record");
-    }
+    return withLock(async () => {
+      const memory = buildMemoryRecord(
+        source,
+        sourceType,
+        title,
+        content,
+        summary,
+        tags,
+        topic,
+        undefined,
+        zhFields,
+      );
 
-    const stmt = this.db.prepare(`
+      if (!validateMemoryRecord(memory)) {
+        throw new MemoryValidationError("record", "记忆数据不完整");
+      }
+
+      const stmt = this.db.prepare(`
       INSERT INTO memories (
         id, version, source, sourceType, title, titleZh, content, summary, summaryZh,
         tags, tagsZh, topic, topicZh,
         createdAt, updatedAt, accessedAt, accessCount, heatScore, graphLinks
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
-      memory.id,
-      memory.version,
-      memory.source,
-      memory.sourceType,
-      memory.title,
-      memory.titleZh || null,
-      memory.content,
-      memory.summary,
-      memory.summaryZh || null,
-      JSON.stringify(memory.tags),
-      memory.tagsZh ? JSON.stringify(memory.tagsZh) : null,
-      memory.topic,
-      memory.topicZh || null,
-      memory.createdAt,
-      memory.updatedAt,
-      memory.accessedAt,
-      memory.accessCount,
-      memory.heatScore,
-      JSON.stringify(memory.graphLinks)
-    );
+      stmt.run(
+        memory.id,
+        memory.version,
+        memory.source,
+        memory.sourceType,
+        memory.title,
+        memory.titleZh || null,
+        memory.content,
+        memory.summary,
+        memory.summaryZh || null,
+        JSON.stringify(memory.tags),
+        memory.tagsZh ? JSON.stringify(memory.tagsZh) : null,
+        memory.topic,
+        memory.topicZh || null,
+        memory.createdAt,
+        memory.updatedAt,
+        memory.accessedAt,
+        memory.accessCount,
+        memory.heatScore,
+        JSON.stringify(memory.graphLinks),
+      );
 
-    const vectorIndex = new VectorIndex();
-    const vectorRecord = await buildVectorRecord(memory.id, content);
-    vectorIndex.create(vectorRecord);
-    vectorIndex.close();
+      const vectorIndex = new VectorIndex();
+      const vectorRecord = await buildVectorRecord(memory.id, content);
+      vectorIndex.create(vectorRecord);
+      vectorIndex.close();
 
-    this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?")
-      .run(memory.id, memory.id);
+      this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
 
-    return memory.id;
+      return memory.id;
+    });
   }
 
   getMemory(id: string): MemoryRecord | null {
@@ -166,7 +179,7 @@ export class MemoryService {
     const stmt = this.db.prepare("SELECT * FROM memories");
     const rows = stmt.all() as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       version: row.version,
       source: row.source,
@@ -192,10 +205,10 @@ export class MemoryService {
 
   updateMemory(id: string, updates: Partial<MemoryRecord>): void {
     const existing = this.getMemory(id);
-    if (!existing) throw new Error("Memory not found");
+    if (!existing) throw new MemoryNotFoundError(id);
 
     const updated = { ...existing, ...updates, version: existing.version + 1 };
-    
+
     const stmt = this.db.prepare(`
       UPDATE memories SET
         version = ?, source = ?, sourceType = ?, title = ?, titleZh = ?, content = ?,
@@ -223,7 +236,7 @@ export class MemoryService {
       updated.heatScore,
       updated.vectorId,
       JSON.stringify(updated.graphLinks),
-      id
+      id,
     );
   }
 
@@ -257,7 +270,7 @@ export class MemoryService {
       JSON.stringify(event.changedFields),
       event.createdAt,
       event.status,
-      event.retryCount
+      event.retryCount,
     );
   }
 
@@ -288,12 +301,10 @@ export class MemoryService {
   }
 
   getPendingEvents(): PendingEvent[] {
-    const stmt = this.db.prepare(
-      "SELECT * FROM pending_events WHERE status = 'pending'"
-    );
+    const stmt = this.db.prepare("SELECT * FROM pending_events WHERE status = 'pending'");
     const rows = stmt.all() as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       eventId: row.eventId,
       memoryId: row.memoryId,
       sourceType: row.sourceType as PendingEvent["sourceType"],

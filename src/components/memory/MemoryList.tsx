@@ -7,9 +7,11 @@ import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
 import { ShimmerButton } from "../ui/shimmer-button";
 import MemoryViewer from "./MemoryViewer";
+import { AppError } from "../../lib/errors";
 
 // Photo by Léonard Cotte on Unsplash (free to use, no attribution required)
-const memoryGardenImage = "https://images.unsplash.com/photo-1499002238440-d264edd596ec?w=1200&q=80";
+const memoryGardenImage =
+  "https://images.unsplash.com/photo-1499002238440-d264edd596ec?w=1200&q=80";
 
 export default function MemoryList() {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
@@ -52,7 +54,7 @@ export default function MemoryList() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "导入失败");
+        throw new AppError("IMPORT_FAILED", result.error || "导入失败");
       }
 
       setImportContent("");
@@ -82,7 +84,7 @@ export default function MemoryList() {
               <div className="mt-6 space-y-3">
                 <textarea
                   value={importContent}
-                  onChange={event => setImportContent(event.target.value)}
+                  onChange={(event) => setImportContent(event.target.value)}
                   placeholder="粘贴要导入的记忆内容..."
                   className="input min-h-[112px] resize-y"
                 />
@@ -120,8 +122,12 @@ export default function MemoryList() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-5 stagger-list md:grid-cols-2 xl:grid-cols-3">
-            {memories.map(memory => (
-              <div key={memory.id} onClick={() => setSelectedMemoryId(memory.id)} className="cursor-pointer">
+            {memories.map((memory) => (
+              <div
+                key={memory.id}
+                onClick={() => setSelectedMemoryId(memory.id)}
+                className="cursor-pointer"
+              >
                 <MemoryCard key={memory.id} memory={memory} className="animate-slide-up" />
               </div>
             ))}

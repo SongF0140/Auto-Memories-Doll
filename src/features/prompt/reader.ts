@@ -17,7 +17,7 @@ export class PromptReader {
   }
 
   getAvailableTemplateIds(): string[] {
-    return this.manager.listTemplates().map(t => t.id);
+    return this.manager.listTemplates().map((t) => t.id);
   }
 
   hasTemplate(templateId: string): boolean {

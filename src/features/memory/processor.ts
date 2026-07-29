@@ -12,12 +12,12 @@ export class MemoryProcessor {
 
   async processMemory(memory: MemoryRecord): Promise<MemoryRecord> {
     const allMemories = this.memoryService.listMemories();
-    
-    const maxAccessCount = Math.max(...allMemories.map(m => m.accessCount), 1);
-    const maxExposureCount = Math.max(...allMemories.map(m => m.accessCount), 1);
-    
+
+    const maxAccessCount = Math.max(...allMemories.map((m) => m.accessCount), 1);
+    const maxExposureCount = Math.max(...allMemories.map((m) => m.accessCount), 1);
+
     const profileTags = await readProfileTags();
-    
+
     const heatScore = calculateHeatScore(
       memory.accessCount,
       memory.updatedAt,
@@ -25,7 +25,7 @@ export class MemoryProcessor {
       memory.tags,
       profileTags,
       maxAccessCount,
-      maxExposureCount
+      maxExposureCount,
     );
 
     return { ...memory, heatScore };
@@ -34,9 +34,9 @@ export class MemoryProcessor {
   async updateHeatScores(): Promise<void> {
     const allMemories = this.memoryService.listMemories();
     const profileTags = await readProfileTags();
-    
-    const maxAccessCount = Math.max(...allMemories.map(m => m.accessCount), 1);
-    const maxExposureCount = Math.max(...allMemories.map(m => m.accessCount), 1);
+
+    const maxAccessCount = Math.max(...allMemories.map((m) => m.accessCount), 1);
+    const maxExposureCount = Math.max(...allMemories.map((m) => m.accessCount), 1);
 
     for (const memory of allMemories) {
       const heatScore = calculateHeatScore(
@@ -46,9 +46,9 @@ export class MemoryProcessor {
         memory.tags,
         profileTags,
         maxAccessCount,
-        maxExposureCount
+        maxExposureCount,
       );
-      
+
       this.memoryService.updateMemory(memory.id, { heatScore });
     }
   }

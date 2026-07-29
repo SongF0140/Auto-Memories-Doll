@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join, extname } from "path";
 import { getNotesPath } from "../storage/path-resolver";
 import { parseWikilinks } from "../storage/markdown-formatter";
@@ -72,7 +72,10 @@ export class WikiGraph {
       const contentLinks = parseWikilinks(content);
 
       const merged = [...new Set([...allLinks, ...contentLinks])];
-      index.set(record.id, merged.filter(id => id && id !== record.id));
+      index.set(
+        record.id,
+        merged.filter((id) => id && id !== record.id),
+      );
     }
 
     return index;
@@ -150,7 +153,6 @@ export class WikiGraph {
 
   /** 两个记忆之间添加 wikilink（在文件中追加） */
   addWikilinkToFile(fromFile: string, toMemoryId: string): void {
-    const { writeFileSync, readFileSync } = require("fs");
     let content = readFileSync(fromFile, "utf-8");
 
     // 检查是否已存在该 wikilink

@@ -138,15 +138,24 @@ function parseYamlArray(value: string | undefined): string[] {
   if (jsonMatch) {
     const inner = jsonMatch[1];
     if (!inner) return [];
-    return inner.split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    return inner
+      .split(",")
+      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
   }
   // 逗号分隔
-  return value.split(",").map(s => s.trim()).filter(Boolean);
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /** 提取摘要（正文前 200 字） */
 function extractSummary(body: string): string {
-  const cleaned = body.replace(/#{1,6}\s/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  const cleaned = body
+    .replace(/#{1,6}\s/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   return cleaned.length <= 200 ? cleaned : cleaned.substring(0, 200) + "...";
 }
 

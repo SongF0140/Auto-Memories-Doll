@@ -9,7 +9,7 @@ export class SkillManager {
   }
 
   listEnabledSkills(): SkillConfig[] {
-    return this.configService.listSkills().filter(s => s.enabled);
+    return this.configService.listSkills().filter((s) => s.enabled);
   }
 
   getSkill(id: string): SkillConfig | null {

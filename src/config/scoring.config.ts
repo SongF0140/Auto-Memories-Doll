@@ -13,20 +13,17 @@ export const calculateHeatScore = (
   tags: string[],
   profileTags: string[],
   maxAccessCount: number,
-  maxExposureCount: number
+  maxExposureCount: number,
 ): number => {
-  const accessScore = maxAccessCount > 0 
-    ? Math.log(1 + accessCount) / Math.log(1 + maxAccessCount)
-    : 0;
+  const accessScore =
+    maxAccessCount > 0 ? Math.log(1 + accessCount) / Math.log(1 + maxAccessCount) : 0;
 
   const hoursSinceUpdate = (Date.now() - new Date(updatedAt).getTime()) / (1000 * 60 * 60);
   const recencyScore = Math.exp(-scoringConfig.recencyLambda * hoursSinceUpdate);
 
-  const exposureScore = maxExposureCount > 0 
-    ? exposureCount / maxExposureCount
-    : 0;
+  const exposureScore = maxExposureCount > 0 ? exposureCount / maxExposureCount : 0;
 
-  const intersection = tags.filter(tag => profileTags.includes(tag)).length;
+  const intersection = tags.filter((tag) => profileTags.includes(tag)).length;
   const union = tags.length + profileTags.length - intersection;
   const tagAffinityScore = union > 0 ? intersection / union : 0;
 

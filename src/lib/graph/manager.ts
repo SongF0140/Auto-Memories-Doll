@@ -35,7 +35,7 @@ export class GraphManager {
     const stmt = this.db.prepare("SELECT * FROM graph_edges WHERE fromId = ? AND toId = ?");
     const row = stmt.get(from, to) as any;
     if (!row) return null;
-    
+
     return {
       from: row.fromId,
       to: row.toId,
@@ -57,8 +57,8 @@ export class GraphManager {
   getNeighbors(nodeId: string): GraphEdge[] {
     const stmt = this.db.prepare("SELECT * FROM graph_edges WHERE fromId = ? OR toId = ?");
     const rows = stmt.all(nodeId, nodeId) as any[];
-    
-    return rows.map(row => ({
+
+    return rows.map((row) => ({
       from: row.fromId,
       to: row.toId,
       relation: row.relation,
@@ -70,8 +70,8 @@ export class GraphManager {
   list(): GraphEdge[] {
     const stmt = this.db.prepare("SELECT * FROM graph_edges");
     const rows = stmt.all() as any[];
-    
-    return rows.map(row => ({
+
+    return rows.map((row) => ({
       from: row.fromId,
       to: row.toId,
       relation: row.relation,
@@ -83,8 +83,8 @@ export class GraphManager {
   getRelations(memoryId: string): { to: string; relation: string; weight: number }[] {
     const stmt = this.db.prepare("SELECT * FROM graph_edges WHERE fromId = ?");
     const rows = stmt.all(memoryId) as any[];
-    
-    return rows.map(row => ({
+
+    return rows.map((row) => ({
       to: row.toId,
       relation: row.relation,
       weight: row.weight,

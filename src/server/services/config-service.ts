@@ -68,7 +68,7 @@ export class ConfigService {
   listMcpServers(): McpServerConfig[] {
     const stmt = this.db.prepare("SELECT * FROM mcp_servers ORDER BY updatedAt DESC");
     const rows = stmt.all() as any[];
-    return rows.map(row => this.mapMcpServer(row));
+    return rows.map((row) => this.mapMcpServer(row));
   }
 
   getMcpServer(id: string): McpServerConfig | null {
@@ -78,7 +78,9 @@ export class ConfigService {
     return this.mapMcpServer(row);
   }
 
-  createMcpServer(server: Omit<McpServerConfig, "id" | "createdAt" | "updatedAt">): McpServerConfig {
+  createMcpServer(
+    server: Omit<McpServerConfig, "id" | "createdAt" | "updatedAt">,
+  ): McpServerConfig {
     const now = new Date().toISOString();
     const id = `mcp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const stmt = this.db.prepare(`
@@ -94,7 +96,7 @@ export class ConfigService {
       JSON.stringify(server.env || {}),
       server.description || null,
       now,
-      now
+      now,
     );
     return this.getMcpServer(id)!;
   }
@@ -117,7 +119,7 @@ export class ConfigService {
       JSON.stringify(merged.env || {}),
       merged.description || null,
       merged.updatedAt,
-      id
+      id,
     );
     return this.getMcpServer(id);
   }
@@ -131,7 +133,7 @@ export class ConfigService {
   listSkills(): SkillConfig[] {
     const stmt = this.db.prepare("SELECT * FROM skills ORDER BY updatedAt DESC");
     const rows = stmt.all() as any[];
-    return rows.map(row => this.mapSkill(row));
+    return rows.map((row) => this.mapSkill(row));
   }
 
   getSkill(id: string): SkillConfig | null {
@@ -156,7 +158,7 @@ export class ConfigService {
       skill.description || null,
       skill.prompt,
       now,
-      now
+      now,
     );
     return this.getSkill(id)!;
   }
@@ -178,7 +180,7 @@ export class ConfigService {
       merged.description || null,
       merged.prompt,
       merged.updatedAt,
-      id
+      id,
     );
     return this.getSkill(id);
   }

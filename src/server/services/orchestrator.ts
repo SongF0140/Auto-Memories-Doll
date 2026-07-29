@@ -6,6 +6,7 @@ import { buildPendingEvent } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
 import { updateIndexMap } from "../../lib/storage/index-writer";
 import { createFailureRecord } from "../../lib/storage/file-manager";
+import { MemoryValidationError } from "../../lib/errors";
 
 export class Orchestrator {
   private memoryService: MemoryService;
@@ -24,7 +25,7 @@ export class Orchestrator {
     content: string,
     title: string,
     summary: string,
-    tags: string[] = []
+    tags: string[] = [],
   ): Promise<string> {
     const memory = {
       id: "",
@@ -44,14 +45,14 @@ export class Orchestrator {
     };
 
     if (!validateMemoryRecord(memory)) {
-      throw new Error("Invalid memory record");
+      throw new MemoryValidationError("record", "记忆数据不完整");
     }
 
     const pendingEvent = buildPendingEvent(
       memory.id || "new",
       sourceType,
       memory,
-      Object.keys(memory) as string[]
+      Object.keys(memory) as string[],
     );
 
     this.memoryService.enqueueEvent(pendingEvent);
@@ -68,8 +69,8 @@ export class Orchestrator {
 
     if (pendingEvents.length > 0) {
       const updatedMemories = this.memoryService.listMemories();
-      await updateIndexMap(updatedMemories).catch(err =>
-        console.error("Index map update failed:", err)
+      await updateIndexMap(updatedMemories).catch((err) =>
+        console.error("Index map update failed:", err),
       );
     }
   }
@@ -89,22 +90,19 @@ export class Orchestrator {
           candidate.title,
           candidate.content,
           candidate.summary,
-          candidate.tags
+          candidate.tags,
         );
 
         const all = this.memoryService.listMemories();
-        await updateIndexMap(all).catch(err =>
-          console.error("Index map update failed:", err)
-        );
+        await updateIndexMap(all).catch((err) => console.error("Index map update failed:", err));
 
         event.status = "done";
         this.memoryService.updateEvent(event);
         return;
       }
 
-      const auditResult = await this.auditor.process(
-        event.memoryId,
-        (id: string) => this.memoryService.getMemory(id)
+      const auditResult = await this.auditor.process(event.memoryId, (id: string) =>
+        this.memoryService.getMemory(id),
       );
 
       if (!auditResult) {
@@ -130,7 +128,7 @@ export class Orchestrator {
               event.eventId,
               conflict.field,
               conflict.existingValue,
-              conflict.candidateValue
+              conflict.candidateValue,
             );
           }
         }
@@ -145,11 +143,9 @@ export class Orchestrator {
       event.status = "failed";
       event.retryCount++;
       this.memoryService.updateEvent(event);
-      await createFailureRecord(
-        event.memoryId,
-        "orchestrator-process",
-        error as Error
-      ).catch(err => console.error("Failure record creation failed:", err));
+      await createFailureRecord(event.memoryId, "orchestrator-process", error as Error).catch(
+        (err) => console.error("Failure record creation failed:", err),
+      );
     }
   }
 

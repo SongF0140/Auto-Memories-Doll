@@ -39,11 +39,11 @@ const TOPIC_LABELS: Record<string, string> = {
   "ai-coding": "AI 编程",
   "daily-notes": "日常记录",
   "project-planning": "项目规划",
-  "learning": "学习笔记",
-  "meetings": "会议记录",
-  "reading": "阅读摘录",
-  "ideas": "灵感想法",
-  "uncategorized": "未分类",
+  learning: "学习笔记",
+  meetings: "会议记录",
+  reading: "阅读摘录",
+  ideas: "灵感想法",
+  uncategorized: "未分类",
 };
 
 export function translateTitle(title: string): string {
@@ -72,37 +72,37 @@ export function translateTopicZh(topic: string): string {
 /** 为一组英文标签生成对应的中文标签 */
 export function translateTags(tags: string[]): string[] {
   const tagMap: Record<string, string> = {
-    "react": "React",
-    "nextjs": "Next.js",
+    react: "React",
+    nextjs: "Next.js",
     "next.js": "Next.js",
-    "typescript": "TypeScript",
-    "sqlite": "SQLite",
-    "database": "数据库",
-    "vector": "向量",
-    "algorithm": "算法",
-    "frontend": "前端",
-    "backend": "后端",
-    "api": "API",
-    "ai": "AI",
-    "llm": "LLM",
-    "embedding": "嵌入",
-    "bug": "缺陷",
-    "fix": "修复",
-    "deploy": "部署",
-    "docker": "Docker",
-    "testing": "测试",
-    "javascript": "JavaScript",
-    "python": "Python",
-    "rust": "Rust",
-    "config": "配置",
-    "component": "组件",
-    "design": "设计",
-    "ui": "UI",
-    "ux": "UX",
-    "performance": "性能",
+    typescript: "TypeScript",
+    sqlite: "SQLite",
+    database: "数据库",
+    vector: "向量",
+    algorithm: "算法",
+    frontend: "前端",
+    backend: "后端",
+    api: "API",
+    ai: "AI",
+    llm: "LLM",
+    embedding: "嵌入",
+    bug: "缺陷",
+    fix: "修复",
+    deploy: "部署",
+    docker: "Docker",
+    testing: "测试",
+    javascript: "JavaScript",
+    python: "Python",
+    rust: "Rust",
+    config: "配置",
+    component: "组件",
+    design: "设计",
+    ui: "UI",
+    ux: "UX",
+    performance: "性能",
   };
 
-  return tags.map(t => tagMap[t.toLowerCase()] || t);
+  return tags.map((t) => tagMap[t.toLowerCase()] || t);
 }
 
 /** 生成完整的中文版本字段 */
@@ -110,7 +110,7 @@ export function generateZhFields(
   title: string,
   summary: string,
   tags: string[],
-  topic: string
+  topic: string,
 ): { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string } {
   const titleZh = translateTitle(title);
   const topicZh = translateTopicZh(topic);

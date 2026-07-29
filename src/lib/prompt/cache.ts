@@ -29,11 +29,7 @@ export class PromptCache {
   }
 
   /** 获取缓存的系统前缀，若缓存失效则重建 */
-  getOrBuild(
-    key: string,
-    builder: () => string,
-    templateHash: string
-  ): string {
+  getOrBuild(key: string, builder: () => string, templateHash: string): string {
     const cached = this.cache.get(key);
     const currentProfileMtime = this.getProfileMtime();
 
@@ -68,9 +64,11 @@ export class PromptCache {
 
   /** 获取缓存的系统提示词前缀（包含用户画像） */
   getSystemPrefix(templateHash: string): string {
-    return this.getOrBuild("system-prefix", () => {
-      const profileContent = this.readProfile();
-      return `你是 Auto-Memories-Doll，一个智能记忆伴侣助手。
+    return this.getOrBuild(
+      "system-prefix",
+      () => {
+        const profileContent = this.readProfile();
+        return `你是 Auto-Memories-Doll，一个智能记忆伴侣助手。
 
 ## 用户画像
 ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏好。"}
@@ -86,7 +84,9 @@ ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏�
 - 若记忆库中没有相关信息，诚实说明而非编造
 - 对用户说"记住""保存""记录"等内容时，确认并帮助整理记忆
 - 根据用户画像调整回答风格和关注重点`;
-    }, templateHash);
+      },
+      templateHash,
+    );
   }
 
   /** 获取相关记忆部分的缓存 */
@@ -98,7 +98,7 @@ ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏�
     if (cached) return cached.content;
 
     const content = `## 相关记忆\n${memoryContent}\n\n## 回答格式\n- 使用 Markdown 格式使回答更清晰易读\n- 若引用了某条记忆，用引用块标注 [来自记忆]\n- 保持回答简洁，避免冗长，重点突出`;
-    
+
     this.cache.set(key, {
       content,
       createdAt: Date.now(),
@@ -116,7 +116,9 @@ ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏�
         const content = readFileSync(profilePath, "utf-8").trim();
         return content || "正在构建用户画像中...";
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return "正在构建用户画像中...";
   }
 
@@ -126,7 +128,9 @@ ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏�
       if (existsSync(profilePath)) {
         return statSync(profilePath).mtimeMs;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return this.profileMtime;
   }
 
@@ -134,7 +138,7 @@ ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏�
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
     return Math.abs(hash).toString(36);

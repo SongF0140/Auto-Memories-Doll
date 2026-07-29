@@ -5,7 +5,7 @@ export const buildGraphEdge = (
   from: string,
   to: string,
   relation: string,
-  weight: number = 1
+  weight: number = 1,
 ): GraphEdge => {
   return {
     from,
@@ -16,23 +16,20 @@ export const buildGraphEdge = (
   };
 };
 
-export const calculateRelationWeight = (
-  frequency: number,
-  recencyScore: number
-): number => {
+export const calculateRelationWeight = (frequency: number, recencyScore: number): number => {
   return frequency * 0.5 + recencyScore * 0.5;
 };
 
 export const extractRelations = (
   content: string,
   memoryId: string,
-  existingMemoryIds: string[]
+  existingMemoryIds: string[],
 ): GraphEdge[] => {
   const edges: GraphEdge[] = [];
-  
-  existingMemoryIds.forEach(otherId => {
+
+  existingMemoryIds.forEach((otherId) => {
     if (otherId === memoryId) return;
-    
+
     if (content.includes(otherId)) {
       edges.push(buildGraphEdge(memoryId, otherId, "mentions", 0.8));
     }

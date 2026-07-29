@@ -28,13 +28,13 @@ export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelecto
             }`}
             title={description}
           >
-            <span className={`text-sm font-semibold ${active ? "text-text-primary" : "text-text-secondary"}`}>
+            <span
+              className={`text-sm font-semibold ${active ? "text-text-primary" : "text-text-secondary"}`}
+            >
               <span className="mr-1.5">{icon}</span>
               {label}
             </span>
-            <span className="text-xs text-text-tertiary mt-0.5">
-              {description}
-            </span>
+            <span className="text-xs text-text-tertiary mt-0.5">{description}</span>
           </button>
         );
       })}

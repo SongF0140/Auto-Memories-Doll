@@ -52,9 +52,7 @@ export function getListenerStatus(port: number = 3000): ListenerStatus {
   return {
     running: isRunning,
     startTime,
-    uptime: startTime
-      ? (Date.now() - new Date(startTime).getTime()) / 1000
-      : 0,
+    uptime: startTime ? (Date.now() - new Date(startTime).getTime()) / 1000 : 0,
     port,
     endpoints: {
       listen: `POST http://localhost:${port}/api/listen`,

@@ -30,7 +30,10 @@ export class Auditor {
     return this.queue.size();
   }
 
-  async process(memoryId: string, getMemory: (id: string) => MemoryRecord | null): Promise<AuditResult | null> {
+  async process(
+    memoryId: string,
+    getMemory: (id: string) => MemoryRecord | null,
+  ): Promise<AuditResult | null> {
     const event = this.queue.dequeueByMemoryId(memoryId);
     if (!event) return null;
 

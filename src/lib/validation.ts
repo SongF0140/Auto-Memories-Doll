@@ -14,10 +14,14 @@ export const aiConfigSchema = z.object({
 });
 
 export const chatRequestSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(["user", "assistant", "system"]),
-    content: z.string(),
-  })).min(1, "messages 至少需要一条消息"),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string(),
+      }),
+    )
+    .min(1, "messages 至少需要一条消息"),
   mode: z.enum(["chat", "memory", "prompt"]).default("chat"),
   sessionId: z.string().default("default"),
   memoryIds: z.array(z.string()).optional(),

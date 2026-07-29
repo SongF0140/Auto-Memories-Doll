@@ -4,20 +4,22 @@ export class InputParser {
   parseJson(input: string): InputEvent[] {
     try {
       const parsed = JSON.parse(input);
-      
+
       if (Array.isArray(parsed)) {
-        return parsed.map(item => this.parseItem(item));
+        return parsed.map((item) => this.parseItem(item));
       }
-      
+
       return [this.parseItem(parsed)];
     } catch {
-      return [{
-        id: `${Date.now()}`,
-        source: "manual",
-        sourceType: "manual",
-        content: input,
-        timestamp: new Date().toISOString(),
-      }];
+      return [
+        {
+          id: `${Date.now()}`,
+          source: "manual",
+          sourceType: "manual",
+          content: input,
+          timestamp: new Date().toISOString(),
+        },
+      ];
     }
   }
 

@@ -72,3 +72,6 @@ coverage/
 
 # Turbo (monorepo)
 .turbo
+
+# ESLint
+.eslintcache

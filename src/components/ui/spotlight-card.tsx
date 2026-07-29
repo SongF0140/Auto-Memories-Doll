@@ -40,7 +40,7 @@ export function SpotlightCard({
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
       className={cn(
         "relative overflow-hidden rounded-2xl border border-border bg-surface/80 backdrop-blur-xl shadow-sm",
-        className
+        className,
       )}
     >
       <motion.div

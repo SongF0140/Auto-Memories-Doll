@@ -81,7 +81,7 @@ export default function SettingsPanel() {
         </div>
 
         <div className="flex gap-2 mb-8 border-b border-border pb-1">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -114,9 +114,7 @@ export default function SettingsPanel() {
             <div>
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-text-primary mb-1">MCP 服务器</h3>
-                <p className="text-sm text-text-tertiary">
-                  连接外部 MCP 服务器来扩展能力。
-                </p>
+                <p className="text-sm text-text-tertiary">连接外部 MCP 服务器来扩展能力。</p>
               </div>
               <McpServerList servers={mcpServers} onChange={setMcpServers} />
             </div>

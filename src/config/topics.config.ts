@@ -26,12 +26,29 @@ type CompiledRule = {
 
 /** 默认话题规则 */
 const defaultRules: TopicRule[] = [
-  { pattern: "代码|编程|react|next\\.?js|typescript|前端|后端|api|bug|debug|算法|code\\b|programming|frontend|backend|database|sqlite|docker|deploy|git|node\\.?js|python|rust|golang", topic: "ai-coding" },
+  {
+    pattern:
+      "代码|编程|react|next\\.?js|typescript|前端|后端|api|bug|debug|算法|code\\b|programming|frontend|backend|database|sqlite|docker|deploy|git|node\\.?js|python|rust|golang",
+    topic: "ai-coding",
+  },
   { pattern: "日记|今天|心情|生活|日常|备忘|diary|daily|journal|mood|log", topic: "daily-notes" },
-  { pattern: "项目|需求|架构|设计|规划|roadmap|project|architecture|planning|design system|milestone", topic: "project-planning" },
-  { pattern: "学习|教程|笔记|知识|总结|learn|tutorial|study|knowledge|guide|how.?to|course", topic: "learning" },
-  { pattern: "会议|讨论|决策|review|meeting|discussion|decision|retro|standup|sync", topic: "meetings" },
-  { pattern: "阅读|书籍|文章|论文|paper|reading|book|article|research|arxiv|pdf", topic: "reading" },
+  {
+    pattern:
+      "项目|需求|架构|设计|规划|roadmap|project|architecture|planning|design system|milestone",
+    topic: "project-planning",
+  },
+  {
+    pattern: "学习|教程|笔记|知识|总结|learn|tutorial|study|knowledge|guide|how.?to|course",
+    topic: "learning",
+  },
+  {
+    pattern: "会议|讨论|决策|review|meeting|discussion|decision|retro|standup|sync",
+    topic: "meetings",
+  },
+  {
+    pattern: "阅读|书籍|文章|论文|paper|reading|book|article|research|arxiv|pdf",
+    topic: "reading",
+  },
   { pattern: "想法|灵感|创意|brainstorm|idea|thought|creativity|draft|sketch", topic: "ideas" },
 ];
 
@@ -40,19 +57,19 @@ const defaultTopicLabels: Record<string, string> = {
   "ai-coding": "AI 编程",
   "daily-notes": "日常记录",
   "project-planning": "项目规划",
-  "learning": "学习笔记",
-  "meetings": "会议记录",
-  "reading": "阅读摘录",
-  "ideas": "灵感想法",
-  "uncategorized": "未分类",
+  learning: "学习笔记",
+  meetings: "会议记录",
+  reading: "阅读摘录",
+  ideas: "灵感想法",
+  uncategorized: "未分类",
 };
 
 /** 编译正则并缓存 */
-let compiledCache: CompiledRule[] | null = null;
-let cacheHash = "";
+const compiledCache: CompiledRule[] | null = null;
+const cacheHash = "";
 
 function compileRules(rules: TopicRule[]): CompiledRule[] {
-  return rules.map(r => ({
+  return rules.map((r) => ({
     regex: new RegExp(r.pattern, "i"),
     topic: r.topic,
   }));
@@ -158,7 +175,7 @@ export function getDefaultTopicRules(): TopicRule[] {
 /** 获取所有可用话题名 */
 export function getAvailableTopics(): string[] {
   const rules = getTopicRules();
-  const topics = rules.map(r => r.topic);
+  const topics = rules.map((r) => r.topic);
   return [...new Set([...topics, "uncategorized"])];
 }
 

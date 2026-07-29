@@ -35,12 +35,12 @@ export class ConversationProcessor {
   }
 
   extractConversationTopic(data: ConversationData): string {
-    const fullText = data.messages.map(m => m.content).join("\n");
+    const fullText = data.messages.map((m) => m.content).join("\n");
     return this.extractor.extractTopic(fullText);
   }
 
   private extractConversationTitle(messages: ConversationMessage[]): string {
-    const firstUserMsg = messages.find(m => m.role === "user");
+    const firstUserMsg = messages.find((m) => m.role === "user");
     if (firstUserMsg) {
       return firstUserMsg.content.substring(0, 60).replace(/\n/g, " ");
     }
@@ -51,12 +51,14 @@ export class ConversationProcessor {
   private messagesToContent(
     messages: ConversationMessage[],
     source: string,
-    metadata?: ConversationData["metadata"]
+    metadata?: ConversationData["metadata"],
   ): string {
     const lines: string[] = [];
 
     if (metadata) {
-      lines.push(`> 来源: ${metadata.platform || source}${metadata.model ? ` | 模型: ${metadata.model}` : ""}${metadata.url ? ` | [原始链接](${metadata.url})` : ""}`);
+      lines.push(
+        `> 来源: ${metadata.platform || source}${metadata.model ? ` | 模型: ${metadata.model}` : ""}${metadata.url ? ` | [原始链接](${metadata.url})` : ""}`,
+      );
       lines.push("");
     }
     lines.push(`> 导入时间: ${new Date().toISOString()}`);
@@ -65,7 +67,8 @@ export class ConversationProcessor {
     lines.push("");
 
     for (const msg of messages) {
-      const roleLabel = msg.role === "user" ? "### 用户" : msg.role === "assistant" ? "### AI" : "### 系统";
+      const roleLabel =
+        msg.role === "user" ? "### 用户" : msg.role === "assistant" ? "### AI" : "### 系统";
       lines.push(roleLabel);
       lines.push("");
       lines.push(msg.content);
@@ -100,7 +103,7 @@ export class ConversationProcessor {
 
   generateKnowledgeCard(data: ConversationData): KnowledgeCard {
     const { title, topic } = this.formatConversation(data);
-    const allText = data.messages.map(m => m.content).join("\n");
+    const allText = data.messages.map((m) => m.content).join("\n");
     const summary = this.extractKeyInsights(allText);
     const tags = data.tags || [];
     const zhFields = generateZhFields(title, summary, tags, topic);
@@ -117,7 +120,10 @@ export class ConversationProcessor {
   }
 
   private extractKeyInsights(text: string): string {
-    const cleaned = text.replace(/#{1,6}\s/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    const cleaned = text
+      .replace(/#{1,6}\s/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
     if (cleaned.length <= 200) return cleaned;
     return cleaned.substring(0, 200) + "...";
   }

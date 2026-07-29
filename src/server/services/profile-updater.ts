@@ -13,6 +13,7 @@ import { ModelAdapter } from "../../lib/ai/model-adapter";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { getProfilePath } from "../../lib/storage/path-resolver";
 import { PromptCache } from "../../lib/prompt/cache";
+import { withLock } from "../../lib/storage/lock";
 
 const PROFILE_ANALYSIS_PROMPT = `You are a user profile analyzer. Based on the conversation below, extract the user's characteristics.
 
@@ -115,19 +116,24 @@ export class ProfileUpdater {
       const model = createLanguageModel();
       const result = await generateText({
         model,
-        messages: [{
-          role: "user",
-          content: PROFILE_ANALYSIS_PROMPT
-            .replace("{existing}", existingProfile || "暂无画像")
-            .replace("{conversation}", conversation),
-        }],
+        messages: [
+          {
+            role: "user",
+            content: PROFILE_ANALYSIS_PROMPT.replace(
+              "{existing}",
+              existingProfile || "暂无画像",
+            ).replace("{conversation}", conversation),
+          },
+        ],
         maxOutputTokens: 800,
         temperature: 0.5,
       });
 
       const updatedProfile = result.text.trim();
       if (updatedProfile && updatedProfile.length > 20) {
-        this.writeProfile(updatedProfile);
+        await withLock(async () => {
+          this.writeProfile(updatedProfile);
+        });
         // 画像更新后，让前缀缓存失效
         PromptCache.getInstance().invalidate("system-prefix");
         console.log("[ProfileUpdater] 用户画像已更新");
@@ -150,7 +156,9 @@ export class ProfileUpdater {
       if (existsSync(profilePath)) {
         return readFileSync(profilePath, "utf-8").trim();
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return "";
   }
 

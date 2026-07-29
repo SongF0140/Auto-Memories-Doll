@@ -32,7 +32,7 @@ export class VectorIndex {
       JSON.stringify(record.embedding),
       record.model,
       record.dimensions,
-      record.updatedAt
+      record.updatedAt,
     );
   }
 
@@ -40,7 +40,7 @@ export class VectorIndex {
     const stmt = this.db.prepare("SELECT * FROM vector_records WHERE memoryId = ?");
     const row = stmt.get(memoryId) as any;
     if (!row) return null;
-    
+
     return {
       memoryId: row.memoryId,
       embedding: JSON.parse(row.embedding),
@@ -63,7 +63,7 @@ export class VectorIndex {
     const stmt = this.db.prepare("SELECT * FROM vector_records");
     const rows = stmt.all() as any[];
 
-    const results = rows.map(row => {
+    const results = rows.map((row) => {
       const rowEmbedding = JSON.parse(row.embedding as string);
       const similarity = this.cosineSimilarity(embedding, rowEmbedding);
       return { memoryId: row.memoryId, similarity };
@@ -75,7 +75,7 @@ export class VectorIndex {
   list(): VectorRecord[] {
     const stmt = this.db.prepare("SELECT * FROM vector_records");
     const rows = stmt.all() as any[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       memoryId: row.memoryId,
       embedding: JSON.parse(row.embedding),
       model: row.model,
@@ -86,17 +86,17 @@ export class VectorIndex {
 
   private cosineSimilarity(a: number[], b: number[]): number {
     if (a.length !== b.length) return 0;
-    
+
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    
+
     for (let i = 0; i < a.length; i++) {
       dotProduct += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    
+
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 

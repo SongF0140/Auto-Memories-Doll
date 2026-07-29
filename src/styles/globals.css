@@ -36,9 +36,21 @@
 
   /* 淡紫金色美术渐变 */
   --gradient-warm: linear-gradient(135deg, #fbf4df 0%, #f1e5cf 42%, #ece0f3 100%);
-  --gradient-glow-1: radial-gradient(circle at 18% 22%, rgba(142, 113, 166, 0.30) 0%, transparent 44%);
-  --gradient-glow-2: radial-gradient(circle at 84% 72%, rgba(205, 159, 71, 0.28) 0%, transparent 48%);
-  --gradient-glow-3: radial-gradient(circle at 50% 42%, rgba(248, 215, 146, 0.22) 0%, transparent 42%);
+  --gradient-glow-1: radial-gradient(
+    circle at 18% 22%,
+    rgba(142, 113, 166, 0.3) 0%,
+    transparent 44%
+  );
+  --gradient-glow-2: radial-gradient(
+    circle at 84% 72%,
+    rgba(205, 159, 71, 0.28) 0%,
+    transparent 48%
+  );
+  --gradient-glow-3: radial-gradient(
+    circle at 50% 42%,
+    rgba(248, 215, 146, 0.22) 0%,
+    transparent 42%
+  );
   --gradient-text: linear-gradient(135deg, #2b241d 0%, #6f5a8f 46%, #b88735 100%);
 
   --radius-sm: 8px;
@@ -61,13 +73,19 @@ html {
 
 body {
   background: var(--color-bg);
-  background-image:
-    var(--gradient-glow-1),
-    var(--gradient-glow-2),
-    var(--gradient-glow-3);
+  background-image: var(--gradient-glow-1), var(--gradient-glow-2), var(--gradient-glow-3);
   background-attachment: fixed;
   color: var(--color-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
@@ -84,7 +102,12 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   letter-spacing: -0.025em;
   line-height: 1.25;
 }
@@ -156,7 +179,8 @@ textarea:focus-visible {
 }
 
 @keyframes pulseSoft {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -174,7 +198,8 @@ textarea:focus-visible {
 }
 
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) rotate(0deg);
   }
   50% {
@@ -183,7 +208,8 @@ textarea:focus-visible {
 }
 
 @keyframes glowPulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.4;
     transform: scale(1);
   }
@@ -224,7 +250,8 @@ textarea:focus-visible {
 }
 
 @keyframes letterGlow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.55;
     transform: translateY(0) scale(1);
   }
@@ -256,7 +283,12 @@ textarea:focus-visible {
   }
 
   .animate-shimmer {
-    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      transparent 100%
+    );
     background-size: 200% 100%;
     animation: shimmer 2s var(--ease-smooth) infinite;
   }
@@ -305,7 +337,9 @@ textarea:focus-visible {
   }
 
   .glow-hover {
-    transition: box-shadow 300ms var(--ease-out-expo), transform 300ms var(--ease-out-expo);
+    transition:
+      box-shadow 300ms var(--ease-out-expo),
+      transform 300ms var(--ease-out-expo);
   }
 
   .glow-hover:hover {
@@ -324,7 +358,11 @@ textarea:focus-visible {
     left: 0;
     right: 0;
     bottom: 0;
-    background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.15) 0%, transparent 50%);
+    background: radial-gradient(
+      circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(255, 255, 255, 0.15) 0%,
+      transparent 50%
+    );
     opacity: 0;
     transition: opacity 300ms var(--ease-smooth);
     pointer-events: none;
@@ -334,10 +372,22 @@ textarea:focus-visible {
     opacity: 1;
   }
 
-  .stagger-1 { animation-delay: 40ms; }
-  .stagger-2 { animation-delay: 80ms; }
-  .stagger-3 { animation-delay: 120ms; }
-  .stagger-4 { animation-delay: 160ms; }
-  .stagger-5 { animation-delay: 200ms; }
-  .stagger-6 { animation-delay: 240ms; }
+  .stagger-1 {
+    animation-delay: 40ms;
+  }
+  .stagger-2 {
+    animation-delay: 80ms;
+  }
+  .stagger-3 {
+    animation-delay: 120ms;
+  }
+  .stagger-4 {
+    animation-delay: 160ms;
+  }
+  .stagger-5 {
+    animation-delay: 200ms;
+  }
+  .stagger-6 {
+    animation-delay: 240ms;
+  }
 }

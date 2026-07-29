@@ -82,7 +82,11 @@ export default function AuditPanel() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="loading-dots"><span /><span /><span /></div>
+        <div className="loading-dots">
+          <span />
+          <span />
+          <span />
+        </div>
       </div>
     );
   }
@@ -116,11 +120,15 @@ export default function AuditPanel() {
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
               <div className="card p-5 text-center">
-                <div className="text-3xl font-bold text-gradient mb-1">{report?.totalMemories ?? 0}</div>
+                <div className="text-3xl font-bold text-gradient mb-1">
+                  {report?.totalMemories ?? 0}
+                </div>
                 <div className="text-xs text-text-tertiary">记忆总数</div>
               </div>
               <div className="card p-5 text-center">
-                <div className="text-3xl font-bold text-gradient mb-1">{report?.pendingEvents ?? 0}</div>
+                <div className="text-3xl font-bold text-gradient mb-1">
+                  {report?.pendingEvents ?? 0}
+                </div>
                 <div className="text-xs text-text-tertiary">待处理事件</div>
               </div>
               <div className="card p-5 text-center">
@@ -135,7 +143,9 @@ export default function AuditPanel() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-text-secondary">重放待处理事件</p>
-                    <p className="text-xs text-text-tertiary">重新处理所有 pending 状态的记忆事件</p>
+                    <p className="text-xs text-text-tertiary">
+                      重新处理所有 pending 状态的记忆事件
+                    </p>
                   </div>
                   <button
                     onClick={handleReplay}
@@ -162,7 +172,9 @@ export default function AuditPanel() {
                   <div key={conflict.id} className="card p-5">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-text-tertiary font-mono">{conflict.id.slice(0, 12)}...</span>
+                        <span className="text-xs text-text-tertiary font-mono">
+                          {conflict.id.slice(0, 12)}...
+                        </span>
                         <span className="tag">字段: {conflict.field}</span>
                         <span className="tag">{conflict.status}</span>
                       </div>

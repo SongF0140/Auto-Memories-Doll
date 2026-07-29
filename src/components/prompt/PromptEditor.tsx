@@ -5,7 +5,12 @@ import { PromptTemplate } from "../../lib/prompt/template-manager";
 
 interface PromptEditorProps {
   template?: PromptTemplate | null;
-  onSave: (data: { name: string; content: string; variables: string[]; description?: string }) => void;
+  onSave: (data: {
+    name: string;
+    content: string;
+    variables: string[];
+    description?: string;
+  }) => void;
   onCancel: () => void;
 }
 
@@ -38,7 +43,10 @@ export default function PromptEditor({ template, onSave, onCancel }: PromptEdito
     onSave({
       name: name.trim(),
       content: content.trim(),
-      variables: variables.split(",").map((v) => v.trim()).filter(Boolean),
+      variables: variables
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean),
       description: description.trim() || undefined,
     });
   };
@@ -72,7 +80,9 @@ export default function PromptEditor({ template, onSave, onCancel }: PromptEdito
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-1">变量（逗号分隔）</label>
+        <label className="block text-sm font-medium text-text-secondary mb-1">
+          变量（逗号分隔）
+        </label>
         <input
           value={variables}
           onChange={(e) => setVariables(e.target.value)}
@@ -95,7 +105,9 @@ export default function PromptEditor({ template, onSave, onCancel }: PromptEdito
         <button onClick={handleSubmit} className="shimmer-button h-10 px-6 text-sm">
           保存
         </button>
-        <button onClick={onCancel} className="btn-secondary h-10 px-6 text-sm">取消</button>
+        <button onClick={onCancel} className="btn-secondary h-10 px-6 text-sm">
+          取消
+        </button>
       </div>
     </div>
   );

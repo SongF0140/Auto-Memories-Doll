@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     let result = service.listMemories();
 
     if (tag) {
-      result = result.filter(m => m.tags.includes(tag));
+      result = result.filter((m) => m.tags.includes(tag));
     }
 
     const orderMul = sortOrder === "asc" ? 1 : -1;
@@ -44,10 +44,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = memoryCreateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0].message },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
   const { title, content, tags, sourceType } = parsed.data;
@@ -57,7 +54,11 @@ export async function POST(request: NextRequest) {
   const extractor = new MemoryExtractor();
 
   try {
-    const memoryRecord = extractor.extractFromStructuredData(source, sourceType, { title, content, tags });
+    const memoryRecord = extractor.extractFromStructuredData(source, sourceType, {
+      title,
+      content,
+      tags,
+    });
     const memoryId = await service.createMemory(
       memoryRecord.source,
       memoryRecord.sourceType,
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
         summaryZh: memoryRecord.summaryZh,
         tagsZh: memoryRecord.tagsZh,
         topicZh: memoryRecord.topicZh,
-      }
+      },
     );
     return NextResponse.json({ ...memoryRecord, id: memoryId });
   } finally {

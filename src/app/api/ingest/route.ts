@@ -30,16 +30,18 @@ export async function POST(request: NextRequest) {
     const normalizedEvents = normalizer.normalize(events);
     const memoryRecords = adapter.adaptBatch(normalizedEvents);
 
-    const results = await Promise.all(memoryRecords.map(record =>
-      memoryService.createMemory(
-        record.source,
-        record.sourceType,
-        record.title,
-        record.content,
-        record.summary,
-        record.tags
-      )
-    ));
+    const results = await Promise.all(
+      memoryRecords.map((record) =>
+        memoryService.createMemory(
+          record.source,
+          record.sourceType,
+          record.title,
+          record.content,
+          record.summary,
+          record.tags,
+        ),
+      ),
+    );
 
     return NextResponse.json({ success: true, memories: results });
   } finally {

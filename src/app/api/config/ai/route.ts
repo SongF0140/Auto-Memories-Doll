@@ -13,7 +13,10 @@ export async function GET() {
 }
 
 const REQUIRED_STRING_FIELDS: (keyof AiConfig)[] = [
-  "baseURL", "apiKey", "chatModel", "embeddingModel",
+  "baseURL",
+  "apiKey",
+  "chatModel",
+  "embeddingModel",
 ];
 
 const REQUIRED_NUMBER_FIELDS: { field: keyof AiConfig; min: number; max: number }[] = [
@@ -24,7 +27,9 @@ const REQUIRED_NUMBER_FIELDS: { field: keyof AiConfig; min: number; max: number 
   { field: "maxRetries", min: 0, max: 10 },
 ];
 
-function validateAiConfig(body: any): { valid: true; config: AiConfig } | { valid: false; error: string } {
+function validateAiConfig(
+  body: any,
+): { valid: true; config: AiConfig } | { valid: false; error: string } {
   for (const field of REQUIRED_STRING_FIELDS) {
     if (!body[field] || typeof body[field] !== "string") {
       return { valid: false, error: `"${field}" is required and must be a string` };
@@ -40,7 +45,10 @@ function validateAiConfig(body: any): { valid: true; config: AiConfig } | { vali
 
   const provider = body.provider;
   if (!["openai", "openai-compatible", "anthropic", "custom"].includes(provider)) {
-    return { valid: false, error: `"provider" must be one of: openai, openai-compatible, anthropic, custom` };
+    return {
+      valid: false,
+      error: `"provider" must be one of: openai, openai-compatible, anthropic, custom`,
+    };
   }
 
   return {

@@ -53,7 +53,7 @@ export function MagneticButton({
         "shadow-sm hover:shadow-md hover:bg-accent-hover",
         "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none",
         "transition-colors duration-200",
-        className
+        className,
       )}
     >
       {children}

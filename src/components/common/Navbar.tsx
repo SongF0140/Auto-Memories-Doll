@@ -32,7 +32,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
           </div>
 
           <nav className="flex gap-1">
-            {tabs.map(tab => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}

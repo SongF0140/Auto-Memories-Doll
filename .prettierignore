@@ -1,0 +1,9 @@
+.next
+node_modules
+memory-root
+logs
+dist
+*.db
+*.log
+.env
+.env.*

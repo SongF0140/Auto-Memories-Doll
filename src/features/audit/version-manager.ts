@@ -50,7 +50,7 @@ export class VersionManager {
       snapshot.memoryId,
       snapshot.version,
       JSON.stringify(snapshot.data),
-      snapshot.createdAt
+      snapshot.createdAt,
     );
 
     return snapshot;
@@ -58,7 +58,7 @@ export class VersionManager {
 
   getSnapshot(memoryId: string, version: number): MemorySnapshot | null {
     const stmt = this.db.prepare(
-      "SELECT * FROM memory_snapshots WHERE memoryId = ? AND version = ?"
+      "SELECT * FROM memory_snapshots WHERE memoryId = ? AND version = ?",
     );
     const row = stmt.get(memoryId, version) as any;
     if (!row) return null;
@@ -74,10 +74,10 @@ export class VersionManager {
 
   listSnapshots(memoryId: string): MemorySnapshot[] {
     const stmt = this.db.prepare(
-      "SELECT * FROM memory_snapshots WHERE memoryId = ? ORDER BY version DESC"
+      "SELECT * FROM memory_snapshots WHERE memoryId = ? ORDER BY version DESC",
     );
     const rows = stmt.all(memoryId) as any[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       snapshotId: row.snapshotId,
       memoryId: row.memoryId,
       version: row.version,

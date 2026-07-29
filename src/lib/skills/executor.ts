@@ -37,11 +37,11 @@ export class SkillExecutor {
 
   async executeAll(params: Record<string, any>): Promise<SkillExecutionResult[]> {
     const results: SkillExecutionResult[] = [];
-    
+
     for (const skill of this.registry.list()) {
       results.push(await this.execute(skill.id, params));
     }
-    
+
     return results;
   }
 

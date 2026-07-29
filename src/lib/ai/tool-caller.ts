@@ -19,7 +19,7 @@ export class ToolCaller {
 
   static async callTool(toolCall: ToolCall): Promise<ToolResult> {
     const handler = this.tools[toolCall.toolName];
-    
+
     if (!handler) {
       return {
         toolName: toolCall.toolName,

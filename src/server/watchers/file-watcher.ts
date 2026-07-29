@@ -13,12 +13,7 @@ export function startFileWatcher(): void {
   if (watcher) return;
 
   const watchPaths = [getMemoryRoot()];
-  const ignored = [
-    "**/memory.db",
-    "**/memory.db-journal",
-    "**/memory.db-wal",
-    "**/archive/**",
-  ];
+  const ignored = ["**/memory.db", "**/memory.db-journal", "**/memory.db-wal", "**/archive/**"];
 
   watcher = watch(watchPaths, {
     ignored,
@@ -73,7 +68,7 @@ async function handleNewMarkdown(filePath: string): Promise<void> {
             record.content,
             record.summary,
             record.tags,
-            record.topic
+            record.topic,
           );
           console.log(`[FileWatcher] 已导入 (LLMWiki): ${filePath} → ${record.id}`);
           return;
@@ -97,7 +92,7 @@ async function handleNewMarkdown(filePath: string): Promise<void> {
           record.content,
           record.summary,
           record.tags,
-          record.topic
+          record.topic,
         );
       }
 
