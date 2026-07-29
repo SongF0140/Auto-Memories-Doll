@@ -11,6 +11,7 @@ export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelecto
   const modes: { value: ChatMode; label: string; description: string; icon: string }[] = [
     { value: "chat", label: "对话", description: "通用对话", icon: "💬" },
     { value: "memory", label: "记忆", description: "提取并保存记忆", icon: "✦" },
+    { value: "prompt", label: "提示词", description: "使用提示词模板", icon: "📋" },
   ];
 
   return (

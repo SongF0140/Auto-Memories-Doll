@@ -165,9 +165,6 @@ export class ProfileUpdater {
   private writeProfile(content: string): void {
     try {
       const profilePath = getProfilePath();
-      writeFileSync(profilePath, content, "utf-8");
-
-      // 同时确保 profile.md 开头是 # 用户画像
       const formatted = content.startsWith("#") ? content : `# 用户画像\n\n${content}`;
       writeFileSync(profilePath, formatted, "utf-8");
     } catch (error) {

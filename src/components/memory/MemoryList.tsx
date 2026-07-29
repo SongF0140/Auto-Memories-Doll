@@ -43,7 +43,7 @@ export default function MemoryList() {
     if (!content || importing) return;
 
     setImporting(true);
-    setImportMessage("");
+    setImportMessage("正在导入...");
 
     try {
       const response = await fetch("/api/ingest", {
@@ -58,10 +58,18 @@ export default function MemoryList() {
       }
 
       setImportContent("");
-      setImportMessage(`已导入 ${result.memories?.length || 0} 条记忆`);
+      const count = result.memories?.length || 0;
+      const noAiMsg =
+        "（未配置 AI，跳过向量生成。可在设置中配置 AI 后重新导入以启用语义搜索）";
+      setImportMessage(`已导入 ${count} 条记忆 ${noAiMsg}`);
       await fetchMemoryList();
     } catch (error) {
-      setImportMessage(`导入失败: ${(error as Error).message}`);
+      const errMsg = (error as Error).message;
+      if (errMsg.includes("fetch failed") || errMsg.includes("Failed to fetch")) {
+        setImportMessage("导入失败: 无法连接到服务，请确保开发服务器正在运行");
+      } else {
+        setImportMessage(`导入失败: ${errMsg}`);
+      }
     } finally {
       setImporting(false);
     }

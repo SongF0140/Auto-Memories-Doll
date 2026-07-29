@@ -68,6 +68,16 @@ export class ModelAdapter {
   static async generateEmbedding(text: string): Promise<EmbeddingResponse> {
     const config = getConfig();
 
+    // 未配置 API Key 时跳过向量生成，避免长时间超时等待
+    if (!config.apiKey || config.apiKey.trim() === "") {
+      console.warn("[ModelAdapter] 未配置 API Key，跳过向量生成");
+      return {
+        embedding: [],
+        model: config.embeddingModel,
+        timestamp: getCurrentTime(),
+      };
+    }
+
     try {
       const model = createEmbeddingModel();
       const result = await embed({

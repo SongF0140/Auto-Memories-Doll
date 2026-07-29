@@ -1,5 +1,5 @@
 /** 简易中文化工具：基于关键词映射和规则生成中文版本字段 */
-import { getTopicLabelClient } from "../../config/topics.config";
+import { getTopicLabelClient } from "../../config/topics-data";
 
 /** 常用英文 → 中文标题映射表 */
 const EN_ZH_TITLE_PATTERNS: [RegExp, string][] = [

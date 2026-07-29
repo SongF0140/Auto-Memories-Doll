@@ -3,7 +3,7 @@
 import { MemoryRecord } from "../../types/memory";
 import { MagicCard } from "../ui/magic-card";
 import Badge from "../common/Badge";
-import { getTopicLabelClient } from "../../config/topics.config";
+import { getTopicLabelClient } from "../../config/topics-data";
 
 interface MemoryCardProps {
   memory: MemoryRecord;

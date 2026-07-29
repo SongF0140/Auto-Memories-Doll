@@ -35,13 +35,23 @@ export async function GET(request: NextRequest) {
     const paged = result.slice(start, start + pageSize);
 
     return NextResponse.json({ items: paged, total, page, pageSize });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    console.error("[Memory] 列表查询失败:", message);
+    return NextResponse.json({ error: `查询失败: ${message}` }, { status: 500 });
   } finally {
     service.close();
   }
 }
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "请求体格式无效" }, { status: 400 });
+  }
+
   const parsed = memoryCreateSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -75,6 +85,10 @@ export async function POST(request: NextRequest) {
       },
     );
     return NextResponse.json({ ...memoryRecord, id: memoryId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    console.error("[Memory] 创建失败:", message);
+    return NextResponse.json({ error: `创建失败: ${message}` }, { status: 500 });
   } finally {
     service.close();
   }

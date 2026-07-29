@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
 import Badge from "../common/Badge";
-import { getTopicLabelClient } from "../../config/topics.config";
+import { getTopicLabelClient } from "../../config/topics-data";
 
 const display = (memory: MemoryRecord) => ({
   title: memory.titleZh || memory.title,

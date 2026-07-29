@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const handler = new ChatHandler();
 
   try {
-    const { messages, mode = "chat", sessionId } = await request.json();
+    const { messages, mode = "chat", sessionId, memoryIds } = await request.json();
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 默认：流式 AI 对话 ──
-    const result = await handler.streamResponse(messages, mode as ChatMode, sessionId);
+    const result = await handler.streamResponse(messages, mode as ChatMode, sessionId, memoryIds);
     return result.toTextStreamResponse({
       headers: {
         "Content-Type": "text/event-stream",

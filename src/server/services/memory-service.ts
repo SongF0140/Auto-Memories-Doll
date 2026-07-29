@@ -136,11 +136,14 @@ export class MemoryService {
       );
 
       const vectorIndex = new VectorIndex();
-      const vectorRecord = await buildVectorRecord(memory.id, content);
-      vectorIndex.create(vectorRecord);
+      try {
+        const vectorRecord = await buildVectorRecord(memory.id, content);
+        vectorIndex.create(vectorRecord);
+        this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
+      } catch (vectorError) {
+        console.warn("[MemoryService] 向量生成失败，记忆仍会保存:", (vectorError as Error).message);
+      }
       vectorIndex.close();
-
-      this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
 
       return memory.id;
     });
@@ -175,9 +178,15 @@ export class MemoryService {
     };
   }
 
-  listMemories(): MemoryRecord[] {
-    const stmt = this.db.prepare("SELECT * FROM memories");
-    const rows = stmt.all() as any[];
+  listMemories(opts?: { limit?: number; offset?: number }): MemoryRecord[] {
+    const limit = opts?.limit ?? -1;
+    const offset = opts?.offset ?? 0;
+
+    let sql = "SELECT * FROM memories ORDER BY updatedAt DESC";
+    if (limit > 0) sql += " LIMIT ? OFFSET ?";
+
+    const stmt = this.db.prepare(sql);
+    const rows = (limit > 0 ? stmt.all(limit, offset) : stmt.all()) as any[];
 
     return rows.map((row) => ({
       id: row.id,

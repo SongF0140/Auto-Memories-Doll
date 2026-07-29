@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ChatMessage, ChatMode } from "../../types/api";
 import { MemoryRecord } from "../../types/memory";
 import ChatMessageItem from "./ChatMessageItem";
@@ -13,6 +13,11 @@ import { AppError } from "../../lib/errors";
 
 // Photo by RetroSupply on Unsplash (free to use, no attribution required)
 const chatGardenImage = "https://images.unsplash.com/photo-1432821596592-e2c18b78144f?w=1200&q=80";
+
+const display = (memory: MemoryRecord) => ({
+  title: memory.titleZh || memory.title,
+  tags: memory.tagsZh && memory.tagsZh.length > 0 ? memory.tagsZh : memory.tags,
+});
 
 function parseDataStreamLine(line: string): { type: "text" | "error" | "unknown"; value: string } {
   const separatorIndex = line.indexOf(":");
@@ -45,6 +50,24 @@ export default function ChatInterface() {
   const [mode, setMode] = useState<ChatMode>("chat");
   const [loading, setLoading] = useState(false);
   const [relatedMemories, setRelatedMemories] = useState<MemoryRecord[]>([]);
+  const [availableMemories, setAvailableMemories] = useState<MemoryRecord[]>([]);
+  const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetchAvailableMemories();
+  }, []);
+
+  const fetchAvailableMemories = async () => {
+    try {
+      const res = await fetch("/api/memory?pageSize=100");
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableMemories(data.items || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch available memories:", e);
+    }
+  };
 
   const handleSend = useCallback(
     async (content: string) => {
@@ -63,6 +86,7 @@ export default function ChatInterface() {
             messages: currentMessages,
             mode,
             sessionId: "default",
+            memoryIds: selectedMemoryIds.size > 0 ? Array.from(selectedMemoryIds) : undefined,
           }),
         });
 
@@ -114,9 +138,13 @@ export default function ChatInterface() {
               if (parsed.type === "text") {
                 setMessages((prev) => {
                   const updated = [...prev];
-                  const last = updated[updated.length - 1];
+                  const lastIdx = updated.length - 1;
+                  const last = updated[lastIdx];
                   if (last && last.role === "assistant") {
-                    last.content += parsed.value;
+                    updated[lastIdx] = {
+                      ...last,
+                      content: last.content + parsed.value,
+                    };
                   }
                   return updated;
                 });
@@ -150,7 +178,7 @@ export default function ChatInterface() {
         setLoading(false);
       }
     },
-    [messages, mode],
+    [messages, mode, selectedMemoryIds],
   );
 
   const fetchRelatedMemories = async (ids: string[]) => {
@@ -233,30 +261,95 @@ export default function ChatInterface() {
         </div>
 
         {mode === "memory" && (
-          <div className="w-96 bg-surface border-l border-border flex flex-col hidden xl:flex">
+          <div className="w-80 lg:w-96 bg-surface border-l border-border flex flex-col">
             <div className="px-5 py-4 border-b border-border">
-              <h3 className="text-sm font-semibold text-text-primary">相关记忆</h3>
+              <h3 className="text-sm font-semibold text-text-primary">
+                选择记忆
+                {selectedMemoryIds.size > 0 && (
+                  <span className="ml-2 text-xs font-normal text-accent">
+                    已选 {selectedMemoryIds.size} 条
+                  </span>
+                )}
+              </h3>
               <p className="text-xs text-text-tertiary mt-0.5">
-                {relatedMemories.length > 0
-                  ? `${relatedMemories.length} 条关联记忆`
-                  : "记忆将显示在这里"}
+                {availableMemories.length > 0
+                  ? `共 ${availableMemories.length} 条，勾选后作为对话上下文`
+                  : "暂无记忆，先去导入一些吧"}
               </p>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {relatedMemories.length === 0 ? (
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {availableMemories.length === 0 ? (
                 <div className="text-center py-8">
-                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-                    <span className="text-text-tertiary text-lg">+</span>
-                  </div>
-                  <p className="text-sm text-text-secondary">暂无相关记忆</p>
-                  <p className="text-xs text-text-tertiary mt-1">发送消息以提取记忆</p>
+                  <p className="text-sm text-text-secondary">暂无记忆</p>
+                  <p className="text-xs text-text-tertiary mt-1">切换到记忆页面导入内容</p>
                 </div>
               ) : (
-                relatedMemories.map((memory) => (
-                  <MemoryCard key={memory.id} memory={memory} compact />
-                ))
+                availableMemories.map((memory) => {
+                  const isSelected = selectedMemoryIds.has(memory.id);
+                  return (
+                    <label
+                      key={memory.id}
+                      className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-accent/10 border border-accent/30"
+                          : "hover:bg-muted border border-transparent"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedMemoryIds((prev) => {
+                            const next = new Set(prev);
+                            if (isSelected) {
+                              next.delete(memory.id);
+                            } else {
+                              next.add(memory.id);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="mt-0.5 h-4 w-4 rounded accent-accent"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-text-primary truncate">
+                          {display(memory).title}
+                        </p>
+                        <p className="text-xs text-text-tertiary mt-0.5 line-clamp-2">
+                          {memory.summaryZh || memory.summary}
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {display(memory).tags.slice(0, 3).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-muted text-text-tertiary"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })
               )}
             </div>
+
+            {relatedMemories.length > 0 && (
+              <div className="border-t border-border">
+                <div className="px-5 py-3">
+                  <h3 className="text-sm font-semibold text-text-primary">相关记忆</h3>
+                  <p className="text-xs text-text-tertiary mt-0.5">
+                    {relatedMemories.length} 条关联记忆
+                  </p>
+                </div>
+                <div className="px-3 pb-3 space-y-2">
+                  {relatedMemories.map((memory) => (
+                    <MemoryCard key={memory.id} memory={memory} compact />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

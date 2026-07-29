@@ -6,7 +6,13 @@ import { MemoryService } from "../../../server/services/memory-service";
 import { ingestRequestSchema } from "../../../lib/validation";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "请求体格式无效，需要 JSON" }, { status: 400 });
+  }
+
   const parsed = ingestRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -44,6 +50,10 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({ success: true, memories: results });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知错误";
+    console.error("[Ingest] 导入失败:", message);
+    return NextResponse.json({ error: `导入失败: ${message}` }, { status: 500 });
   } finally {
     memoryService.close();
   }

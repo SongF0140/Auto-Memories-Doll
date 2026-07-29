@@ -44,13 +44,14 @@ export class ChatHandler {
     messages: ChatMessage[],
     mode: ChatMode,
     sessionId: string,
+    memoryIds?: string[],
   ): Promise<{
     content: string;
     memoryReferences: { memoryId: string; title: string; relevance: number }[];
   }> {
     const processedMessages = await this.applySkills(messages);
     const memoryContent =
-      mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
+      mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
     const prompt = this.buildPrompt(processedMessages, memoryContent);
 
@@ -72,10 +73,11 @@ export class ChatHandler {
     messages: ChatMessage[],
     mode: ChatMode,
     _sessionId: string,
+    memoryIds?: string[],
   ): Promise<StreamTextResult<any, any, any>> {
     const processedMessages = await this.applySkills(messages);
     const memoryContent =
-      mode === "memory" ? await this.retrieveRelevantMemories(processedMessages) : "";
+      mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
     const prompt = this.buildPrompt(processedMessages, memoryContent);
 
@@ -148,28 +150,45 @@ ${conversationHistory}
     return processed;
   }
 
-  private async retrieveRelevantMemories(messages: ChatMessage[]): Promise<string> {
+  private async retrieveRelevantMemories(
+    messages: ChatMessage[],
+    selectedMemoryIds?: string[],
+  ): Promise<string> {
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage) return "";
 
     const memories = this.memoryService.listMemories();
     if (memories.length === 0) return "";
 
-    const results = await this.vectorRetriever.search(lastMessage.content, 10);
-
-    const profileTags = await readProfileTags();
     const memoryMap = new Map(memories.map((m) => [m.id, m]));
 
+    // 优先收集用户手动选中的记忆
+    const selectedMemories: MemoryRecord[] = [];
+    if (selectedMemoryIds && selectedMemoryIds.length > 0) {
+      for (const id of selectedMemoryIds) {
+        const mem = memoryMap.get(id);
+        if (mem) selectedMemories.push(mem);
+      }
+    }
+
+    // 向量检索补充相关记忆
+    const results = await this.vectorRetriever.search(lastMessage.content, 10);
+    const profileTags = await readProfileTags();
     const rankedResults = this.ranker.rank(results, memoryMap, profileTags);
 
-    const relevantMemories = rankedResults
-      .slice(0, 5)
-      .map((r) => memoryMap.get(r.memoryId))
-      .filter((m): m is MemoryRecord => m !== undefined);
+    const relevantMemories: MemoryRecord[] = [...selectedMemories];
+
+    for (const r of rankedResults) {
+      if (relevantMemories.length >= 8) break;
+      const mem = memoryMap.get(r.memoryId);
+      if (mem && !relevantMemories.some((m) => m.id === mem.id)) {
+        relevantMemories.push(mem);
+      }
+    }
 
     relevantMemories.forEach((m) => this.memoryService.incrementAccess(m.id));
 
-    // 图谱扩展：纳入关联记忆的邻居（wikilink）
+    // 图谱扩展：纳入关联记忆的邻居
     const expandedIds = new Set(relevantMemories.map((m) => m.id));
     for (const mem of relevantMemories) {
       const neighbors = this.wikiGraph.getNeighbors(mem.id);

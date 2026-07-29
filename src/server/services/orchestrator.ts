@@ -7,6 +7,7 @@ import { validateMemoryRecord } from "../../lib/memory/validator";
 import { updateIndexMap } from "../../lib/storage/index-writer";
 import { createFailureRecord } from "../../lib/storage/file-manager";
 import { MemoryValidationError } from "../../lib/errors";
+import { generateId } from "../../lib/utils/id";
 
 export class Orchestrator {
   private memoryService: MemoryService;
@@ -27,8 +28,9 @@ export class Orchestrator {
     summary: string,
     tags: string[] = [],
   ): Promise<string> {
+    const id = generateId();
     const memory = {
-      id: "",
+      id,
       version: 1,
       source,
       sourceType,
@@ -49,7 +51,7 @@ export class Orchestrator {
     }
 
     const pendingEvent = buildPendingEvent(
-      memory.id || "new",
+      id,
       sourceType,
       memory,
       Object.keys(memory) as string[],

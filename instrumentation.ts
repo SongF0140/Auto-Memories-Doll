@@ -1,3 +1,7 @@
+let auditScheduler: { start: () => void; stop: () => void } | null = null;
+let cleanupScheduler: { start: () => void; stop: () => void } | null = null;
+let vectorScheduler: { start: () => void; stop: () => void } | null = null;
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startAllListeners } = await import("./src/server/listener/listener-service");
@@ -9,14 +13,26 @@ export async function register() {
     const { CleanupScheduler } = await import("./src/server/schedulers/cleanup-scheduler");
     const { VectorScheduler } = await import("./src/server/schedulers/vector-scheduler");
 
-    const auditScheduler = new AuditScheduler();
-    const cleanupScheduler = new CleanupScheduler();
-    const vectorScheduler = new VectorScheduler();
+    auditScheduler = new AuditScheduler();
+    cleanupScheduler = new CleanupScheduler();
+    vectorScheduler = new VectorScheduler();
 
     auditScheduler.start();
     cleanupScheduler.start();
     vectorScheduler.start();
 
     console.log("[Instrumentation] 调度器已启动: audit / cleanup / vector");
+
+    // 注册进程退出时的优雅关闭
+    const shutdown = (signal: string) => {
+      console.log(`[Instrumentation] 收到 ${signal}，正在关闭调度器...`);
+      auditScheduler?.stop();
+      cleanupScheduler?.stop();
+      vectorScheduler?.stop();
+      process.exit(0);
+    };
+
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
   }
 }
