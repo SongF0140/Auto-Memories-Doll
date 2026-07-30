@@ -1,8 +1,7 @@
-import { streamText, StreamTextResult } from "ai";
 import { ChatMessage, ChatMode } from "../../types/api";
 import { MemoryRecord } from "../../types/memory";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
-import { createLanguageModel } from "../../lib/ai/provider";
+import { AiEvent, AiToolDef } from "../../lib/ai/ai-events";
 import { TemplateManager, initializeTemplates } from "../../lib/prompt/template-manager";
 import { PromptCache } from "../../lib/prompt/cache";
 import { MemoryService } from "../../server/services/memory-service";
@@ -18,6 +17,8 @@ import { WikiGraph } from "../../lib/graph/wiki-graph";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
+/** Agent 循环最大工具迭代轮次 */
+const MAX_AGENT_ROUNDS = 5;
 
 export class ChatHandler {
   private templateManager: TemplateManager;
@@ -69,12 +70,23 @@ export class ChatHandler {
     };
   }
 
+  /**
+   * Agent 循环：支持工具调用的多轮流式响应
+   *
+   * 流程：
+   * 1. Skills 预处理用户消息
+   * 2. Memory 模式下检索相关记忆并注入系统提示
+   * 3. 构建工具清单（内置 + MCP + Skills）
+   * 4. 调用 AI 模型：文本增量 + 工具调用 + 工具结果 → AiEvent 流
+   * 5. 持续迭代直到助手不再产生工具调用（最多 MAX_AGENT_ROUNDS 轮）
+   * 6. 回合边界以 round_start 事件标记，前端可据此更新 UI
+   */
   async streamResponse(
     messages: ChatMessage[],
     mode: ChatMode,
     _sessionId: string,
     memoryIds?: string[],
-  ): Promise<StreamTextResult<any, any, any>> {
+  ): Promise<ReadableStream<AiEvent>> {
     const processedMessages = await this.applySkills(messages);
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
@@ -87,10 +99,60 @@ export class ChatHandler {
       ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
     }
 
-    return streamText({
-      model: createLanguageModel(),
+    // 收集所有可用工具
+    const toolDefs = await this.collectToolDefs(mode);
+
+    return ModelAdapter.generateStream({
       messages: [{ role: "user", content: prompt }],
+      tools: toolDefs.length > 0 ? toolDefs : undefined,
+      readonly: mode !== "memory",
     });
+  }
+
+  /**
+   * 收集当前模式下的所有工具定义
+   * - memory 模式：内置记忆工具 + MCP 工具
+   * - chat 模式：仅 MCP 工具（只读）
+   */
+  private async collectToolDefs(mode: ChatMode): Promise<AiToolDef[]> {
+    const defs: AiToolDef[] = [];
+
+    if (mode === "memory") {
+      // 内置记忆工具
+      for (const desc of ToolCaller.getToolDescriptions()) {
+        defs.push({
+          name: desc.name,
+          description: desc.description,
+          parameters: desc.schema,
+          execute: async (args: Record<string, unknown>) => {
+            const result = await ToolCaller.callTool({
+              toolName: desc.name,
+              arguments: args,
+            });
+            return result.success ? result.data : `错误: ${result.error}`;
+          },
+        });
+      }
+    }
+
+    // MCP 工具（所有模式可用）
+    try {
+      const mcpTools = await this.mcpManager.listAllTools();
+      for (const { tools } of mcpTools) {
+        for (const t of tools) {
+          defs.push({
+            name: t.name,
+            description: t.description || `MCP tool: ${t.name}`,
+            parameters: t.inputSchema || {},
+            execute: undefined, // MCP 工具由 MCP 服务端自行执行
+          });
+        }
+      }
+    } catch {
+      // MCP 不可用不影响核心流程
+    }
+
+    return defs;
   }
 
   /**

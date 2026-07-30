@@ -17,6 +17,7 @@ memory-root/
 
 # 个人文档和笔记
 docs/
+docs-zh/
 notes/
 *.private.md
 *.local.md

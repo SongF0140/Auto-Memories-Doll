@@ -1,26 +1,54 @@
+import { ZodTypeAny } from "zod";
+import { ToolName, toolSchemas } from "./tool-schemas";
+
 export type ToolCall = {
   toolName: string;
-  arguments: Record<string, any>;
+  arguments: Record<string, unknown>;
 };
 
 export type ToolResult = {
   toolName: string;
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
 };
 
-export class ToolCaller {
-  private static tools: Record<string, (args: Record<string, any>) => Promise<any>> = {};
+type ToolHandler = {
+  schema: ZodTypeAny;
+  handler: (args: Record<string, unknown>) => Promise<unknown>;
+  description: string;
+};
 
-  static registerTool(name: string, handler: (args: Record<string, any>) => Promise<any>): void {
-    this.tools[name] = handler;
+export class ToolCaller {
+  private static tools = new Map<string, ToolHandler>();
+
+  /** 注册工具：绑定名称、Zod schema、执行器和描述 */
+  static registerTool(
+    name: ToolName,
+    handler: (args: Record<string, unknown>) => Promise<unknown>,
+    description: string,
+  ): void {
+    this.tools.set(name, {
+      schema: toolSchemas[name],
+      handler,
+      description,
+    });
   }
 
-  static async callTool(toolCall: ToolCall): Promise<ToolResult> {
-    const handler = this.tools[toolCall.toolName];
+  /** 获取所有已注册工具的描述（用于系统提示） */
+  static getToolDescriptions(): Array<{ name: string; description: string; schema: object }> {
+    return Array.from(this.tools.entries()).map(([name, tool]) => ({
+      name,
+      description: tool.description,
+      schema: (tool.schema._def ?? {}) as unknown as Record<string, unknown>,
+    }));
+  }
 
-    if (!handler) {
+  /** 执行工具调用：先 Zod 校验参数，再执行 handler */
+  static async callTool(toolCall: ToolCall): Promise<ToolResult> {
+    const entry = this.tools.get(toolCall.toolName);
+
+    if (!entry) {
       return {
         toolName: toolCall.toolName,
         success: false,
@@ -28,8 +56,18 @@ export class ToolCaller {
       };
     }
 
+    // Zod 校验
+    const parseResult = entry.schema.safeParse(toolCall.arguments);
+    if (!parseResult.success) {
+      return {
+        toolName: toolCall.toolName,
+        success: false,
+        error: `参数校验失败: ${parseResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+      };
+    }
+
     try {
-      const result = await handler(toolCall.arguments);
+      const result = await entry.handler(parseResult.data as Record<string, unknown>);
       return {
         toolName: toolCall.toolName,
         success: true,
@@ -44,7 +82,23 @@ export class ToolCaller {
     }
   }
 
+  /** 用于 Vercel AI SDK 的 tools 参数 */
+  static toAISdkTools(): Record<string, { description: string; parameters: unknown }> {
+    const tools: Record<string, { description: string; parameters: unknown }> = {};
+    for (const [name, entry] of this.tools) {
+      tools[name] = {
+        description: entry.description,
+        parameters: entry.schema,
+      };
+    }
+    return tools;
+  }
+
   static getAvailableTools(): string[] {
-    return Object.keys(this.tools);
+    return Array.from(this.tools.keys());
+  }
+
+  static reset(): void {
+    this.tools.clear();
   }
 }

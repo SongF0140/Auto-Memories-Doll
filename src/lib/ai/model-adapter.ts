@@ -2,6 +2,8 @@ import { generateText, embed } from "ai";
 import { createLanguageModel, createEmbeddingModel } from "./provider";
 import { getCurrentTime } from "../utils/date";
 import { ConfigService } from "../../server/services/config-service";
+import { OpenAIProvider } from "./openai-provider";
+import { AiProvider, AiEvent } from "./ai-events";
 
 export type ModelType = "mini" | "pro";
 
@@ -27,12 +29,60 @@ function getConfig() {
   }
 }
 
+/** 获取当前可用的 AiProvider 实例 */
+function getProvider(): AiProvider {
+  const config = getConfig();
+  // API Key 为空时这里仍返回 provider，降级逻辑在 generateStream 的 catch 中处理
+  return new OpenAIProvider(config);
+}
+
 export class ModelAdapter {
   private static isDegraded = false;
 
   static get isDegradedMode(): boolean {
     return this.isDegraded;
   }
+
+  // ── 核心新接口：统一的事件流 ──
+
+  /**
+   * 流式生成，返回统一的 AiEvent 流
+   * 前端和 Handler 只消费 AiEvent，不感知底层 SDK
+   */
+  static generateStream(options: {
+    messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+    temperature?: number;
+    tools?: import("./ai-events").AiToolDef[];
+    readonly?: boolean;
+  }): ReadableStream<AiEvent> {
+    const config = getConfig();
+
+    // 未配置 API Key 时返回降级流
+    if (!config.apiKey || config.apiKey.trim() === "") {
+      return this.createFallbackStream("当前处于离线模式，请前往设置页面配置 AI API Key 和 baseURL。");
+    }
+
+    try {
+      const provider = getProvider();
+      return provider.generateStream(options);
+    } catch {
+      return this.createFallbackStream("当前处于离线模式，请检查 AI 配置。");
+    }
+  }
+
+  private static createFallbackStream(message: string): ReadableStream<AiEvent> {
+    return new ReadableStream<AiEvent>({
+      start(controller) {
+        controller.enqueue({ type: "text_start" });
+        controller.enqueue({ type: "text_delta", content: message });
+        controller.enqueue({ type: "text_end" });
+        controller.enqueue({ type: "done", finishReason: "error" });
+        controller.close();
+      },
+    });
+  }
+
+  // ── 以下为向后兼容的旧接口 ──
 
   static async generate(prompt: string, _modelType: ModelType): Promise<LlmResponse> {
     const config = getConfig();
@@ -68,7 +118,6 @@ export class ModelAdapter {
   static async generateEmbedding(text: string): Promise<EmbeddingResponse> {
     const config = getConfig();
 
-    // 未配置 API Key 时跳过向量生成，避免长时间超时等待
     if (!config.apiKey || config.apiKey.trim() === "") {
       console.warn("[ModelAdapter] 未配置 API Key，跳过向量生成");
       return {
@@ -79,16 +128,12 @@ export class ModelAdapter {
     }
 
     try {
-      const model = createEmbeddingModel();
-      const result = await embed({
-        model,
-        value: text,
-      });
+      const provider = getProvider();
+      const embedding = await provider.generateEmbedding(text);
 
       this.isDegraded = false;
-
       return {
-        embedding: result.embedding,
+        embedding,
         model: config.embeddingModel,
         timestamp: getCurrentTime(),
       };

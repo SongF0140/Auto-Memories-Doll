@@ -10,6 +10,8 @@ import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
 import { AppError } from "../../lib/errors";
+import { AiEvent } from "../../lib/ai/ai-events";
+import { useChatSession } from "./useChatSession";
 
 // Photo by RetroSupply on Unsplash (free to use, no attribution required)
 const chatGardenImage = "https://images.unsplash.com/photo-1432821596592-e2c18b78144f?w=1200&q=80";
@@ -19,36 +21,33 @@ const display = (memory: MemoryRecord) => ({
   tags: memory.tagsZh && memory.tagsZh.length > 0 ? memory.tagsZh : memory.tags,
 });
 
-function parseDataStreamLine(line: string): { type: "text" | "error" | "unknown"; value: string } {
-  const separatorIndex = line.indexOf(":");
-  if (separatorIndex === -1) return { type: "unknown", value: "" };
-
-  const type = line.slice(0, separatorIndex);
-  const raw = line.slice(separatorIndex + 1);
-
-  if (type === "0") {
-    try {
-      return { type: "text", value: JSON.parse(raw) as string };
-    } catch {
-      return { type: "text", value: raw };
-    }
+/**
+ * 解析 AiEvent SSE 行：data: {"type":"text_delta","content":"..."}\n\n
+ */
+function parseAiEventLine(line: string): AiEvent | null {
+  if (!line.startsWith("data: ")) return null;
+  try {
+    return JSON.parse(line.slice(6)) as AiEvent;
+  } catch {
+    return null;
   }
-
-  if (type === "3") {
-    try {
-      return { type: "error", value: JSON.parse(raw) as string };
-    } catch {
-      return { type: "error", value: raw };
-    }
-  }
-
-  return { type: "unknown", value: "" };
 }
 
 export default function ChatInterface() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [mode, setMode] = useState<ChatMode>("chat");
-  const [loading, setLoading] = useState(false);
+  const {
+    sessionId,
+    messages,
+    mode,
+    loading,
+    sessionIds,
+    setMessages,
+    setMode,
+    setLoading,
+    newSession,
+    switchSession,
+    removeSession,
+  } = useChatSession();
+
   const [relatedMemories, setRelatedMemories] = useState<MemoryRecord[]>([]);
   const [availableMemories, setAvailableMemories] = useState<MemoryRecord[]>([]);
   const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(new Set());
@@ -85,7 +84,7 @@ export default function ChatInterface() {
           body: JSON.stringify({
             messages: currentMessages,
             mode,
-            sessionId: "default",
+            sessionId,
             memoryIds: selectedMemoryIds.size > 0 ? Array.from(selectedMemoryIds) : undefined,
           }),
         });
@@ -111,7 +110,7 @@ export default function ChatInterface() {
           return;
         }
 
-        // 流式响应（Vercel AI SDK 数据流格式）
+        // 流式响应（AiEvent SSE 格式）
         if (!response.body) {
           throw new AppError("NO_RESPONSE_BODY", "无响应体");
         }
@@ -133,29 +132,79 @@ export default function ChatInterface() {
             buffer = lines.pop() || "";
 
             for (const line of lines) {
-              if (!line) continue;
-              const parsed = parseDataStreamLine(line);
-              if (parsed.type === "text") {
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  const lastIdx = updated.length - 1;
-                  const last = updated[lastIdx];
-                  if (last && last.role === "assistant") {
-                    updated[lastIdx] = {
-                      ...last,
-                      content: last.content + parsed.value,
-                    };
-                  }
-                  return updated;
-                });
-              } else if (parsed.type === "error" && parsed.value) {
-                streamError += parsed.value;
+              const event = parseAiEventLine(line);
+              if (!event) continue;
+
+              switch (event.type) {
+                case "text_delta":
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    const last = updated[lastIdx];
+                    if (last && last.role === "assistant") {
+                      updated[lastIdx] = {
+                        ...last,
+                        content: last.content + event.content,
+                      };
+                    }
+                    return updated;
+                  });
+                  break;
+                case "tool_call_start":
+                  // 工具调用通知：在消息末尾追加系统提示
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    const last = updated[lastIdx];
+                    if (last && last.role === "assistant") {
+                      updated[lastIdx] = {
+                        ...last,
+                        content: last.content + `\n\n> 正在调用工具: ${event.toolName}...`,
+                      };
+                    }
+                    return updated;
+                  });
+                  break;
+                case "tool_call_result":
+                  // 工具结果追加
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    const last = updated[lastIdx];
+                    if (last && last.role === "assistant") {
+                      updated[lastIdx] = {
+                        ...last,
+                        content: last.content + `\n> 工具 ${event.toolName} 完成`,
+                      };
+                    }
+                    return updated;
+                  });
+                  break;
+                case "round_start":
+                  // Agent 循环新轮次：追加分隔标记
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    const lastIdx = updated.length - 1;
+                    const last = updated[lastIdx];
+                    if (last && last.role === "assistant") {
+                      updated[lastIdx] = {
+                        ...last,
+                        content: last.content + `\n---\n`,
+                      };
+                    }
+                    return updated;
+                  });
+                  break;
+                case "error":
+                  streamError += event.message;
+                  break;
+                case "done":
+                  break;
               }
             }
           }
         }
 
-        // 若流中包含错误，将空 assistant 消息替换为 system 错误
         if (streamError) {
           setMessages((prev) => {
             const updated = [...prev];
@@ -178,7 +227,7 @@ export default function ChatInterface() {
         setLoading(false);
       }
     },
-    [messages, mode, selectedMemoryIds],
+    [messages, mode, sessionId, selectedMemoryIds, setMessages, setLoading],
   );
 
   const fetchRelatedMemories = async (ids: string[]) => {
@@ -211,7 +260,16 @@ export default function ChatInterface() {
                   </p>
                 </div>
               </div>
-              <ChatModeSelector mode={mode} onModeChange={setMode} />
+              <div className="flex items-center gap-2">
+                <ChatModeSelector mode={mode} onModeChange={setMode} />
+                <button
+                  onClick={newSession}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-border text-text-secondary hover:bg-muted transition-colors"
+                  title="新建会话"
+                >
+                  + 新会话
+                </button>
+              </div>
             </div>
             <div className="relative hidden min-h-[132px] overflow-hidden lg:block">
               <img
@@ -227,12 +285,46 @@ export default function ChatInterface() {
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col min-w-0">
+          {/* 会话历史栏 */}
+          {sessionIds.length > 1 && (
+            <div className="flex items-center gap-1 overflow-x-auto px-6 py-2 border-b border-border">
+              {sessionIds.slice(0, 8).map((id) => {
+                const isActive = id === sessionId;
+                return (
+                  <div key={id} className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => switchSession(id)}
+                      className={`px-2.5 py-1 text-xs rounded-md truncate max-w-[140px] transition-colors ${
+                        isActive
+                          ? "bg-accent/15 text-accent font-medium"
+                          : "text-text-tertiary hover:bg-muted"
+                      }`}
+                      title={id}
+                    >
+                      {id.slice(5, 13)}...
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSession(id);
+                      }}
+                      className="px-1 text-[10px] text-text-tertiary hover:text-red-500 transition-colors"
+                      title="删除会话"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto px-6 py-8">
             <div className="max-w-3xl mx-auto space-y-6">
               {messages.length === 0 ? (
                 <EmptyState
                   title="开始对话"
-                  description="随意提问，或切换到记忆模式提取并保存重要信息。"
+                  description="随意提问，或切换到记忆模式提取并保存重要信息。刷新页面后对话历史不会丢失。"
                 />
               ) : (
                 messages.map((message, index) => <ChatMessageItem key={index} message={message} />)
