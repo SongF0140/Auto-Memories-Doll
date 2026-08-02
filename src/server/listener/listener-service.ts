@@ -5,6 +5,7 @@
  * 负责启动文件监听和提供运行状态查询。
  */
 import { startFileWatcher, stopFileWatcher } from "../watchers/file-watcher";
+import { logger } from "../../lib/logger";
 
 let isRunning = false;
 let startTime: string | null = null;
@@ -31,9 +32,9 @@ export function startAllListeners(port: number = 3000): void {
   // 启动文件系统监听（自动导入 memory-root 下的 .md 文件）
   startFileWatcher();
 
-  console.log(`[ListenerService] 后台监听已启动，端口: ${port}`);
-  console.log(`[ListenerService] API 端点: POST http://localhost:${port}/api/listen`);
-  console.log(`[ListenerService] 状态查询: GET  http://localhost:${port}/api/listen`);
+  logger.ingest.info(`[ListenerService] 后台监听已启动，端口: ${port}`);
+  logger.ingest.info(`[ListenerService] API 端点: POST http://localhost:${port}/api/listen`);
+  logger.ingest.info(`[ListenerService] 状态查询: GET  http://localhost:${port}/api/listen`);
 }
 
 /** 停止所有监听器 */
@@ -44,7 +45,7 @@ export function stopAllListeners(): void {
   isRunning = false;
   startTime = null;
 
-  console.log("[ListenerService] 后台监听已停止");
+  logger.ingest.info("[ListenerService] 后台监听已停止");
 }
 
 /** 获取运行状态 */

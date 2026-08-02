@@ -1,6 +1,7 @@
 import { MemoryRecord, PendingEvent } from "../../types/memory";
-import { buildMemoryRecord, buildPendingEvent } from "../../lib/memory/builder";
+import { buildMemoryRecord, buildPendingEvent, updateMemoryRecord } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
+import { MemoryClassifier } from "../../features/memory/classifier";
 import { VectorIndex } from "../../lib/vector/index";
 import { buildVectorRecord } from "../../lib/vector/generator";
 import { getDatabase } from "../../lib/storage/database";
@@ -78,6 +79,16 @@ export class MemoryService {
         resolvedAt TEXT
       )
     `);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_classifications (
+        memoryId TEXT PRIMARY KEY,
+        category TEXT,
+        confidence REAL,
+        subcategories TEXT,
+        updatedAt TEXT
+      )
+    `);
   }
 
   async createMemory(
@@ -148,6 +159,68 @@ export class MemoryService {
 
       return memory.id;
     });
+  }
+
+  /**
+   * 外部入口统一使用：生成待创建记忆的 PendingEvent 并入队。
+   * 实际写入 SQLite / 向量 / Markdown 由 Orchestrator 在消费队列时完成。
+   */
+  stageCreateMemory(
+    source: string,
+    sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
+    title: string,
+    content: string,
+    summary: string,
+    tags: string[] = [],
+    topic: string = "uncategorized",
+    zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
+  ): string {
+    const memory = buildMemoryRecord(
+      source,
+      sourceType,
+      title,
+      content,
+      summary,
+      tags,
+      topic,
+      undefined,
+      zhFields,
+    );
+
+    if (!validateMemoryRecord(memory)) {
+      throw new MemoryValidationError("record", "记忆数据不完整");
+    }
+
+    const event = buildPendingEvent(
+      memory.id,
+      sourceType,
+      memory,
+      Object.keys(memory) as string[],
+    );
+    this.enqueueEvent(event);
+    return memory.id;
+  }
+
+  /**
+   * 外部入口统一使用：生成待更新记忆的 PendingEvent 并入队。
+   */
+  stageUpdateMemory(id: string, updates: Partial<MemoryRecord>): string {
+    const existing = this.getMemory(id);
+    if (!existing) throw new MemoryNotFoundError(id);
+
+    const candidate = updateMemoryRecord(existing, updates);
+    const changedFields = (Object.keys(updates) as string[]).filter((key) => {
+      const existingValue = (existing as Record<string, unknown>)[key];
+      const candidateValue = (candidate as Record<string, unknown>)[key];
+      return JSON.stringify(existingValue) !== JSON.stringify(candidateValue);
+    });
+    if (changedFields.length === 0) {
+      changedFields.push("updatedAt");
+    }
+
+    const event = buildPendingEvent(id, candidate.sourceType, candidate, changedFields);
+    this.enqueueEvent(event);
+    return event.eventId;
   }
 
   getMemory(id: string): MemoryRecord | null {
@@ -337,6 +410,73 @@ export class MemoryService {
       createdAt: row.createdAt,
       status: row.status as PendingEvent["status"],
       retryCount: row.retryCount,
+    }));
+  }
+
+  /**
+   * 对记忆内容执行分类，并将分类结果持久化到 memory_classifications 表。
+   */
+  classifyMemory(memoryId: string, content: string): void {
+    const classifier = new MemoryClassifier();
+    const result = classifier.classify(content);
+
+    const stmt = this.db.prepare(`
+      INSERT INTO memory_classifications (memoryId, category, confidence, subcategories, updatedAt)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(memoryId) DO UPDATE SET
+        category = excluded.category,
+        confidence = excluded.confidence,
+        subcategories = excluded.subcategories,
+        updatedAt = excluded.updatedAt
+    `);
+    stmt.run(
+      memoryId,
+      result.category,
+      result.confidence,
+      JSON.stringify(result.subcategories),
+      new Date().toISOString(),
+    );
+  }
+
+  getClassification(memoryId: string): {
+    memoryId: string;
+    category: string;
+    confidence: number;
+    subcategories: string[];
+    updatedAt: string;
+  } | null {
+    const stmt = this.db.prepare("SELECT * FROM memory_classifications WHERE memoryId = ?");
+    const row = stmt.get(memoryId) as any;
+    if (!row) return null;
+
+    return {
+      memoryId: row.memoryId,
+      category: row.category,
+      confidence: row.confidence,
+      subcategories: JSON.parse(row.subcategories || "[]"),
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  listClassifications(category?: string): Array<{
+    memoryId: string;
+    category: string;
+    confidence: number;
+    subcategories: string[];
+    updatedAt: string;
+  }> {
+    const sql = category
+      ? "SELECT * FROM memory_classifications WHERE category = ?"
+      : "SELECT * FROM memory_classifications";
+    const stmt = this.db.prepare(sql);
+    const rows = (category ? stmt.all(category) : stmt.all()) as any[];
+
+    return rows.map((row) => ({
+      memoryId: row.memoryId,
+      category: row.category,
+      confidence: row.confidence,
+      subcategories: JSON.parse(row.subcategories || "[]"),
+      updatedAt: row.updatedAt,
     }));
   }
 

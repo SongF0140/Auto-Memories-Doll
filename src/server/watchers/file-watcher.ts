@@ -6,6 +6,8 @@ import { InputNormalizer } from "../../features/ingest/normalizer";
 import { InputParser } from "../../features/ingest/parser";
 import { MemoryService } from "../services/memory-service";
 import { parseMemoryFromText } from "../../lib/storage/markdown-parser";
+import { isRecentWrite } from "../../lib/storage/write-tracker";
+import { logger } from "../../lib/logger";
 
 let watcher: FSWatcher | null = null;
 
@@ -35,22 +37,25 @@ export function startFileWatcher(): void {
   });
 
   watcher.on("error", (error) => {
-    console.error("[FileWatcher] 监听错误:", error);
+    logger.ingest.error("[FileWatcher] 监听错误:", { error: (error as Error).message });
   });
 
-  console.log(`[FileWatcher] 已启动，监听目录: ${watchPaths.join(", ")}`);
+  logger.ingest.info(`[FileWatcher] 已启动，监听目录: ${watchPaths.join(", ")}`);
 }
 
 export function stopFileWatcher(): void {
   if (watcher) {
     watcher.close();
     watcher = null;
-    console.log("[FileWatcher] 已停止");
+    logger.ingest.info("[FileWatcher] 已停止");
   }
 }
 
 async function handleNewMarkdown(filePath: string): Promise<void> {
   try {
+    // 跳过本进程最近写入的文件，防止 Markdown 写回 → 监听 → 再次入队的循环
+    if (isRecentWrite(filePath)) return;
+
     const content = readFileSync(filePath, "utf-8");
     if (content.length < 10) return;
 
@@ -61,7 +66,7 @@ async function handleNewMarkdown(filePath: string): Promise<void> {
       if (content.startsWith("---")) {
         const record = parseMemoryFromText(content);
         if (record) {
-          await memoryService.createMemory(
+          memoryService.stageCreateMemory(
             record.source || filePath,
             record.sourceType,
             record.title,
@@ -70,7 +75,7 @@ async function handleNewMarkdown(filePath: string): Promise<void> {
             record.tags,
             record.topic,
           );
-          console.log(`[FileWatcher] 已导入 (LLMWiki): ${filePath} → ${record.id}`);
+          logger.ingest.info(`[FileWatcher] 已入队 (LLMWiki): ${filePath} → ${record.id}`);
           return;
         }
       }
@@ -85,7 +90,7 @@ async function handleNewMarkdown(filePath: string): Promise<void> {
       const records = adapter.adaptBatch(normalized);
 
       for (const record of records) {
-        await memoryService.createMemory(
+        memoryService.stageCreateMemory(
           record.source,
           record.sourceType,
           record.title,
@@ -96,16 +101,16 @@ async function handleNewMarkdown(filePath: string): Promise<void> {
         );
       }
 
-      console.log(`[FileWatcher] 已导入: ${filePath} → ${records.length} 条记忆`);
+      logger.ingest.info(`[FileWatcher] 已入队: ${filePath} → ${records.length} 条记忆`);
     } finally {
       memoryService.close();
     }
   } catch (error) {
-    console.error(`[FileWatcher] 导入失败 (${filePath}):`, (error as Error).message);
+    logger.ingest.error(`[FileWatcher] 导入失败 (${filePath}):`, { error: (error as Error).message });
   }
 }
 
 async function handleUpdatedMarkdown(filePath: string): Promise<void> {
-  console.log(`[FileWatcher] 检测到文件更新: ${filePath}`);
+  logger.ingest.info(`[FileWatcher] 检测到文件更新: ${filePath}`);
   await handleNewMarkdown(filePath);
 }

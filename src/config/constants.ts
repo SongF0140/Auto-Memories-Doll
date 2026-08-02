@@ -24,4 +24,11 @@ export const RETENTION_PERIOD_HOURS = 24;
 
 export const DEGRADATION_CHECK_INTERVAL = 30000;
 
+/** 压缩与遗忘机制阈值 */
+export const MAX_TOTAL_MEMORIES = 2000;
+export const COMPRESSION_BATCH_SIZE = 10;
+export const COMPRESSION_AGE_DAYS = 30;
+export const COLD_HEAT_THRESHOLD = 0.05;
+export const RETENTION_RUN_INTERVAL_MS = 3600000; // 1 小时
+
 export const DEGRADATION_ALERT_THRESHOLD = 600000;

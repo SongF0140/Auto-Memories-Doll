@@ -14,6 +14,7 @@ import {
   mergeRules,
   type TopicRule,
 } from "./topics-data";
+import { logger } from "../lib/logger";
 
 export type { TopicRule, CompiledRule };
 
@@ -31,14 +32,14 @@ function loadUserTopics(): TopicRule[] {
     if (Array.isArray(parsed) && parsed.length > 0) {
       for (const rule of parsed) {
         if (typeof rule.pattern !== "string" || typeof rule.topic !== "string") {
-          console.warn("[TopicsConfig] 无效规则跳过:", JSON.stringify(rule));
+          logger.ingest.warn("[TopicsConfig] 无效规则跳过:", { rule: JSON.stringify(rule) });
           return [];
         }
       }
       return parsed;
     }
   } catch (e) {
-    console.warn("[TopicsConfig] 加载 topics.json 失败:", (e as Error).message);
+    logger.ingest.warn("[TopicsConfig] 加载 topics.json 失败:", { error: (e as Error).message });
   }
   return [];
 }

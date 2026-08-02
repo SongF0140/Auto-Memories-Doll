@@ -1,10 +1,14 @@
 import { MemoryService } from "./memory-service";
 import { AuditService } from "./audit-service";
 import { Auditor } from "../../features/audit/auditor";
+import { QualityFilterService } from "./quality-filter-service";
 import { MemoryRecord, PendingEvent } from "../../types/memory";
-import { buildPendingEvent } from "../../lib/memory/builder";
+import { buildMemoryRecord, buildPendingEvent } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
+import { buildVectorRecord } from "../../lib/vector/generator";
+import { VectorIndex } from "../../lib/vector/index";
 import { updateIndexMap } from "../../lib/storage/index-writer";
+import { writeMemoryMarkdown, updateAgentMarkdown } from "../../lib/storage/memory-writer";
 import { createFailureRecord } from "../../lib/storage/file-manager";
 import { MemoryValidationError } from "../../lib/errors";
 import { generateId } from "../../lib/utils/id";
@@ -16,10 +20,12 @@ export class Orchestrator {
   private memoryService: MemoryService;
   private auditService: AuditService;
   private auditor: Auditor;
+  private qualityFilter: QualityFilterService;
 
   constructor() {
     this.memoryService = new MemoryService();
     this.auditService = new AuditService();
+    this.qualityFilter = new QualityFilterService();
     this.auditor = new Auditor({
       getMemory: (id) => this.memoryService.getMemory(id),
       dequeueEvent: (memoryId) => this.memoryService.dequeueEvent(memoryId),
@@ -36,22 +42,16 @@ export class Orchestrator {
     tags: string[] = [],
   ): Promise<string> {
     const id = generateId();
-    const memory = {
-      id,
-      version: 1,
+    const memory = buildMemoryRecord(
       source,
       sourceType,
       title,
       content,
       summary,
       tags,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      accessedAt: new Date().toISOString(),
-      accessCount: 0,
-      heatScore: 0,
-      graphLinks: [],
-    };
+      "uncategorized",
+      id,
+    );
 
     if (!validateMemoryRecord(memory)) {
       throw new MemoryValidationError("record", "记忆数据不完整");
@@ -83,7 +83,7 @@ export class Orchestrator {
     }
   }
 
-  private async processEvent(event: PendingEvent): Promise<void> {
+  private async processEvent(event: PendingEvent): Promise<string | void> {
     try {
       event.status = "processing";
       this.memoryService.updateEvent(event);
@@ -92,6 +92,17 @@ export class Orchestrator {
       const existing = this.memoryService.getMemory(event.memoryId);
 
       if (!existing) {
+        const filterResult = await this.qualityFilter.filter(candidate);
+        if (!filterResult.ok) {
+          event.status = "failed";
+          event.retryCount++;
+          this.memoryService.updateEvent(event);
+          await createFailureRecord(event.memoryId, "quality-filter", new Error(filterResult.reason || "质量未达标")).catch(
+            (err) => logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
+          );
+          return;
+        }
+
         const newId = await this.memoryService.createMemory(
           candidate.source,
           candidate.sourceType,
@@ -99,16 +110,30 @@ export class Orchestrator {
           candidate.content,
           candidate.summary,
           candidate.tags,
+          candidate.topic,
+          {
+            titleZh: candidate.titleZh,
+            summaryZh: candidate.summaryZh,
+            tagsZh: candidate.tagsZh,
+            topicZh: candidate.topicZh,
+          },
         );
 
         const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
-        await updateIndexMap(all).catch((err) =>
-          logger.audit.error("Index map update failed (new memory)", { error: (err as Error).message }),
-        );
+
+        this.memoryService.classifyMemory(newId, candidate.content);
+
+        await Promise.all([
+          writeMemoryMarkdown(this.memoryService.getMemory(newId)!),
+          updateAgentMarkdown(candidate.topic, all),
+          updateIndexMap(all).catch((err) =>
+            logger.audit.error("Index map update failed (new memory)", { error: (err as Error).message }),
+          ),
+        ]);
 
         event.status = "done";
         this.memoryService.updateEvent(event);
-        return;
+        return newId;
       }
 
       const auditResult = await this.auditor.process(event.memoryId);
@@ -123,7 +148,25 @@ export class Orchestrator {
       if (auditResult.status === "done") {
         const resolution = auditResult.resolution;
         if (resolution && resolution.action === "auto_merge") {
-          this.memoryService.updateMemory(event.memoryId, resolution.merged);
+          const merged = resolution.merged;
+          this.memoryService.updateMemory(event.memoryId, merged);
+
+          // 内容发生变更时重新生成向量
+          if (event.changedFields.includes("content") && merged.content) {
+            await this.refreshVector(event.memoryId, merged.content);
+          }
+
+          // 同步 Markdown 主存储与话题 Agent.md
+          const updated = this.memoryService.getMemory(event.memoryId)!;
+          if (event.changedFields.includes("content")) {
+            this.memoryService.classifyMemory(event.memoryId, updated.content);
+          }
+          const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
+          await Promise.all([
+            writeMemoryMarkdown(updated),
+            updateAgentMarkdown(updated.topic, all),
+            updateIndexMap(all),
+          ]);
         }
         event.status = "done";
         this.memoryService.updateEvent(event);
@@ -154,6 +197,19 @@ export class Orchestrator {
       await createFailureRecord(event.memoryId, "orchestrator-process", error as Error).catch(
         (err) => logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
       );
+    }
+  }
+
+  private async refreshVector(memoryId: string, content: string): Promise<void> {
+    const vectorIndex = new VectorIndex();
+    try {
+      const vectorRecord = await buildVectorRecord(memoryId, content);
+      vectorIndex.create(vectorRecord);
+      this.memoryService.updateMemory(memoryId, { vectorId: memoryId });
+    } catch (vectorError) {
+      logger.vector.warn("更新向量失败，记忆仍会继续保存:", { error: (vectorError as Error).message });
+    } finally {
+      vectorIndex.close();
     }
   }
 

@@ -106,6 +106,7 @@ export class ChatHandler {
       messages: [{ role: "user", content: prompt }],
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       readonly: mode !== "memory",
+      modelType: "mini",
     });
   }
 

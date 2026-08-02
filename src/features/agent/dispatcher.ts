@@ -51,11 +51,15 @@ export class AgentDispatcher {
     const memoryService = new MemoryService();
     try {
       const record = this.extractor.buildMemoryRecord("chat", "chat", messages);
-      const memoryId = await memoryService.createMemory(
-        record.source, record.sourceType,
-        record.title, record.content, record.summary, record.tags,
+      const memoryId = memoryService.stageCreateMemory(
+        record.source,
+        record.sourceType,
+        record.title,
+        record.content,
+        record.summary,
+        record.tags,
       );
-      return { type: "json", data: { content: `已保存记忆: ${record.title}`, memoryId } };
+      return { type: "json", data: { content: `已保存记忆（待审计）: ${record.title}`, memoryId } };
     } finally {
       memoryService.close();
     }
@@ -65,7 +69,7 @@ export class AgentDispatcher {
     const memoryService = new MemoryService();
     try {
       const searchText = query.replace(/查询|查找|搜索|回忆/g, "").trim();
-      const all = memoryService.listMemories();
+      const all = memoryService.listMemories({ limit: 500 });
       const matched = all.filter(
         (m) =>
           m.tags.some((t) => query.includes(t)) ||
@@ -92,7 +96,7 @@ export class AgentDispatcher {
   private handleMemoryDelete(query: string): DispatchResult {
     const memoryService = new MemoryService();
     try {
-      const toDelete = memoryService.listMemories().find((m) => query.includes(m.title));
+      const toDelete = memoryService.listMemories({ limit: 500 }).find((m) => query.includes(m.title));
       if (toDelete) {
         memoryService.deleteMemory(toDelete.id);
         return { type: "json", data: { content: `已删除记忆: ${toDelete.title}` } };
@@ -106,10 +110,10 @@ export class AgentDispatcher {
   private handleMemoryUpdate(query: string): DispatchResult {
     const memoryService = new MemoryService();
     try {
-      const toUpdate = memoryService.listMemories().find((m) => query.includes(m.title));
+      const toUpdate = memoryService.listMemories({ limit: 500 }).find((m) => query.includes(m.title));
       if (toUpdate) {
-        memoryService.updateMemory(toUpdate.id, { updatedAt: new Date().toISOString() });
-        return { type: "json", data: { content: `已更新记忆: ${toUpdate.title}` } };
+        memoryService.stageUpdateMemory(toUpdate.id, { updatedAt: new Date().toISOString() });
+        return { type: "json", data: { content: `已更新记忆（待审计）: ${toUpdate.title}` } };
       }
       return { type: "json", data: { content: "未找到要更新的记忆，请提供记忆标题。" } };
     } finally {

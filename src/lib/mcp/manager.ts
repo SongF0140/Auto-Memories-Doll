@@ -46,6 +46,16 @@ export class McpManager {
     throw new McpNotConfiguredError(server.name);
   }
 
+  /**
+   * 公开的工具发现接口，供 IngestBridge 判断服务器是否提供 collect_memory 工具。
+   * 当前为占位实现，接入真实 MCP SDK 后替换为协议调用。
+   */
+  async discoverToolsPublic(serverId: string): Promise<McpTool[]> {
+    const server = this.getServer(serverId);
+    if (!server) return [];
+    return this.discoverTools(server);
+  }
+
   close(): void {
     this.configService.close();
   }

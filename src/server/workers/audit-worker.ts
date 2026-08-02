@@ -1,5 +1,6 @@
 import { Orchestrator } from "../services/orchestrator";
 import { RETRY_DELAYS } from "../../config/constants";
+import { logger } from "../../lib/logger";
 
 export class AuditWorker {
   private orchestrator: Orchestrator;
@@ -23,7 +24,7 @@ export class AuditWorker {
       try {
         await this.orchestrator.processQueue();
       } catch (error) {
-        console.error("Audit worker error:", error);
+        logger.audit.error("Audit worker error:", { error: (error as Error).message });
       }
       await this.sleep(10000);
     }

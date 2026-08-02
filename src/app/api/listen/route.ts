@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
     // 3. 生成知识卡片
     const knowledgeCard = processor.generateKnowledgeCard(data);
 
-    // 4. 创建记忆记录（附带中文版本字段）
-    const memoryId = await memoryService.createMemory(
+    // 4. 将记忆写入待审计队列（实际落盘由 Orchestrator 消费时完成）
+    const memoryId = memoryService.stageCreateMemory(
       data.source,
       data.sourceType,
       title,

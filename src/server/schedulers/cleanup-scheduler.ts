@@ -1,4 +1,5 @@
 import { CleanupWorker } from "../workers/cleanup-worker";
+import { logger } from "../../lib/logger";
 
 export class CleanupScheduler {
   private worker: CleanupWorker;
@@ -15,7 +16,7 @@ export class CleanupScheduler {
         await this.worker.cleanupResolvedConflicts();
         await this.worker.vacuum();
       } catch (error) {
-        console.error("Cleanup scheduler error:", error);
+        logger.audit.error("Cleanup scheduler error:", { error: (error as Error).message });
       }
     }, 86400000);
   }

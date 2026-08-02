@@ -80,4 +80,6 @@ export const logger = {
   api: createLogger("api"),
   storage: createLogger("storage"),
   vector: createLogger("vector"),
+  retention: createLogger("retention"),
+  quality: createLogger("quality"),
 };

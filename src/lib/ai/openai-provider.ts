@@ -4,6 +4,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { AiEvent, AiProvider, AiToolDef } from "./ai-events";
 import { AiConfig } from "../../types/config";
 import { apiConfig } from "../../config/api.config";
+import { createLanguageModel } from "./provider";
+import type { ModelType } from "./model-adapter";
 
 /** 指数退避等待 */
 function delay(ms: number): Promise<void> {
@@ -26,14 +28,15 @@ export class OpenAIProvider implements AiProvider {
     temperature?: number;
     tools?: AiToolDef[];
     readonly?: boolean;
+    modelType?: ModelType;
   }): ReadableStream<AiEvent> {
-    const { messages, temperature, tools: toolDefs, readonly } = options;
+    const { messages, temperature, tools: toolDefs, readonly, modelType } = options;
     const self = this;
 
     return new ReadableStream<AiEvent>({
       async start(controller) {
         try {
-          const model = self.createModel();
+          const model = self.createModel(modelType);
 
           // 将 AiToolDef 转为 Vercel AI SDK 的 tool 对象
           const sdkTools: Record<string, any> = {};
@@ -131,19 +134,23 @@ export class OpenAIProvider implements AiProvider {
     return [];
   }
 
-  private createModel() {
+  private createModel(modelType?: ModelType) {
+    const modelName = modelType === "mini" ? apiConfig.miniLlmModel
+      : modelType === "pro" ? apiConfig.proLlmModel
+      : this.config.chatModel;
+
     if (this.config.provider === "anthropic") {
       const anthropic = createAnthropic({
         apiKey: this.config.apiKey,
         baseURL: this.config.baseURL,
       });
-      return anthropic(this.config.chatModel);
+      return anthropic(modelName);
     }
 
     const openai = createOpenAI({
       apiKey: this.config.apiKey,
       baseURL: this.config.baseURL,
     });
-    return openai(this.config.chatModel);
+    return openai(modelName);
   }
 }

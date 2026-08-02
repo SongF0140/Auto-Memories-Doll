@@ -4,6 +4,7 @@ import { InputNormalizer } from "../../../features/ingest/normalizer";
 import { IngestAdapter } from "../../../features/ingest/adapter";
 import { MemoryService } from "../../../server/services/memory-service";
 import { ingestRequestSchema } from "../../../lib/validation";
+import { logger } from "../../../lib/logger";
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -36,23 +37,22 @@ export async function POST(request: NextRequest) {
     const normalizedEvents = normalizer.normalize(events);
     const memoryRecords = adapter.adaptBatch(normalizedEvents);
 
-    const results = await Promise.all(
-      memoryRecords.map((record) =>
-        memoryService.createMemory(
-          record.source,
-          record.sourceType,
-          record.title,
-          record.content,
-          record.summary,
-          record.tags,
-        ),
+    const results = memoryRecords.map((record) =>
+      memoryService.stageCreateMemory(
+        record.source,
+        record.sourceType,
+        record.title,
+        record.content,
+        record.summary,
+        record.tags,
+        record.topic,
       ),
     );
 
     return NextResponse.json({ success: true, memories: results });
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
-    console.error("[Ingest] 导入失败:", message);
+    logger.api.error("[Ingest] 导入失败:", { message });
     return NextResponse.json({ error: `导入失败: ${message}` }, { status: 500 });
   } finally {
     memoryService.close();

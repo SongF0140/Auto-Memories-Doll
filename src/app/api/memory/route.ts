@@ -4,6 +4,7 @@ import { MemoryExtractor } from "../../../features/memory/extractor";
 import { memoryCreateSchema } from "../../../lib/validation";
 import { ErrorCode } from "../../../lib/api-errors";
 import { apiResponse, apiError } from "../../../lib/api-response";
+import { logger } from "../../../lib/logger";
 
 /** sortBy 字段白名单 —— 仅允许按这些字段排序，拒绝注入攻击 */
 const SORTABLE_FIELDS = new Set([
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(apiResponse({ items: paged, total, page, pageSize }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
-    console.error("[Memory] 列表查询失败:", message);
+    logger.api.error("[Memory] 列表查询失败:", { message });
     return NextResponse.json(apiError(ErrorCode.MEMORY_QUERY_FAILED, `查询失败: ${message}`), { status: 500 });
   } finally {
     service.close();
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
       content,
       tags,
     });
-    const memoryId = await service.createMemory(
+    const memoryId = service.stageCreateMemory(
       memoryRecord.source,
       memoryRecord.sourceType,
       memoryRecord.title,
@@ -91,10 +92,10 @@ export async function POST(request: NextRequest) {
         topicZh: memoryRecord.topicZh,
       },
     );
-    return NextResponse.json(apiResponse({ ...memoryRecord, id: memoryId }));
+    return NextResponse.json(apiResponse({ ...memoryRecord, id: memoryId, status: "pending_audit" }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
-    console.error("[Memory] 创建失败:", message);
+    logger.api.error("[Memory] 创建失败:", { message });
     return NextResponse.json(apiError(ErrorCode.MEMORY_CREATE_FAILED, `创建失败: ${message}`), { status: 500 });
   } finally {
     service.close();

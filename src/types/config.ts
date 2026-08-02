@@ -32,6 +32,12 @@ export type SkillConfig = {
   trigger: string;
   description?: string;
   prompt: string;
+  /** 标记为 true 时，McpIngestBridge 会自动执行该 skill 并将输出送入 ingest 管线 */
+  autoIngest?: boolean;
+  /** autoIngest 模式下使用的标签 */
+  tags?: string[];
+  /** autoIngest 模式下归入的话题目录 */
+  topic?: string;
   createdAt: string;
   updatedAt: string;
 };

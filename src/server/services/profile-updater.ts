@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { getProfilePath } from "../../lib/storage/path-resolver";
 import { PromptCache } from "../../lib/prompt/cache";
 import { withLock } from "../../lib/storage/lock";
+import { logger } from "../../lib/logger";
 
 const PROFILE_ANALYSIS_PROMPT = `You are a user profile analyzer. Based on the conversation below, extract the user's characteristics.
 
@@ -136,10 +137,10 @@ export class ProfileUpdater {
         });
         // 画像更新后，让前缀缓存失效
         PromptCache.getInstance().invalidate("system-prefix");
-        console.log("[ProfileUpdater] 用户画像已更新");
+        logger.memory.info("[ProfileUpdater] 用户画像已更新");
       }
     } catch (error) {
-      console.error("[ProfileUpdater] 分析失败:", (error as Error).message);
+      logger.memory.error("[ProfileUpdater] 分析失败:", { error: (error as Error).message });
     }
   }
 
@@ -168,7 +169,7 @@ export class ProfileUpdater {
       const formatted = content.startsWith("#") ? content : `# 用户画像\n\n${content}`;
       writeFileSync(profilePath, formatted, "utf-8");
     } catch (error) {
-      console.error("[ProfileUpdater] 写入失败:", (error as Error).message);
+      logger.memory.error("[ProfileUpdater] 写入失败:", { error: (error as Error).message });
     }
   }
 }

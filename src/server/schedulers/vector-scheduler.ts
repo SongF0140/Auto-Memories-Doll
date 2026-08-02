@@ -1,4 +1,5 @@
 import { VectorWorker } from "../workers/vector-worker";
+import { logger } from "../../lib/logger";
 
 export class VectorScheduler {
   private worker: VectorWorker;
@@ -13,7 +14,7 @@ export class VectorScheduler {
       try {
         await this.worker.rebuildAllVectors();
       } catch (error) {
-        console.error("Vector scheduler error:", error);
+        logger.audit.error("Vector scheduler error:", { error: (error as Error).message });
       }
     }, 3600000);
   }

@@ -31,8 +31,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Memory not found" }, { status: 404 });
     }
 
-    service.updateMemory(params.id, parsed.data);
-    return NextResponse.json(service.getMemory(params.id));
+    service.stageUpdateMemory(params.id, parsed.data);
+    return NextResponse.json({ ...service.getMemory(params.id), ...parsed.data, status: "pending_audit" });
   } finally {
     service.close();
   }

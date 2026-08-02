@@ -7,7 +7,7 @@ export const updateIndexMap = async (memories: MemoryRecord[]): Promise<void> =>
   const tags = new Set<string>();
 
   memories.forEach((memory) => {
-    const topic = memory.sourceType;
+    const topic = memory.topic || memory.sourceType || "uncategorized";
     if (!topics.has(topic)) {
       topics.set(topic, []);
     }

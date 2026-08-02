@@ -4,6 +4,8 @@ import { LanguageModel } from "ai";
 import { ConfigService } from "../../server/services/config-service";
 import { AiConfig } from "../../types/config";
 import { AiServiceError } from "../errors";
+import { apiConfig } from "../../config/api.config";
+import type { ModelType } from "./model-adapter";
 
 function getConfig(): AiConfig {
   const service = new ConfigService();
@@ -14,22 +16,25 @@ function getConfig(): AiConfig {
   }
 }
 
-export function createLanguageModel(): LanguageModel {
+export function createLanguageModel(modelType?: ModelType): LanguageModel {
   const config = getConfig();
+  const modelName = modelType === "mini" ? apiConfig.miniLlmModel
+    : modelType === "pro" ? apiConfig.proLlmModel
+    : config.chatModel;
 
   if (config.provider === "anthropic") {
     const anthropic = createAnthropic({
       apiKey: config.apiKey,
       baseURL: config.baseURL,
     });
-    return anthropic(config.chatModel);
+    return anthropic(modelName);
   }
 
   const openai = createOpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
   });
-  return openai(config.chatModel);
+  return openai(modelName);
 }
 
 export function createEmbeddingModel() {

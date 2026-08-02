@@ -77,6 +77,7 @@ export class ModelAdapter {
     temperature?: number;
     tools?: import("./ai-events").AiToolDef[];
     readonly?: boolean;
+    modelType?: ModelType;
   }): ReadableStream<AiEvent> {
     const config = getConfig();
 
@@ -106,11 +107,11 @@ export class ModelAdapter {
 
   // ── 以下为向后兼容的旧接口 ──
 
-  static async generate(prompt: string, _modelType: ModelType): Promise<LlmResponse> {
+  static async generate(prompt: string, modelType: ModelType): Promise<LlmResponse> {
     const config = getConfig();
 
     try {
-      const model = createLanguageModel();
+      const model = createLanguageModel(modelType);
       const result = await generateText({
         model,
         messages: [{ role: "user", content: prompt }],

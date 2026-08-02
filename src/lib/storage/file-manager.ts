@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import { dirname } from "path";
 import {
   getMemoryRoot,
   getNotesPath,
@@ -7,6 +8,7 @@ import {
   getDeletedPath,
 } from "./path-resolver";
 import { sanitizeFilename } from "../utils/normalization";
+import { recordWrite } from "./write-tracker";
 
 export const ensureDirectory = async (path: string): Promise<void> => {
   try {
@@ -33,13 +35,15 @@ export const readFile = async (path: string): Promise<string> => {
 };
 
 export const writeFile = async (path: string, content: string): Promise<void> => {
-  await ensureDirectory(path.substring(0, path.lastIndexOf("/")));
+  await ensureDirectory(dirname(path));
   await fs.writeFile(path, content, "utf-8");
+  recordWrite(path);
 };
 
 export const appendFile = async (path: string, content: string): Promise<void> => {
-  await ensureDirectory(path.substring(0, path.lastIndexOf("/")));
+  await ensureDirectory(dirname(path));
   await fs.appendFile(path, content, "utf-8");
+  recordWrite(path);
 };
 
 export const deleteFile = async (path: string): Promise<void> => {
