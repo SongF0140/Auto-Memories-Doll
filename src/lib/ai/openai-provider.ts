@@ -3,6 +3,12 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { AiEvent, AiProvider, AiToolDef } from "./ai-events";
 import { AiConfig } from "../../types/config";
+import { apiConfig } from "../../config/api.config";
+
+/** 指数退避等待 */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * OpenAIProvider — 封装 Vercel AI SDK 的 OpenAI/Anthropic 实现
@@ -102,17 +108,27 @@ export class OpenAIProvider implements AiProvider {
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    try {
-      const openai = createOpenAI({
-        apiKey: this.config.apiKey,
-        baseURL: this.config.baseURL,
-      });
-      const model = openai.embedding(this.config.embeddingModel);
-      const result = await model.doEmbed({ values: [text] });
-      return result.embeddings[0] || [];
-    } catch {
-      return [];
+    const maxRetries = apiConfig.maxRetries;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const openai = createOpenAI({
+          apiKey: this.config.apiKey,
+          baseURL: this.config.baseURL,
+        });
+        const model = openai.embedding(this.config.embeddingModel);
+        const result = await model.doEmbed({ values: [text] });
+        return result.embeddings[0] || [];
+      } catch (error) {
+        if (attempt === maxRetries) {
+          return [];
+        }
+        // 指数退避：1s, 2s, 4s...
+        await delay(Math.pow(2, attempt) * 1000);
+      }
     }
+
+    return [];
   }
 
   private createModel() {

@@ -4,6 +4,8 @@ import { getCurrentTime } from "../utils/date";
 import { ConfigService } from "../../server/services/config-service";
 import { OpenAIProvider } from "./openai-provider";
 import { AiProvider, AiEvent } from "./ai-events";
+import { logger } from "../logger";
+import { apiConfig } from "../../config/api.config";
 
 export type ModelType = "mini" | "pro";
 
@@ -29,26 +31,47 @@ function getConfig() {
   }
 }
 
-/** 获取当前可用的 AiProvider 实例 */
 function getProvider(): AiProvider {
   const config = getConfig();
-  // API Key 为空时这里仍返回 provider，降级逻辑在 generateStream 的 catch 中处理
   return new OpenAIProvider(config);
 }
 
 export class ModelAdapter {
   private static isDegraded = false;
+  private static healthCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   static get isDegradedMode(): boolean {
     return this.isDegraded;
   }
 
+  /** 启动健康检查：周期性测试 API 连通性，恢复后自动解除降级 */
+  static startHealthCheck(): void {
+    if (this.healthCheckTimer) return; // 已启动
+    this.healthCheckTimer = setInterval(async () => {
+      const config = getConfig();
+      if (!config.apiKey) return;
+      try {
+        const provider = getProvider();
+        await provider.generateEmbedding("health-check");
+        if (this.isDegraded) {
+          this.isDegraded = false;
+          logger.api.info("AI API 已恢复，退出降级模式");
+        }
+      } catch {
+        // 仍不可用，保持降级
+      }
+    }, apiConfig.degradation.checkInterval);
+  }
+
+  static stopHealthCheck(): void {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+  }
+
   // ── 核心新接口：统一的事件流 ──
 
-  /**
-   * 流式生成，返回统一的 AiEvent 流
-   * 前端和 Handler 只消费 AiEvent，不感知底层 SDK
-   */
   static generateStream(options: {
     messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
     temperature?: number;
@@ -57,7 +80,6 @@ export class ModelAdapter {
   }): ReadableStream<AiEvent> {
     const config = getConfig();
 
-    // 未配置 API Key 时返回降级流
     if (!config.apiKey || config.apiKey.trim() === "") {
       return this.createFallbackStream("当前处于离线模式，请前往设置页面配置 AI API Key 和 baseURL。");
     }
@@ -104,7 +126,7 @@ export class ModelAdapter {
       };
     } catch (error) {
       this.isDegraded = true;
-      console.error("LLM API call failed:", error);
+      logger.api.error("LLM API 调用失败", { error: (error as Error).message });
 
       return {
         content: this.getFallbackResponse(prompt),
@@ -119,7 +141,7 @@ export class ModelAdapter {
     const config = getConfig();
 
     if (!config.apiKey || config.apiKey.trim() === "") {
-      console.warn("[ModelAdapter] 未配置 API Key，跳过向量生成");
+      logger.vector.warn("未配置 API Key，跳过向量生成");
       return {
         embedding: [],
         model: config.embeddingModel,
@@ -139,7 +161,7 @@ export class ModelAdapter {
       };
     } catch (error) {
       this.isDegraded = true;
-      console.error("Embedding API call failed:", error);
+      logger.vector.error("Embedding API 调用失败", { error: (error as Error).message });
 
       return {
         embedding: [],

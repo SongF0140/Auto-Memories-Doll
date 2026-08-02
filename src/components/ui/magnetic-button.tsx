@@ -10,6 +10,7 @@ interface MagneticButtonProps {
   onClick?: () => void;
   disabled?: boolean;
   type?: "button" | "submit" | "reset";
+  title?: string;
 }
 
 export function MagneticButton({
@@ -18,6 +19,7 @@ export function MagneticButton({
   onClick,
   disabled,
   type = "button",
+  title,
 }: MagneticButtonProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -40,6 +42,7 @@ export function MagneticButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       animate={{ x: position.x, y: position.y }}

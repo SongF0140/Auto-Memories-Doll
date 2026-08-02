@@ -1,0 +1,19 @@
+{
+  "$schema": "./providers.schema.json",
+  "providers": {
+    "openai": {
+      "baseURL": "https://api.openai.com/v1",
+      "models": {
+        "gpt-4o-mini": { "type": "chat", "contextWindow": 128000 },
+        "gpt-4o": { "type": "chat", "contextWindow": 128000 },
+        "text-embedding-3-small": { "type": "embedding", "dimensions": 1536 }
+      }
+    },
+    "custom-proxy": {
+      "baseURL": "http://localhost:11434/v1",
+      "models": {
+        "qwen2.5:7b": { "type": "chat", "contextWindow": 32768 }
+      }
+    }
+  }
+}

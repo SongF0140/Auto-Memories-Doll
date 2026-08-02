@@ -1,19 +1,40 @@
-﻿# Agent 开发规范（面向 AI）
+#﻿# Agent 开发规范（面向 AI）
+
+## 核心概念速览
+
+| 概念 | 一句话 | 位置 |
+|------|--------|------|
+| **记忆 (Memory)** | Markdown 文件承载的独立知识单元，含 YAML 元数据，人类和 LLM 均可直读 | `memory-root/notes/` |
+| **Agent 循环** | 用户消息 → 记忆检索 → 组装提示 → AI 流式响应 → 工具调用 → 候选记忆写入待审计队列 | `src/features/chat/handler.ts` |
+| **待审计队列** | 候选记忆写回前暂存的 SQLite 队列，按 `memoryId` 串行消费 | `src/server/services/memory-service.ts` |
+| **LLMWiki** | Markdown + YAML frontmatter 格式，每条记忆自包含 | `src/lib/storage/markdown-formatter.ts` |
+| **向量召回** | SQLite 存储向量 + JavaScript 内存余弦相似度计算，语义检索相关记忆 | `src/lib/vector/retriever.ts` |
+| **图谱关系** | 文件内 `[[wikilink]]` 构建的内存索引，替代图数据库边表 | `src/lib/graph/wiki-graph.ts` |
+| **降级模式** | LLM API 不可用时切换为本地检索模板回复，Embedding 不可用时降级为关键词匹配 | `src/lib/ai/model-adapter.ts` |
+| **工具系统** | Zod schema 校验 + 异步执行器，结果分层为 `content`（给模型）和 `data`（给 UI） | `src/lib/ai/tool-caller.ts` |
+| **会话系统** | 前端内存 + localStorage 持久化，系统消息不保存（恢复时重建） | `src/components/chat/useChatSession.ts` |
+| **提供商目录** | `providers.json` 声明式注册 AI 提供商和模型，零代码接入新端点 | `src/config/providers.json` |
 
 ## 1. 文档目标
 本文件用于描述系统架构、数据流、处理阶段、技术边界与推荐技术栈，供 AI 在编写、修改和审查代码时作为统一上下文。
 
 ## 2. 设计原则
-- 所有描述优先使用可验证的事实，避免口语化和主观评价。
-- 所有流程按“输入 -> 处理 -> 输出”表达，并尽量给出数据结构、接口和结果约束。
-- 未经确认的内容必须标记为“待确认”或“推测”，不得写成确定事实。
-- 持久化层优先保持本地化、可追踪、可恢复，不依赖云端存储或远程数据库。
-- 模型能力（LLM、embedding）通过 API 接入，但 API 不可用时必须支持降级运行，不影响本地数据完整性。
-- 系统定位为纯本地单机部署，不考虑多用户隔离和远程访问。
-- 技术选型优先采用 TypeScript 作为主线。
-- 文档中出现的术语必须先定义，再使用。
-- 任何进入实现的 API、事件和写回结构都必须先定义 schema，再定义校验器，再定义处理逻辑。
-- 任何后台任务都必须明确失败记录、重试策略和人工接管条件。
+
+以下 7 条是可逐条验证的架构约束，新代码应逐条对照审核：
+
+1. **核心零 UI 依赖**：`src/features/` 和 `src/lib/` 不导入 React 组件、Next.js 路由细节或 CSS 模块。核心通过 `AiEvent` 流输出，UI 消费事件。
+
+2. **事件是唯一契约**：快轨层 Agent 循环只通过 `ReadableStream<AiEvent>` 输出，前端只通过消费同一事件流来更新 UI。不引入框架特定的回调、全局 emitter 或状态管理库的跨层耦合。
+
+3. **工具 = Zod schema + 异步执行器**：`tool-schemas.ts` 定义校验，`tool-registry.ts` 注册执行器，`tool-caller.ts` 调度。无全局变量、无装饰器、无代码生成。工具结果分层为 `content`（给模型读的自然语言）和 `data`（给 UI/日志的结构化元数据）。
+
+4. **存储不可变追加**：记忆和会话记录采用追加式日志（Markdown 文件追加 + JSONL 行追加），不修改已写入的数据。冲突通过新条目标记解决，不覆盖旧数据。待审计队列 `pending_events` 按 `memoryId` 串行消费。
+
+5. **系统配置重建而非快照**：持久化会话时不保存 system 角色消息。恢复会话时从当前 `PromptCache` 和工具注册表重建系统提示，确保升级配置后旧会话也受益。
+
+6. **模型边界显式化**：任何 AI 调用都经过 `ModelAdapter` 层。LLM/Embedding API 不可用时降级到本地检索模板回复，降级状态必须在前端可见。提供商通过 `providers.json` 声明式注册，零代码接入新端点。
+
+7. **文档跟随实现，差异有记录**：AGENTS.md 的偏差表（11.1）持续维护。任何与规范的偏差都必须记录在表中，附上优先级和预期修复版本。每个 Phase 结束必须更新偏差表和路线图。
 
 ## 3. 总体技术栈
 - 语言：TypeScript
@@ -518,10 +539,23 @@ export type MemoryRecord = {
   version: number;
   source: string;
   sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen";
+  /** 原标题（AI 可读） */
   title: string;
+  /** 中文标题（人可读），为空时前端回退到 title */
+  titleZh?: string;
   content: string;
+  /** 原摘要（AI 可读） */
   summary: string;
+  /** 中文摘要（人可读），为空时前端回退到 summary */
+  summaryZh?: string;
+  /** 原标签（AI 可读） */
   tags: string[];
+  /** 中文标签（人可读），为空时前端回退到 tags */
+  tagsZh?: string[];
+  /** 所属话题目录，如 "ai-coding"、"daily-notes" */
+  topic: string;
+  /** 中文话题标签，为空时前端用 getTopicLabel(topic) */
+  topicZh?: string;
   createdAt: string;
   updatedAt: string;
   accessedAt: string;
@@ -536,7 +570,9 @@ export type MemoryRecord = {
 - `source` 记录原始来源标识，必须可回溯到输入事件。
 - `sourceType` 表示来源通道，必须取自固定枚举。
 - `title`、`content`、`summary` 由记忆提取流程生成；`title` 为短标题，`summary` 为压缩摘要。
+- `titleZh`/`summaryZh`/`tagsZh`/`topicZh` 为可选的中文翻译字段，供前端人类可读展示；为空时前端回退到原字段。AI 检索和注入 prompt 时只用原字段，不读 zh 字段。
 - `tags` 由分类流程生成，写回时允许增量合并。
+- `topic` 表示所属话题目录，由分类流程生成（见 4.6.2 自动话题分类）。
 - `createdAt` 记录记忆首次落盘时间；`updatedAt` 记录最后一次写回时间；`accessedAt` 记录最近一次访问时间。
 - `accessCount` 在每次命中后递增。
 - `heatScore` 按 4.10 定义的公式和子项计算，默认参数在 `src/config/scoring.config.ts` 中配置。
@@ -740,27 +776,74 @@ export type ConflictRecord = {
 
 | 偏差项 | AGENTS.md 描述 | 实际代码 | 优先级 |
 |--------|---------------|---------|--------|
-| 队列存储路径 | `src/lib/storage/queue.ts`（第 4.6 节旧版描述） | 实际位于 `src/features/audit/queue.ts`（纯内存 Map 实现）；SQLite 版队列操作位于 `src/server/services/memory-service.ts` | P1 |
-| 图谱存储方式 | 第 4.6 节仅描述 `graph_edges` SQLite 表 | 项目采用双轨：`wiki-graph.ts`（文件级 [[wikilink]] 扫描，主路径）+ `manager.ts`（SQLite graph_edges，已废弃/保留兼容） | P2 |
+| 队列存储路径 | `src/lib/storage/queue.ts`（第 4.6 节旧版描述） | 已修复：删除 `src/features/audit/queue.ts`（内存 Map），Auditor 统一使用 MemoryService SQLite 队列；dequeueEvent 事务化（悲观锁） | ~~P1~~ |
+| 图谱存储方式 | 第 4.6 节仅描述 `graph_edges` SQLite 表 | 已修复：删除 `manager.ts` 和 `query.ts`，唯一路径为 `wiki-graph.ts` | ~~P2~~ |
 | API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 仅 `memory`/`ingest`/`listen` 路由有内部 Zod 校验，无 route 文件级 export、无响应体 schema、无错误码表 | P2 |
-| sortBy 参数 | 无约束 | `memory/route.ts` 直接使用 URL query 中的 `sortBy` 做对象属性访问，无白名单校验 | P1 |
-| memory/search 性能 | 无约束 | 每次搜索调用 `listMemories()` 全量加载记忆到内存 | P1 |
-| 文件锁实现 | 未描述实现细节 | `src/lib/storage/lock.ts` 使用 `access` + `writeFile`，存在 TOCTOU 竞态条件 | P2 |
-| 日志系统 | 未提及 | `src/lib/logger.ts` 提供结构化日志（`createLogger` + 模块级 logger），支持 `LOG_LEVEL` 环境变量控制 | P3 |
-| 测试覆盖 | 第 10 节定义了完整测试策略 | vitest 基础设施已搭建（`vitest.config.ts`），3 个测试文件 16 个用例覆盖 api-response / validation / tool-caller。更多层测试待补充 | P2 |
+| sortBy 参数 | 无约束 | 已修复：`SORTABLE_FIELDS` Set 白名单 | ~~P1~~ |
+| memory/search 性能 | 无约束 | 已修复：`listMemories()` 调用处统一加 limit 约束（handler: 500, tool-registry: 200, orchestrator: 500） | ~~P1~~ |
+| 文件锁实现 | 未描述实现细节 | 已修复：`fs.open(path, O_WRONLY \| O_CREAT \| O_EXCL)` 原子操作 | ~~P2~~ |
+| 日志系统 | 未提及 | 已修复：核心链路（model-adapter, memory-service, orchestrator）迁移到 `logger` | ~~P3~~ |
+| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：8 文件 112 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor；Agent 循环与降级路径待补充 | ~~P2~~ |
+| 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
+| 会话系统提示快照 | 持久化 system 消息 | 已修复：`saveSession` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
+| 提供商配置 | AI 配置仅前端表单 | 新增 `src/config/providers.json` 声明式目录 + `provider-loader.ts` 读写层 | P2 |
+| 降级状态恢复 | 第 4.11 节描述降级但未提恢复 | 已修复：`ModelAdapter.startHealthCheck()` 周期性轮询，恢复后自动退出降级；scheduler setInterval 类型修复 | ~~P1~~ |
+| 记忆创建绕过审计 | 第 4.8 节要求先入队再审计 | 已修复：tool-registry 的 create_memory/update_memory 改为生成 PendingEvent 入队而非直接写库 | ~~P0~~ |
+| MMR 重排 | 第 4.11 节"重排默认采用 MMR" | 已修复：`Ranker.rankWithMMR()` 实现真正的 MMR（α*score - (1-α)*max_sim），用 tags Jaccard 作为文档间相似度，α 默认 0.7；handler.ts 已切换到 rankWithMMR；保留 `rank()` 作为基础多因子加权排序供其他场景使用 | ~~P2~~ |
+| reject 路径 | 第 4.10 节"不可合并：schema 版本不兼容、数据损坏或格式校验失败" | 已修复：`conflict-resolver.ts` 补全三种 reject 触发条件（candidate.version < existing.version / 必要字段为空 / tags|graphLinks 非数组），reject 优先级在字段比对前；Auditor 处理 reject 时 status=failed 并透传 reason | ~~P1~~ |
+| 向量检索相似度阈值 | 无约束 | 已修复：`VectorRetriever.search` 新增 `minSimilarity` 参数（默认 0.3），过滤低相似度噪声；搜索 API 新增 `?threshold=` 查询参数 | ~~P1~~ |
+| MCP 工具 execute | 未描述 | 已修复：`handler.ts collectToolDefs` 为 MCP 工具包装 execute 闭包调用 `mcpManager.callTool`，替代原先 `execute: undefined`（会导致模型调用卡住） | ~~P2~~ |
+| 访问计数污染 | 第 4.8 节"搜索回写由前端搜索命中事件触发" | 已修复：`handler.ts retrieveRelevantMemories` 移除召回时的 `incrementAccess` 调用（召回 ≠ 访问），避免 heatScore 失真 | ~~P2~~ |
+| MemoryRecord 国际化字段 | 第 5.1 节 `MemoryRecord` 类型未定义 | 已修复：`types/memory.ts` 补齐 `titleZh`/`summaryZh`/`tagsZh`/`topicZh` 四个可选字段；AGENTS.md 5.1 节类型定义同步更新；`validateMemoryRecord` 增加 zh 字段类型校验 | ~~P2~~ |
+| validatePendingEvent sourceType 白名单 | 第 5.6 节 `sourceType` 含 `listen` | 已修复：`validator.ts` 的 `validatePendingEvent` 白名单补全 `listen`（共 6 种），与 `PendingEvent` 类型定义一致；`/api/listen` 入队事件校验恢复正常 | ~~P1~~ |
+| validateVectorRecord 空数组放行 | 无约束 | 已修复：`validateVectorRecord` 改为 `!Array.isArray(record.embedding) || record.embedding.length === 0`，空数组不再放行 | ~~P3~~ |
+| 访问计数回写入口 | 第 4.8 节"搜索回写由前端搜索命中事件触发" | 已修复：新增 `POST /api/memory/[id]/access` 端点，前端用户点击记忆时调用 `incrementAccess`；配合之前从 `retrieveRelevantMemories` 移除召回时递增的修复，访问计数现在有正确的回写路径 | ~~P2~~ |
 
-### 11.2 待实现功能
+### 11.2 渐进式路线图
 
-- [x] Agent 循环引擎（`ChatHandler.streamResponse` 已支持多轮工具迭代 + `round_start` 事件）
-- [x] 工具系统 Zod 参数校验（`tool-schemas.ts` + `ToolCaller.callTool` 调用前校验）
-- [x] `query_graph` 工具（BFS 图谱邻接查询，支持深度控制）
-- [x] 会话 localStorage 持久化（`useChatSession` hook，页面刷新不丢历史）
-- [x] 结构化日志系统（`src/lib/logger.ts`，支持 `LOG_LEVEL` 环境变量控制，模块级 logger 开箱即用）
-- [x] 单元测试 + 集成测试基础设施（vitest + `src/__tests__/`，3 文件 16 用例通过；暂缺后端集成测试）
-- [x] API 路由统一导出请求体/响应体 schema + 错误码表（`ErrorCode` 枚举 + `apiResponse`/`apiError` 包装 + `chat/memory/search` 路由已接入）
-- [x] `memory/search` 改用按 ID 逐条加载（`getMemory(memoryId)`）替代全量 `listMemories()`
-- [x] `sortBy` 参数白名单校验（`SORTABLE_FIELDS` Set，默认 `updatedAt`）
-- [x] 文件锁改用 `fs.open(path, O_WRONLY | O_CREAT | O_EXCL)` 原子操作
-- [ ] 向量检索升级为 `sqlite-vec` 扩展以替代 JavaScript 内存余弦相似度
-- [ ] 更多层测试补充（快轨层、后台加工层、审计持久化层、集成测试）
+项目按 Phase 分阶段推进，每个 Phase 在前一阶段稳定后才开始。当前阶段：**Phase 1**。
+
+```text
+Phase 0 — 工程健康 [DONE]
+  [x] AGENTS.md 规范文档
+  [x] TypeScript strict mode + vitest 基础设施
+  [x] ErrorCode 枚举 + apiResponse/apiError 包装
+  [x] AI SDK 版本适配（openai-provider.ts / tool-schemas.ts 修复）
+  [x] 文件锁原子操作（O_EXCL）
+  [x] sortBy 白名单校验
+
+Phase 1 — 核心稳定 [IN PROGRESS]
+  [x] 设计原则清单化（7 条可验证架构约束）
+  [x] 工具结果分层（ToolResult.content + data）
+  [x] 会话系统提示重建（不持久化 system 消息）
+  [x] 核心概念速览表
+  [x] 提供商声明式配置（providers.json）
+  [x] pending_events 持久化统一（auditor 用 SQLite 版替代内存 Map）
+  [x] listMemories 分页查询（避免全量内存加载）
+  [x] 图谱废弃代码清理（manager.ts）
+  [x] 降级状态恢复（ModelAdapter 健康检查 + setInterval 类型修复）
+  [x] 记忆创建绕过审计队列修复（tool create/update → PendingEvent 入队）
+  [x] 功能 Bug 修复（MCP execute / 访问计数污染 / 向量相似度阈值）
+  [x] MMR 重排实现（Ranker.rankWithMMR，tags Jaccard 文档间相似度）
+  [x] reject 路径补全（schema 不兼容 / 数据损坏 / 格式校验失败）
+  [x] 核心模块单元测试（builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService/Auditor，112 用例）
+  [x] validator 修复（PendingEvent 白名单补 listen / VectorRecord 空数组拦截 / MemoryRecord zh 字段校验）
+  [x] 访问计数回写端点（POST /api/memory/[id]/access）
+
+Phase 2 — 会话升级
+  [ ] localStorage → JSONL 文件持久化
+  [ ] 多会话列表 + 切换（完善 switchSession / removeSession UI）
+  [ ] 会话恢复系统提示重建（当前 ChatHandler 已支持）
+
+Phase 3 — 智能增强
+  [ ] 会话上下文压缩（旧消息 AI 摘要替换）
+  [ ] 会话树形分支（从任意节点分支对话）
+  [ ] 向量检索升级为 sqlite-vec（替代 JS 内存余弦相似度）
+
+Phase 4 — 测试与质量
+  [ ] 快轨层测试（降级路径、候选记忆生成）
+  [ ] 后台加工层测试（清洗去重、分类打分）
+  [x] 审计持久化层测试（冲突分级、版本管理）
+  [ ] 集成测试（端到端：用户输入 → 快轨 → 审计 → 文件写回）
+```
 

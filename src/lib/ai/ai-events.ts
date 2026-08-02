@@ -16,6 +16,18 @@ export type AiEvent =
   | { type: "done"; finishReason: string }
   | { type: "error"; message: string };
 
+/**
+ * ChatSessionEvent — 应用层会话事件，包装核心 AiEvent 并追加会话上下文。
+ * 前端只消费 ChatSessionEvent，不直接消费 AiEvent。
+ */
+export type ChatSessionEvent = AiEvent & {
+  sessionId: string;
+  /** 本次请求命中的记忆引用 ID 列表 */
+  memoryReferences?: string[];
+  /** 当前工具调用轮次 */
+  roundNum?: number;
+};
+
 /** 传递给 AI 提供商的工具定义 */
 export type AiToolDef = {
   name: string;

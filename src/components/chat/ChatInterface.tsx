@@ -9,6 +9,8 @@ import ChatModeSelector from "./ChatModeSelector";
 import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
+import { SpotlightCard } from "../ui/spotlight-card";
+import { MagneticButton } from "../ui/magnetic-button";
 import { AppError } from "../../lib/errors";
 import { AiEvent } from "../../lib/ai/ai-events";
 import { useChatSession } from "./useChatSession";
@@ -51,6 +53,7 @@ export default function ChatInterface() {
   const [relatedMemories, setRelatedMemories] = useState<MemoryRecord[]>([]);
   const [availableMemories, setAvailableMemories] = useState<MemoryRecord[]>([]);
   const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(new Set());
+  const [degraded, setDegraded] = useState(false);
 
   useEffect(() => {
     fetchAvailableMemories();
@@ -197,8 +200,12 @@ export default function ChatInterface() {
                   break;
                 case "error":
                   streamError += event.message;
+                  setDegraded(true);
                   break;
                 case "done":
+                  if (event.finishReason !== "error") {
+                    setDegraded(false);
+                  }
                   break;
               }
             }
@@ -262,13 +269,13 @@ export default function ChatInterface() {
               </div>
               <div className="flex items-center gap-2">
                 <ChatModeSelector mode={mode} onModeChange={setMode} />
-                <button
+                <MagneticButton
                   onClick={newSession}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-border text-text-secondary hover:bg-muted transition-colors"
+                  className="h-9 px-3.5 text-xs"
                   title="新建会话"
                 >
-                  + 新会话
-                </button>
+                  新会话
+                </MagneticButton>
               </div>
             </div>
             <div className="relative hidden min-h-[132px] overflow-hidden lg:block">
@@ -287,28 +294,34 @@ export default function ChatInterface() {
         <div className="flex-1 flex flex-col min-w-0">
           {/* 会话历史栏 */}
           {sessionIds.length > 1 && (
-            <div className="flex items-center gap-1 overflow-x-auto px-6 py-2 border-b border-border">
+            <div className="flex items-center gap-1.5 overflow-x-auto px-6 py-2.5 border-b border-border/60">
               {sessionIds.slice(0, 8).map((id) => {
                 const isActive = id === sessionId;
                 return (
-                  <div key={id} className="flex items-center gap-0.5 shrink-0">
+                  <div key={id} className="flex items-center gap-0 shrink-0">
                     <button
                       onClick={() => switchSession(id)}
-                      className={`px-2.5 py-1 text-xs rounded-md truncate max-w-[140px] transition-colors ${
+                      className={`group relative flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full transition-all duration-300 ${
                         isActive
-                          ? "bg-accent/15 text-accent font-medium"
-                          : "text-text-tertiary hover:bg-muted"
+                          ? "bg-accent text-accent-text shadow-md shadow-accent/20"
+                          : "bg-surface/60 text-text-tertiary hover:text-text-primary hover:bg-surface border border-transparent hover:border-border"
                       }`}
                       title={id}
                     >
-                      {id.slice(5, 13)}...
+                      {isActive && (
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-text/60 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent-text" />
+                        </span>
+                      )}
+                      <span className="truncate max-w-[120px]">{id.slice(5, 13)}</span>
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         removeSession(id);
                       }}
-                      className="px-1 text-[10px] text-text-tertiary hover:text-red-500 transition-colors"
+                      className="ml-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[11px] text-text-tertiary hover:bg-red-50 hover:text-red-500 transition-colors"
                       title="删除会话"
                     >
                       ×
@@ -320,6 +333,23 @@ export default function ChatInterface() {
           )}
 
           <div className="flex-1 overflow-y-auto px-6 py-8">
+            {/* 降级模式提示 */}
+            {degraded && (
+              <div className="max-w-3xl mx-auto mb-5 rounded-2xl border border-amber-200/60 bg-amber-50/80 backdrop-blur-xl px-4 py-3 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="relative flex h-2.5 w-2.5 mt-1.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-amber-900">离线模式</p>
+                    <p className="text-xs text-amber-700/80 mt-0.5 leading-relaxed">
+                      当前 AI API 连接异常，已切换为离线模式。系统会自动重试恢复连接，恢复后将解除此提示。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="max-w-3xl mx-auto space-y-6">
               {messages.length === 0 ? (
                 <EmptyState
@@ -353,23 +383,23 @@ export default function ChatInterface() {
         </div>
 
         {mode === "memory" && (
-          <div className="w-80 lg:w-96 bg-surface border-l border-border flex flex-col">
-            <div className="px-5 py-4 border-b border-border">
-              <h3 className="text-sm font-semibold text-text-primary">
+          <div className="w-80 lg:w-96 bg-surface/70 border-l border-border/60 backdrop-blur-xl flex flex-col">
+            <div className="px-5 py-4 border-b border-border/60">
+              <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
                 选择记忆
                 {selectedMemoryIds.size > 0 && (
-                  <span className="ml-2 text-xs font-normal text-accent">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-accent/10 text-accent border border-accent/20">
                     已选 {selectedMemoryIds.size} 条
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-text-tertiary mt-0.5">
+              <p className="text-xs text-text-tertiary mt-1">
                 {availableMemories.length > 0
                   ? `共 ${availableMemories.length} 条，勾选后作为对话上下文`
                   : "暂无记忆，先去导入一些吧"}
               </p>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {availableMemories.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-text-secondary">暂无记忆</p>
@@ -379,56 +409,72 @@ export default function ChatInterface() {
                 availableMemories.map((memory) => {
                   const isSelected = selectedMemoryIds.has(memory.id);
                   return (
-                    <label
+                    <SpotlightCard
                       key={memory.id}
-                      className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
+                      spotlightColor="rgba(142, 113, 166, 0.10)"
+                      className={`p-0 cursor-pointer transition-all duration-300 ${
                         isSelected
-                          ? "bg-accent/10 border border-accent/30"
-                          : "hover:bg-muted border border-transparent"
+                          ? "border-accent/30 bg-accent/[0.04]"
+                          : "hover:border-border-strong"
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {
-                          setSelectedMemoryIds((prev) => {
-                            const next = new Set(prev);
-                            if (isSelected) {
-                              next.delete(memory.id);
-                            } else {
-                              next.add(memory.id);
-                            }
-                            return next;
-                          });
-                        }}
-                        className="mt-0.5 h-4 w-4 rounded accent-accent"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-text-primary truncate">
-                          {display(memory).title}
-                        </p>
-                        <p className="text-xs text-text-tertiary mt-0.5 line-clamp-2">
-                          {memory.summaryZh || memory.summary}
-                        </p>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {display(memory).tags.slice(0, 3).map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-muted text-text-tertiary"
-                            >
-                              {tag}
-                            </span>
-                          ))}
+                      <label className="flex items-start gap-3 p-3 cursor-pointer">
+                        <span
+                          className={`mt-0.5 h-4 w-4 shrink-0 rounded border transition-all duration-200 flex items-center justify-center ${
+                            isSelected
+                              ? "bg-accent border-accent"
+                              : "border-border bg-surface hover:border-accent/50"
+                          }`}
+                        >
+                          {isSelected && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-accent-text">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setSelectedMemoryIds((prev) => {
+                              const next = new Set(prev);
+                              if (isSelected) {
+                                next.delete(memory.id);
+                              } else {
+                                next.add(memory.id);
+                              }
+                              return next;
+                            });
+                          }}
+                          className="sr-only"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-text-primary truncate">
+                            {display(memory).title}
+                          </p>
+                          <p className="text-xs text-text-tertiary mt-0.5 line-clamp-2">
+                            {memory.summaryZh || memory.summary}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {display(memory).tags.slice(0, 3).map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-block px-1.5 py-0.5 text-[10px] rounded-full bg-muted/70 text-text-tertiary border border-border/60"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </label>
+                      </label>
+                    </SpotlightCard>
                   );
                 })
               )}
             </div>
 
             {relatedMemories.length > 0 && (
-              <div className="border-t border-border">
+              <div className="border-t border-border/60 bg-surface/40">
                 <div className="px-5 py-3">
                   <h3 className="text-sm font-semibold text-text-primary">相关记忆</h3>
                   <p className="text-xs text-text-tertiary mt-0.5">

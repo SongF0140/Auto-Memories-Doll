@@ -136,15 +136,24 @@ export class ChatHandler {
     }
 
     // MCP 工具（所有模式可用）
+    // 为每个 MCP 工具包装 execute：调用 mcpManager.callTool 转发到远端服务器
+    // 失败时返回错误字符串供模型感知，避免无 execute 的工具被模型调用后卡住
     try {
       const mcpTools = await this.mcpManager.listAllTools();
-      for (const { tools } of mcpTools) {
+      for (const { serverId, tools } of mcpTools) {
         for (const t of tools) {
+          const toolName = t.name;
           defs.push({
-            name: t.name,
-            description: t.description || `MCP tool: ${t.name}`,
+            name: toolName,
+            description: t.description || `MCP tool: ${toolName}`,
             parameters: t.inputSchema || {},
-            execute: undefined, // MCP 工具由 MCP 服务端自行执行
+            execute: async (args: Record<string, unknown>) => {
+              try {
+                return await this.mcpManager.callTool(serverId, toolName, args);
+              } catch (error) {
+                return `MCP 工具 "${toolName}" 执行失败: ${(error as Error).message}`;
+              }
+            },
           });
         }
       }
@@ -219,7 +228,7 @@ ${conversationHistory}
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage) return "";
 
-    const memories = this.memoryService.listMemories();
+    const memories = this.memoryService.listMemories({ limit: 500 });
     if (memories.length === 0) return "";
 
     const memoryMap = new Map(memories.map((m) => [m.id, m]));
@@ -233,10 +242,10 @@ ${conversationHistory}
       }
     }
 
-    // 向量检索补充相关记忆
+    // 向量检索补充相关记忆 + MMR 重排（相关性与多样性平衡，避免主题重复）
     const results = await this.vectorRetriever.search(lastMessage.content, 10);
     const profileTags = await readProfileTags();
-    const rankedResults = this.ranker.rank(results, memoryMap, profileTags);
+    const rankedResults = this.ranker.rankWithMMR(results, memoryMap, profileTags);
 
     const relevantMemories: MemoryRecord[] = [...selectedMemories];
 
@@ -248,7 +257,9 @@ ${conversationHistory}
       }
     }
 
-    relevantMemories.forEach((m) => this.memoryService.incrementAccess(m.id));
+    // 注：访问计数（incrementAccess）不应在自动召回时触发，按 AGENTS.md 4.8
+    // "搜索回写由前端搜索命中事件触发"——只有用户主动点击/查看记忆时才递增，
+    // 否则每次对话都会推高 accessCount 导致 heatScore 失真。
 
     // 图谱扩展：纳入关联记忆的邻居
     const expandedIds = new Set(relevantMemories.map((m) => m.id));

@@ -5,6 +5,7 @@ import { AiConfig, McpServerConfig, SkillConfig } from "../../types/config";
 import AiConfigForm from "./AiConfigForm";
 import McpServerList from "./McpServerList";
 import SkillList from "./SkillList";
+import { MagicCard } from "../ui/magic-card";
 
 type Tab = "ai" | "mcp" | "skills";
 
@@ -80,48 +81,60 @@ export default function SettingsPanel() {
           <p className="section-subtitle mt-1">配置 AI 提供商、MCP 服务器和技能</p>
         </div>
 
-        <div className="flex gap-2 mb-8 border-b border-border pb-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? "border-accent text-accent"
-                  : "border-transparent text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              {tab.label}
-              <span className="block text-xs font-normal text-text-tertiary mt-0.5">
-                {tab.description}
-              </span>
-            </button>
-          ))}
+        <div className="flex gap-2 mb-8 p-1.5 rounded-2xl bg-muted/50 border border-border backdrop-blur-sm w-fit">
+          {tabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative px-5 py-2.5 rounded-xl text-left transition-all duration-300 ${
+                  active
+                    ? "bg-surface shadow-sm border border-border-strong"
+                    : "bg-transparent border border-transparent hover:bg-surface/60 hover:border-border"
+                }`}
+              >
+                {active && (
+                  <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent/5 to-[#b88735]/5 pointer-events-none" />
+                )}
+                <span
+                  className={`relative z-10 block text-sm font-semibold ${
+                    active ? "text-accent" : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  {tab.label}
+                </span>
+                <span className="relative z-10 block text-[11px] text-text-tertiary mt-0.5">
+                  {tab.description}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="animate-fade-in">
           {activeTab === "ai" && (
-            <div className="card">
+            <MagicCard className="p-6">
               <h3 className="text-lg font-semibold text-text-primary mb-1">AI 配置</h3>
               <p className="text-sm text-text-tertiary mb-6">
                 连接到你的首选 AI 提供商。支持 OpenAI、OpenAI 兼容接口和自定义提供商。
               </p>
               <AiConfigForm config={aiConfig} onSave={saveAiConfig} saving={saving} />
-            </div>
+            </MagicCard>
           )}
 
           {activeTab === "mcp" && (
-            <div>
+            <MagicCard className="p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-text-primary mb-1">MCP 服务器</h3>
                 <p className="text-sm text-text-tertiary">连接外部 MCP 服务器来扩展能力。</p>
               </div>
               <McpServerList servers={mcpServers} onChange={setMcpServers} />
-            </div>
+            </MagicCard>
           )}
 
           {activeTab === "skills" && (
-            <div>
+            <MagicCard className="p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-text-primary mb-1">技能</h3>
                 <p className="text-sm text-text-tertiary">
@@ -129,7 +142,7 @@ export default function SettingsPanel() {
                 </p>
               </div>
               <SkillList skills={skills} onChange={setSkills} />
-            </div>
+            </MagicCard>
           )}
         </div>
       </div>

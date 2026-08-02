@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q");
   const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "10")));
+  // 可选相似度阈值：默认 0.3（与 VectorRetriever 默认一致），传 0 表示不过滤
+  const threshold = Math.max(0, Math.min(1, parseFloat(searchParams.get("threshold") || "0.3")));
 
   if (!query) {
     return NextResponse.json(apiError(ErrorCode.VALIDATION_FAILED, "query parameter 'q' is required"), { status: 400 });
@@ -18,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // 向量检索 → 获取候选 memoryId 列表
-    const results = await retriever.search(query, limit);
+    const results = await retriever.search(query, limit, threshold);
 
     // 仅按 ID 逐个加载命中的记忆，不再全量 listMemories
     const formattedResults = results

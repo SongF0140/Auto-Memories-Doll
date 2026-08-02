@@ -8,6 +8,9 @@ import { updateIndexMap } from "../../lib/storage/index-writer";
 import { createFailureRecord } from "../../lib/storage/file-manager";
 import { MemoryValidationError } from "../../lib/errors";
 import { generateId } from "../../lib/utils/id";
+import { logger } from "../../lib/logger";
+
+const LIST_LIMIT = 500;
 
 export class Orchestrator {
   private memoryService: MemoryService;
@@ -17,7 +20,11 @@ export class Orchestrator {
   constructor() {
     this.memoryService = new MemoryService();
     this.auditService = new AuditService();
-    this.auditor = new Auditor();
+    this.auditor = new Auditor({
+      getMemory: (id) => this.memoryService.getMemory(id),
+      dequeueEvent: (memoryId) => this.memoryService.dequeueEvent(memoryId),
+      updateEvent: (event) => this.memoryService.updateEvent(event),
+    });
   }
 
   async processIngest(
@@ -63,21 +70,20 @@ export class Orchestrator {
 
   async processQueue(): Promise<void> {
     const pendingEvents = this.getPendingEvents();
-    const allMemories = this.memoryService.listMemories();
 
     for (const event of pendingEvents) {
-      await this.processEvent(event, allMemories);
+      await this.processEvent(event);
     }
 
     if (pendingEvents.length > 0) {
-      const updatedMemories = this.memoryService.listMemories();
+      const updatedMemories = this.memoryService.listMemories({ limit: LIST_LIMIT });
       await updateIndexMap(updatedMemories).catch((err) =>
-        console.error("Index map update failed:", err),
+        logger.audit.error("Index map update failed", { error: (err as Error).message }),
       );
     }
   }
 
-  private async processEvent(event: PendingEvent, allMemories: MemoryRecord[]): Promise<void> {
+  private async processEvent(event: PendingEvent): Promise<void> {
     try {
       event.status = "processing";
       this.memoryService.updateEvent(event);
@@ -95,17 +101,17 @@ export class Orchestrator {
           candidate.tags,
         );
 
-        const all = this.memoryService.listMemories();
-        await updateIndexMap(all).catch((err) => console.error("Index map update failed:", err));
+        const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
+        await updateIndexMap(all).catch((err) =>
+          logger.audit.error("Index map update failed (new memory)", { error: (err as Error).message }),
+        );
 
         event.status = "done";
         this.memoryService.updateEvent(event);
         return;
       }
 
-      const auditResult = await this.auditor.process(event.memoryId, (id: string) =>
-        this.memoryService.getMemory(id),
-      );
+      const auditResult = await this.auditor.process(event.memoryId);
 
       if (!auditResult) {
         event.status = "failed";
@@ -146,7 +152,7 @@ export class Orchestrator {
       event.retryCount++;
       this.memoryService.updateEvent(event);
       await createFailureRecord(event.memoryId, "orchestrator-process", error as Error).catch(
-        (err) => console.error("Failure record creation failed:", err),
+        (err) => logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
       );
     }
   }

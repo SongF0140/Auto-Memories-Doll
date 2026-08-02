@@ -6,6 +6,7 @@ import { buildVectorRecord } from "../../lib/vector/generator";
 import { getDatabase } from "../../lib/storage/database";
 import { withLock } from "../../lib/storage/lock";
 import { MemoryNotFoundError, MemoryValidationError } from "../../lib/errors";
+import { logger } from "../../lib/logger";
 import Database from "better-sqlite3";
 
 export class MemoryService {
@@ -141,7 +142,7 @@ export class MemoryService {
         vectorIndex.create(vectorRecord);
         this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
       } catch (vectorError) {
-        console.warn("[MemoryService] 向量生成失败，记忆仍会保存:", (vectorError as Error).message);
+        logger.memory.warn("向量生成失败，记忆仍会保存:", { error: (vectorError as Error).message });
       }
       vectorIndex.close();
 
@@ -284,22 +285,36 @@ export class MemoryService {
   }
 
   dequeueEvent(memoryId: string): PendingEvent | null {
-    const stmt = this.db.prepare(`
-      SELECT * FROM pending_events WHERE memoryId = ? AND status = 'pending' ORDER BY createdAt ASC LIMIT 1
-    `);
-    const row = stmt.get(memoryId) as any;
-    if (!row) return null;
+    // 事务包裹 SELECT + UPDATE：保证原子性，防止并发重复消费
+    const transaction = this.db.transaction(() => {
+      const selectStmt = this.db.prepare(`
+        SELECT * FROM pending_events
+        WHERE memoryId = ? AND status = 'pending'
+        ORDER BY createdAt ASC LIMIT 1
+      `);
+      const row = selectStmt.get(memoryId) as any;
+      if (!row) return null;
 
-    return {
-      eventId: row.eventId,
-      memoryId: row.memoryId,
-      sourceType: row.sourceType as PendingEvent["sourceType"],
-      candidate: row.candidate,
-      changedFields: JSON.parse(row.changedFields),
-      createdAt: row.createdAt,
-      status: row.status as PendingEvent["status"],
-      retryCount: row.retryCount,
-    };
+      // 乐观锁：只有 status = 'pending' 的行才 UPDATE
+      const updateStmt = this.db.prepare(`
+        UPDATE pending_events SET status = 'processing' WHERE eventId = ? AND status = 'pending'
+      `);
+      const result = updateStmt.run(row.eventId);
+      if (result.changes === 0) return null; // 被其他消费者抢占
+
+      return {
+        eventId: row.eventId,
+        memoryId: row.memoryId,
+        sourceType: row.sourceType as PendingEvent["sourceType"],
+        candidate: row.candidate,
+        changedFields: JSON.parse(row.changedFields),
+        createdAt: row.createdAt,
+        status: "processing" as PendingEvent["status"],
+        retryCount: row.retryCount,
+      };
+    });
+
+    return transaction();
   }
 
   updateEvent(event: PendingEvent): void {

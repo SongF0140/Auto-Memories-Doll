@@ -21,6 +21,8 @@ docs-zh/
 notes/
 *.private.md
 *.local.md
+架构改进.md
+修补.md
 
 # 用户话题自定义配置（可能含个人偏好）
 **/topics.json

@@ -12,8 +12,12 @@ function generateSessionId(): string {
   return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 安全判断是否在浏览器环境 */
+const isBrowser = () => typeof window !== "undefined";
+
 /** 从 localStorage 恢复会话 */
 function loadSession(sessionId: string): ChatMessage[] | null {
+  if (!isBrowser()) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + sessionId);
     if (!raw) return null;
@@ -25,10 +29,12 @@ function loadSession(sessionId: string): ChatMessage[] | null {
   }
 }
 
-/** 保存会话到 localStorage */
+/** 保存会话到 localStorage（过滤掉 system 消息，恢复时由 ChatHandler 重建系统提示） */
 function saveSession(sessionId: string, messages: ChatMessage[]): void {
+  if (!isBrowser()) return;
   try {
-    localStorage.setItem(STORAGE_KEY_PREFIX + sessionId, JSON.stringify(messages));
+    const persistable = messages.filter((m) => m.role !== "system");
+    localStorage.setItem(STORAGE_KEY_PREFIX + sessionId, JSON.stringify(persistable));
   } catch {
     // localStorage 满时静默失败
   }
@@ -36,6 +42,7 @@ function saveSession(sessionId: string, messages: ChatMessage[]): void {
 
 /** 获取所有已保存的会话 ID 列表 */
 function listSessionIds(): string[] {
+  if (!isBrowser()) return [];
   try {
     const ids: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -52,6 +59,7 @@ function listSessionIds(): string[] {
 
 /** 删除指定会话 */
 function deleteSession(sessionId: string): void {
+  if (!isBrowser()) return;
   try {
     localStorage.removeItem(STORAGE_KEY_PREFIX + sessionId);
   } catch {
@@ -68,32 +76,33 @@ export interface ChatSessionState {
 }
 
 export function useChatSession() {
-  const [state, setState] = useState<ChatSessionState>(() => {
+  // SSR 安全初始化：不访问 localStorage，避免服务端渲染报错
+  const [state, setState] = useState<ChatSessionState>(() => ({
+    sessionId: generateSessionId(),
+    messages: [],
+    mode: "chat",
+    loading: false,
+    sessionIds: [],
+  }));
+
+  // 客户端挂载后从 localStorage 恢复会话和模式
+  useEffect(() => {
+    if (!isBrowser()) return;
     const savedMode = (localStorage.getItem(STORAGE_MODE_KEY) as ChatMode) || "chat";
     const existingIds = listSessionIds();
-    // 尝试恢复最近的会话
     if (existingIds.length > 0) {
-      const msgs = loadSession(existingIds[0]);
-      if (msgs && msgs.length > 0) {
-        return {
-          sessionId: existingIds[0],
-          messages: msgs,
-          mode: savedMode,
-          loading: false,
-          sessionIds: existingIds,
-        };
-      }
+      const msgs = loadSession(existingIds[0]) || [];
+      setState({
+        sessionId: existingIds[0],
+        messages: msgs,
+        mode: savedMode,
+        loading: false,
+        sessionIds: existingIds,
+      });
+    } else {
+      setState((prev) => ({ ...prev, mode: savedMode }));
     }
-    // 无已保存会话，创建新的
-    const newId = generateSessionId();
-    return {
-      sessionId: newId,
-      messages: [],
-      mode: savedMode,
-      loading: false,
-      sessionIds: existingIds,
-    };
-  });
+  }, []);
 
   // 消息变更时自动保存（节流 500ms）
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,7 +121,9 @@ export function useChatSession() {
   // 模式变更时保存
   const setMode = useCallback((mode: ChatMode) => {
     setState((prev) => ({ ...prev, mode }));
-    localStorage.setItem(STORAGE_MODE_KEY, mode);
+    if (isBrowser()) {
+      localStorage.setItem(STORAGE_MODE_KEY, mode);
+    }
   }, []);
 
   const setMessages = useCallback(

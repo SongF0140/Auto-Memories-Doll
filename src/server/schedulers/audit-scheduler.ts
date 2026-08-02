@@ -2,7 +2,7 @@ import { AuditWorker } from "../workers/audit-worker";
 
 export class AuditScheduler {
   private worker: AuditWorker;
-  private intervalId: number | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.worker = new AuditWorker();
@@ -13,7 +13,7 @@ export class AuditScheduler {
 
     this.intervalId = setInterval(async () => {
       await this.worker.retryFailedEvents();
-    }, 60000) as unknown as number;
+    }, 60000);
   }
 
   stop(): void {

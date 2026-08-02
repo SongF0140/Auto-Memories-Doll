@@ -9,6 +9,9 @@ export type ToolCall = {
 export type ToolResult = {
   toolName: string;
   success: boolean;
+  /** 给模型读的自然语言摘要，始终有值 */
+  content: string;
+  /** 给 UI / 日志消费的结构化元数据 */
   data?: unknown;
   error?: string;
 };
@@ -52,6 +55,7 @@ export class ToolCaller {
       return {
         toolName: toolCall.toolName,
         success: false,
+        content: `工具 "${toolCall.toolName}" 未找到`,
         error: `Tool "${toolCall.toolName}" not found`,
       };
     }
@@ -59,25 +63,36 @@ export class ToolCaller {
     // Zod 校验
     const parseResult = entry.schema.safeParse(toolCall.arguments);
     if (!parseResult.success) {
+      const errMsg = `参数校验失败: ${parseResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`;
       return {
         toolName: toolCall.toolName,
         success: false,
-        error: `参数校验失败: ${parseResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+        content: errMsg,
+        error: errMsg,
       };
     }
 
     try {
       const result = await entry.handler(parseResult.data as Record<string, unknown>);
+      // 工具结果分层：content 给模型读（自然语言），data 给 UI/日志（结构化）
+      const resultObj = result as Record<string, unknown> | undefined;
+      const content =
+        resultObj?.content != null
+          ? String(resultObj.content)
+          : JSON.stringify(result);
       return {
         toolName: toolCall.toolName,
         success: true,
+        content,
         data: result,
       };
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       return {
         toolName: toolCall.toolName,
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        content: `工具执行失败: ${errMsg}`,
+        error: errMsg,
       };
     }
   }

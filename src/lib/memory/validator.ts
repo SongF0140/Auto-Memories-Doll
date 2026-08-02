@@ -26,12 +26,18 @@ export const validateMemoryRecord = (record: Partial<MemoryRecord>): record is M
   if (record.accessCount === undefined || typeof record.accessCount !== "number") return false;
   if (record.heatScore === undefined || typeof record.heatScore !== "number") return false;
   if (!record.graphLinks || !Array.isArray(record.graphLinks)) return false;
+  // 可选国际化字段：有值时必须是正确类型
+  if (record.titleZh !== undefined && typeof record.titleZh !== "string") return false;
+  if (record.summaryZh !== undefined && typeof record.summaryZh !== "string") return false;
+  if (record.tagsZh !== undefined && !Array.isArray(record.tagsZh)) return false;
+  if (record.topicZh !== undefined && typeof record.topicZh !== "string") return false;
   return true;
 };
 
 export const validateVectorRecord = (record: Partial<VectorRecord>): record is VectorRecord => {
   if (!record.memoryId || typeof record.memoryId !== "string") return false;
-  if (!record.embedding || !Array.isArray(record.embedding)) return false;
+  // embedding 必须是非空数组：空数组 [] 是 truthy，旧实现用 !record.embedding 会放行
+  if (!Array.isArray(record.embedding) || record.embedding.length === 0) return false;
   if (!record.model || typeof record.model !== "string") return false;
   if (!record.dimensions || typeof record.dimensions !== "number") return false;
   if (!record.updatedAt || typeof record.updatedAt !== "string") return false;
@@ -50,7 +56,11 @@ export const validateGraphEdge = (edge: Partial<GraphEdge>): edge is GraphEdge =
 export const validatePendingEvent = (event: Partial<PendingEvent>): event is PendingEvent => {
   if (!event.eventId || typeof event.eventId !== "string") return false;
   if (!event.memoryId || typeof event.memoryId !== "string") return false;
-  if (!event.sourceType || !["chat", "ingest", "manual", "mcp", "skill"].includes(event.sourceType))
+  // sourceType 白名单必须与 PendingEvent 类型定义一致（含 listen，共 6 种）
+  if (
+    !event.sourceType ||
+    !["chat", "ingest", "manual", "mcp", "skill", "listen"].includes(event.sourceType)
+  )
     return false;
   if (!event.candidate || typeof event.candidate !== "string") return false;
   if (!event.changedFields || !Array.isArray(event.changedFields)) return false;

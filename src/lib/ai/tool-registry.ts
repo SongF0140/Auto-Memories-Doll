@@ -1,6 +1,8 @@
 import { ToolCaller } from "./tool-caller";
 import { MemoryService } from "../../server/services/memory-service";
 import { WikiGraph } from "../graph/wiki-graph";
+import { buildPendingEvent } from "../memory/builder";
+import { generateId } from "../utils/id";
 
 export const registerDefaultTools = (): void => {
   ToolCaller.registerTool(
@@ -9,7 +11,7 @@ export const registerDefaultTools = (): void => {
       const { query, limit } = args as { query: string; limit: number };
       const service = new MemoryService();
       try {
-        const all = service.listMemories();
+        const all = service.listMemories({ limit: 200 });
         const results = all
           .filter(
             (m) =>
@@ -40,11 +42,36 @@ export const registerDefaultTools = (): void => {
       };
       const service = new MemoryService();
       try {
-        const id = await service.createMemory(
-          "tool", "manual",
-          title, content, summary || "", tags,
-        );
-        return { success: true, id, title };
+        const id = generateId();
+        const now = new Date().toISOString();
+        const candidate = {
+          id,
+          version: 1,
+          source: "tool",
+          sourceType: "manual" as const,
+          title,
+          content,
+          summary: summary || "",
+          tags,
+          topic: "uncategorized",
+          createdAt: now,
+          updatedAt: now,
+          accessedAt: now,
+          accessCount: 0,
+          heatScore: 0,
+          graphLinks: [],
+        };
+        const event = buildPendingEvent(id, "manual", candidate, [
+          "title", "content", "summary", "tags",
+        ]);
+        service.enqueueEvent(event);
+        return {
+          success: true,
+          id,
+          title,
+          content: `记忆 "${title}" 已创建（ID: ${id}），等待审计处理。`,
+          data: { memoryId: id, status: "pending_audit" },
+        };
       } finally {
         service.close();
       }
@@ -64,8 +91,16 @@ export const registerDefaultTools = (): void => {
         if (!existing) {
           return { success: false, error: "Memory not found", id };
         }
-        service.updateMemory(id, { ...existing, ...updates } as any);
-        return { success: true, id };
+        const candidate = { ...existing, ...updates, updatedAt: new Date().toISOString() } as typeof existing;
+        const changedFields = Object.keys(updates);
+        const event = buildPendingEvent(id, "manual", candidate, changedFields);
+        service.enqueueEvent(event);
+        return {
+          success: true,
+          id,
+          content: `记忆 "${existing.title}" 更新已入队，等待审计处理。`,
+          data: { memoryId: id, status: "pending_audit" },
+        };
       } finally {
         service.close();
       }

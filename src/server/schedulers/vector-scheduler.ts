@@ -2,7 +2,7 @@ import { VectorWorker } from "../workers/vector-worker";
 
 export class VectorScheduler {
   private worker: VectorWorker;
-  private intervalId: number | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.worker = new VectorWorker();
@@ -15,7 +15,7 @@ export class VectorScheduler {
       } catch (error) {
         console.error("Vector scheduler error:", error);
       }
-    }, 3600000) as unknown as number;
+    }, 3600000);
   }
 
   stop(): void {

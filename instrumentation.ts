@@ -23,12 +23,18 @@ export async function register() {
 
     console.log("[Instrumentation] 调度器已启动: audit / cleanup / vector");
 
+    // 启动 AI API 健康检查（降级恢复）
+    const { ModelAdapter } = await import("./src/lib/ai/model-adapter");
+    ModelAdapter.startHealthCheck();
+    console.log("[Instrumentation] AI API 健康检查已启动");
+
     // 注册进程退出时的优雅关闭
     const shutdown = (signal: string) => {
       console.log(`[Instrumentation] 收到 ${signal}，正在关闭调度器...`);
       auditScheduler?.stop();
       cleanupScheduler?.stop();
       vectorScheduler?.stop();
+      ModelAdapter.stopHealthCheck();
       process.exit(0);
     };
 

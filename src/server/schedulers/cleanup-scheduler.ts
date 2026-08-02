@@ -2,7 +2,7 @@ import { CleanupWorker } from "../workers/cleanup-worker";
 
 export class CleanupScheduler {
   private worker: CleanupWorker;
-  private intervalId: number | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.worker = new CleanupWorker();
@@ -17,7 +17,7 @@ export class CleanupScheduler {
       } catch (error) {
         console.error("Cleanup scheduler error:", error);
       }
-    }, 86400000) as unknown as number;
+    }, 86400000);
   }
 
   stop(): void {

@@ -1,7 +1,6 @@
 import { MemoryRecord, PendingEvent } from "../../types/memory";
 import { compareMemories, extractChangedFields, DiffResult } from "./differ";
 import { resolveConflicts, ConflictResolution } from "./conflict-resolver";
-import { AuditQueue } from "./queue";
 import { VersionManager } from "./version-manager";
 
 export type AuditResult = {
@@ -13,33 +12,28 @@ export type AuditResult = {
   error?: string;
 };
 
+export type MemoryStoreReader = {
+  getMemory: (id: string) => MemoryRecord | null;
+  dequeueEvent: (memoryId: string) => PendingEvent | null;
+  updateEvent: (event: PendingEvent) => void;
+};
+
 export class Auditor {
-  private queue: AuditQueue;
+  private store: MemoryStoreReader;
   private versionManager: VersionManager;
 
-  constructor() {
-    this.queue = new AuditQueue();
+  constructor(store: MemoryStoreReader) {
+    this.store = store;
     this.versionManager = new VersionManager();
   }
 
-  enqueue(event: PendingEvent): void {
-    this.queue.enqueue(event);
-  }
-
-  getPendingCount(): number {
-    return this.queue.size();
-  }
-
-  async process(
-    memoryId: string,
-    getMemory: (id: string) => MemoryRecord | null,
-  ): Promise<AuditResult | null> {
-    const event = this.queue.dequeueByMemoryId(memoryId);
+  async process(memoryId: string): Promise<AuditResult | null> {
+    const event = this.store.dequeueEvent(memoryId);
     if (!event) return null;
 
     try {
       const candidate: MemoryRecord = JSON.parse(event.candidate);
-      const existing = getMemory(event.memoryId);
+      const existing = this.store.getMemory(event.memoryId);
 
       const result: AuditResult = {
         eventId: event.eventId,
@@ -70,11 +64,13 @@ export class Auditor {
       } else if (resolution.action === "manual_decision") {
         result.status = "conflict";
       } else {
+        // reject 路径：schema 不兼容 / 数据损坏 / 格式校验失败
+        // 按 AGENTS.md 4.10 "不可合并——触发人工接管，不写入任何变更"
         result.status = "failed";
+        result.error = resolution.reason;
       }
 
       this.versionManager.createSnapshot(existing, existing.version);
-      this.queue.removeProcessed(event.memoryId);
 
       return result;
     } catch (error) {
