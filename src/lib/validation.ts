@@ -49,11 +49,11 @@ export const ingestRequestSchema = z.object({
 });
 
 export const promptCreateSchema = z.object({
+  id: z.string().min(1, "id 不能为空"),
   name: z.string().min(1, "名称不能为空"),
   content: z.string().min(1, "内容不能为空"),
   variables: z.array(z.string()).default([]),
   description: z.string().optional(),
-  trigger: z.string().optional(),
 });
 
 export const promptUpdateSchema = z.object({
@@ -61,7 +61,6 @@ export const promptUpdateSchema = z.object({
   content: z.string().optional(),
   variables: z.array(z.string()).optional(),
   description: z.string().optional(),
-  trigger: z.string().optional(),
 });
 
 export const mcpServerSchema = z.object({

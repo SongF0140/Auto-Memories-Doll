@@ -5,15 +5,29 @@ import { AiConfig, McpServerConfig, SkillConfig } from "../../types/config";
 import AiConfigForm from "./AiConfigForm";
 import McpServerList from "./McpServerList";
 import SkillList from "./SkillList";
+import StorageConfigForm from "./StorageConfigForm";
+import ToolSourceList from "./ToolSourceList";
 import { MagicCard } from "../ui/magic-card";
+import { ToolWatchSource, ToolType } from "../../types/config";
 
-type Tab = "ai" | "mcp" | "skills";
+type Tab = "ai" | "mcp" | "skills" | "storage" | "tool-sources";
+
+type StorageConfig = {
+  notesPath: string;
+  databasePath: string;
+  updatedAt: string;
+};
+
+type ToolPresets = Record<string, { name: string; toolType: ToolType; path: string; filePattern: string }>;
 
 export default function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<Tab>("ai");
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [skills, setSkills] = useState<SkillConfig[]>([]);
+  const [storageConfig, setStorageConfig] = useState<StorageConfig | null>(null);
+  const [toolSources, setToolSources] = useState<ToolWatchSource[]>([]);
+  const [toolPresets, setToolPresets] = useState<ToolPresets>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -24,14 +38,20 @@ export default function SettingsPanel() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [aiRes, mcpRes, skillRes] = await Promise.all([
+      const [aiRes, mcpRes, skillRes, storageRes, toolRes] = await Promise.all([
         fetch("/api/config/ai"),
         fetch("/api/config/mcp"),
         fetch("/api/config/skills"),
+        fetch("/api/config/storage"),
+        fetch("/api/config/tool-sources"),
       ]);
       setAiConfig(await aiRes.json());
       setMcpServers(await mcpRes.json());
       setSkills(await skillRes.json());
+      setStorageConfig(await storageRes.json());
+      const toolData = await toolRes.json();
+      setToolSources(toolData.sources || []);
+      setToolPresets(toolData.presets || {});
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
@@ -57,6 +77,8 @@ export default function SettingsPanel() {
 
   const tabs: { id: Tab; label: string; description: string }[] = [
     { id: "ai", label: "AI 配置", description: "API 密钥与模型" },
+    { id: "storage", label: "存储路径", description: "笔记与数据库" },
+    { id: "tool-sources", label: "工具采集", description: "Cursor/Codex 等" },
     { id: "mcp", label: "MCP 服务器", description: "外部工具服务" },
     { id: "skills", label: "技能", description: "触发式提示词" },
   ];
@@ -120,6 +142,39 @@ export default function SettingsPanel() {
                 连接到你的首选 AI 提供商。支持 OpenAI、OpenAI 兼容接口和自定义提供商。
               </p>
               <AiConfigForm config={aiConfig} onSave={saveAiConfig} saving={saving} />
+            </MagicCard>
+          )}
+
+          {activeTab === "storage" && storageConfig && (
+            <MagicCard className="p-6">
+              <h3 className="text-lg font-semibold text-text-primary mb-1">存储路径</h3>
+              <p className="text-sm text-text-tertiary mb-6">
+                指定笔记的保存位置。数据库路径固定，笔记可随时迁移到大容量分区，无需重启服务。
+              </p>
+              <StorageConfigForm
+                config={storageConfig}
+                onChanged={async () => {
+                  // 迁移完成后刷新存储配置
+                  const res = await fetch("/api/config/storage");
+                  if (res.ok) setStorageConfig(await res.json());
+                }}
+              />
+            </MagicCard>
+          )}
+
+          {activeTab === "tool-sources" && (
+            <MagicCard className="p-6">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-text-primary mb-1">工具采集源</h3>
+                <p className="text-sm text-text-tertiary">
+                  监听本地 AI 工具（Cursor/Codex/Claude Code 等）的工作目录，自动采集对话会话并整理为笔记。
+                </p>
+              </div>
+              <ToolSourceList
+                sources={toolSources}
+                presets={toolPresets}
+                onChange={setToolSources}
+              />
             </MagicCard>
           )}
 

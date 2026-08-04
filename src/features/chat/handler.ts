@@ -14,6 +14,7 @@ import { ToolCaller } from "../../lib/ai/tool-caller";
 import { registerDefaultTools } from "../../lib/ai/tool-registry";
 import { ProfileUpdater } from "../../server/services/profile-updater";
 import { WikiGraph } from "../../lib/graph/wiki-graph";
+import { ChatClassifier, IntentResult } from "./classifier";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
@@ -28,6 +29,7 @@ export class ChatHandler {
   private skillManager: SkillManager;
   private mcpManager: McpManager;
   private wikiGraph: WikiGraph;
+  private classifier: ChatClassifier;
 
   constructor() {
     this.templateManager = new TemplateManager();
@@ -38,6 +40,7 @@ export class ChatHandler {
     this.skillManager = new SkillManager();
     this.mcpManager = new McpManager();
     this.wikiGraph = new WikiGraph();
+    this.classifier = new ChatClassifier();
     registerDefaultTools();
   }
 
@@ -88,13 +91,18 @@ export class ChatHandler {
     memoryIds?: string[],
   ): Promise<ReadableStream<AiEvent>> {
     const processedMessages = await this.applySkills(messages);
+
+    // 意图分类：本地轻量计算（不耗 LLM），结果注入 prompt 引导模型选择工具与回复风格
+    // 对应《架构检查文档.md》4.4 "分类驱动路由" —— 让 LLM 知道用户意图，而非只看消息内容
+    const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
+    const intent = lastUserMsg ? this.classifier.classify(lastUserMsg.content) : null;
+
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
-    const prompt = this.buildPrompt(processedMessages, memoryContent);
+    const prompt = this.buildPrompt(processedMessages, memoryContent, intent);
 
-    // 对话结束后入队画像分析
-    const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
+    // 对话结束后入队画像分析（lastUserMsg 已在意图分类时获取）
     if (lastUserMsg) {
       ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
     }
@@ -166,11 +174,15 @@ export class ChatHandler {
   }
 
   /**
-   * 构建完整 prompt：缓存前缀（系统提示词 + 用户画像）+ 动态记忆 + 对话历史
+   * 构建完整 prompt：缓存前缀（系统提示词 + 用户画像）+ 意图 + 动态记忆 + 对话历史
+   *
+   * 意图块（intent block）仅在分类结果非 chat 时注入，让 LLM 知道用户意图
+   * 并据此选择工具调用策略与回复风格。
    */
   private buildPrompt(
     messages: { role: string; content: string }[],
     memoryContent: string,
+    intent?: IntentResult | null,
   ): string {
     const promptCache = PromptCache.getInstance();
     const systemPrefix = promptCache.getSystemPrefix(TEMPLATE_HASH);
@@ -181,7 +193,17 @@ export class ChatHandler {
       .map((msg) => `${msg.role}: ${msg.content}`)
       .join("\n");
 
+    const intentBlock =
+      intent && intent.type !== "chat"
+        ? `\n## 用户意图\n${intent.type} (置信度 ${(intent.confidence * 100).toFixed(0)}%)${
+            intent.matchedKeywords.length > 0
+              ? `，命中关键词: ${intent.matchedKeywords.join(", ")}`
+              : ""
+          }`
+        : "";
+
     return `${systemPrefix}
+${intentBlock}
 
 ${memoryBlock}
 

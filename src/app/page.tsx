@@ -10,6 +10,7 @@ import MemorySearch from "../components/memory/MemorySearch";
 import PromptList from "../components/prompt/PromptList";
 import AuditPanel from "../components/audit/AuditPanel";
 import SettingsPanel from "../components/settings/SettingsPanel";
+import ProfilePanel from "../components/profile/ProfilePanel";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("chat");
@@ -22,6 +23,8 @@ export default function HomePage() {
         return <MemoryList />;
       case "search":
         return <MemorySearch />;
+      case "profile":
+        return <ProfilePanel />;
       case "prompt":
         return <PromptList />;
       case "audit":

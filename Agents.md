@@ -14,6 +14,10 @@
 | **工具系统** | Zod schema 校验 + 异步执行器，结果分层为 `content`（给模型）和 `data`（给 UI） | `src/lib/ai/tool-caller.ts` |
 | **会话系统** | 前端内存 + localStorage 持久化，系统消息不保存（恢复时重建） | `src/components/chat/useChatSession.ts` |
 | **提供商目录** | `providers.json` 声明式注册 AI 提供商和模型，零代码接入新端点 | `src/config/providers.json` |
+| **存储路径热重载** | 数据库路径固定（env），笔记路径存 db 配置表可在设置面板修改并自动迁移 | `src/lib/storage/path-resolver.ts` |
+| **工具会话采集** | 监听 Cursor/Codex/Claude Code 工作目录，解析会话文件自动入队 | `src/server/watchers/tool-dir-watcher.ts` |
+| **用户画像演化** | 对话后自动分析画像，相似度 < 0.85 才回写，变更历史记 jsonl 供前端可视化 | `src/server/services/profile-updater.ts` |
+| **浏览器采集** | 定时 copy Chrome/Edge 的 History SQLite，按域名分组总结成笔记 | `src/lib/browser/history-collector.ts` |
 
 ## 1. 文档目标
 本文件用于描述系统架构、数据流、处理阶段、技术边界与推荐技术栈，供 AI 在编写、修改和审查代码时作为统一上下文。
@@ -92,7 +96,8 @@ src/
 │  ├─ chat/                     # 人机交互组件
 │  ├─ prompt/                   # 提示词编辑组件
 │  ├─ memory/                   # 记忆模式相关组件
-│  ├─ settings/                 # 设置页面组件（AI 配置、MCP、Skills）
+│  ├─ profile/                  # 用户画像面板（画像展示 + 演化时间线）
+│  ├─ settings/                 # 设置页面组件（AI 配置、存储路径、工具采集、MCP、Skills）
 │  ├─ common/                   # 公共组件
 │  ├─ ui/                       # Magic UI / Aceternity UI 炫酷组件
 │  └─ audit/                    # 审计相关组件
@@ -111,6 +116,8 @@ src/
 │  ├─ mcp/                      # MCP 接入
 │  ├─ skills/                   # skills 接入
 │  ├─ memory/                   # 记忆抽象
+│  ├─ tools/                    # 工具会话解析器（Codex/Claude Code/Cursor/Markdown/Text）
+│  ├─ browser/                  # 浏览器采集（Chrome/Edge 历史与书签）
 │  ├─ vector/                   # 向量索引与检索
 │  ├─ graph/
 │  │  ├─ wiki-graph.ts          # 文件级 wikilink 图谱（主）
@@ -778,7 +785,6 @@ export type ConflictRecord = {
 |--------|---------------|---------|--------|
 | 队列存储路径 | `src/lib/storage/queue.ts`（第 4.6 节旧版描述） | 已修复：删除 `src/features/audit/queue.ts`（内存 Map），Auditor 统一使用 MemoryService SQLite 队列；dequeueEvent 事务化（悲观锁） | ~~P1~~ |
 | 图谱存储方式 | 第 4.6 节仅描述 `graph_edges` SQLite 表 | 已修复：删除 `manager.ts` 和 `query.ts`，唯一路径为 `wiki-graph.ts` | ~~P2~~ |
-| API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 仅 `memory`/`ingest`/`listen` 路由有内部 Zod 校验，无 route 文件级 export、无响应体 schema、无错误码表 | P2 |
 | sortBy 参数 | 无约束 | 已修复：`SORTABLE_FIELDS` Set 白名单 | ~~P1~~ |
 | memory/search 性能 | 无约束 | 已修复：`listMemories()` 调用处统一加 limit 约束（handler: 500, tool-registry: 200, orchestrator: 500） | ~~P1~~ |
 | 文件锁实现 | 未描述实现细节 | 已修复：`fs.open(path, O_WRONLY \| O_CREAT \| O_EXCL)` 原子操作 | ~~P2~~ |
@@ -798,6 +804,16 @@ export type ConflictRecord = {
 | validatePendingEvent sourceType 白名单 | 第 5.6 节 `sourceType` 含 `listen` | 已修复：`validator.ts` 的 `validatePendingEvent` 白名单补全 `listen`（共 6 种），与 `PendingEvent` 类型定义一致；`/api/listen` 入队事件校验恢复正常 | ~~P1~~ |
 | validateVectorRecord 空数组放行 | 无约束 | 已修复：`validateVectorRecord` 改为 `!Array.isArray(record.embedding) || record.embedding.length === 0`，空数组不再放行 | ~~P3~~ |
 | 访问计数回写入口 | 第 4.8 节"搜索回写由前端搜索命中事件触发" | 已修复：新增 `POST /api/memory/[id]/access` 端点，前端用户点击记忆时调用 `incrementAccess`；配合之前从 `retrieveRelevantMemories` 移除召回时递增的修复，访问计数现在有正确的回写路径 | ~~P2~~ |
+| 预处理管线未接入主路径 | 第 4.6 节"输入归一化：`src/server/pipelines/*`"与《架构检查文档》4.3 "不要让原始输入直接进入索引和记忆" | 已修复：`Orchestrator.processIngest` 接入 `processJsonPipeline`，完成 formatMemoryContent 清洗 + detectDuplicates（与最近 200 条 Jaccard 去重）+ splitText 长文拆包；重复内容抛 `MemoryValidationError` 拒绝入库，多 chunk 合并为 markdown 分段正文 | ~~P0~~ |
+| 分类驱动路由未生效 | 第 4.14 节工具调用流程 + 《架构检查文档》4.4 "分类驱动路由" | 已修复：`ChatHandler.streamResponse` 调用 `ChatClassifier.classify` 对最近 user 消息做本地意图分类，结果注入 prompt 的"用户意图"块（零 LLM 开销），引导模型选择工具与回复风格 | ~~P0~~ |
+| 置信度评分为硬编码常量 | 第 4.11 节"模型与检索约束"未约束置信度算法；《架构检查文档》4.4 要求区分"高可信事实"与"待确认推测" | 已修复：`ChatClassifier`/`MemoryClassifier` 改为 `score = min(0.95, 0.5 + 0.12*命中数 + 0.05*位置加分)`，区分多关键词命中（高可信）与单关键词命中（待确认） | ~~P1~~ |
+| 审计可读文本缺失 | 第 4.10 节"冲突分级策略" + 《架构检查文档》4.7 "markdown 流式转码 + LLM 检查" | 已修复：`AuditReporter.generateMarkdownReport()` 生成按来源/话题分布 + 冲突清单 + 最近记忆的可读 Markdown；`Orchestrator.processQueue` 末尾自动落盘到 `archive/audits/audit-{timestamp}.md` | ~~P1~~ |
+| 画像回写无阈值 | 《架构检查文档》6.3 "回写震荡风险：自动更新 loop 如果太激进，会导致提示词频繁变化、标签漂移" | 已修复：`ProfileUpdater` 新增 `UPDATE_SIMILARITY_THRESHOLD=0.85`，新旧画像行级 Jaccard 相似度 ≥ 阈值时跳过回写，避免 `profile.md` 反复刷新导致 `PromptCache` 震荡 | ~~P2~~ |
+| API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 已修复：`chat/stream/route.ts` 接入 `chatRequestSchema`；`prompt/route.ts` 接入 `promptCreateSchema`；`prompt/[id]/route.ts` 接入 `promptUpdateSchema`；统一 `apiResponse`/`apiError` 包装与 `ErrorCode` 枚举；`validation.ts` 中 `promptCreateSchema` 加必填 `id`、`promptUpdateSchema` 去掉不存在的 `trigger` 字段与 `PromptTemplate` 接口对齐 | ~~P2~~ |
+| 存储路径硬编码 | 第 8 节"本地存储目录：使用 `memory-root/` 作为根目录"未支持运行时可配置 | 已修复：`path-resolver.ts` 改造为 `getDatabasePath()` 固定用 env（避免循环依赖），`getMemoryRoot()` 从 db storage_config 读取带缓存；新增 `StorageMigrationService`（停 watcher→复制→更新 config→invalidatePathCache→重启 watcher）；`/api/config/storage` API（GET/POST/PATCH 预览）；`StorageConfigForm` 前端组件 | ~~P1~~ |
+| 本地工具对话无法采集 | 第 4.6.2 节仅描述 API 监听和书签抓取，无本地工具工作目录采集 | 已修复：新增 `ToolWatchSource` 类型 + `ConfigService` CRUD + `session-parser.ts`（Codex/Claude Code/Cursor/Markdown/Text 五种解析器，递归提取 content）+ `ToolDirWatcher`（多源 chokidar + mtime+size 去重）+ `/api/config/tool-sources` API + `ToolSourceList` 前端组件（预设快速添加） | ~~P1~~ |
+| 用户画像无演化可视化 | 第 4.8 节"profile.md 由审计持久化层更新"但用户无法感知画像变化 | 已修复：`ProfileUpdater` 新增"学习中的领域"区块 + `profile-changelog.jsonl` 变更历史记录 + `getChangelog` 方法 + `/api/profile` API（GET 画像+历史 / POST 手动分析）+ `ProfilePanel` 前端组件（分区块展示 + 演化时间线）+ Navbar 加画像 tab | ~~P2~~ |
+| 浏览器历史未采集 | 第 4.6 节外部能力接入未覆盖浏览器历史 | 已修复：新增 `history-collector.ts`（Chrome/Edge History SQLite copy+读取+Chrome 时间戳转换+域名分组 / Bookmarks JSON 解析+文件夹分组）+ `BrowserCollectScheduler`（历史 30min / 书签 6h，默认 `BROWSER_COLLECT_ENABLED=false` 关闭）+ instrumentation 启动 | ~~P3~~ |
 
 ### 11.2 渐进式路线图
 
@@ -829,6 +845,10 @@ Phase 1 — 核心稳定 [IN PROGRESS]
   [x] 核心模块单元测试（builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService/Auditor，112 用例）
   [x] validator 修复（PendingEvent 白名单补 listen / VectorRecord 空数组拦截 / MemoryRecord zh 字段校验）
   [x] 访问计数回写端点（POST /api/memory/[id]/access）
+  [x] 存储路径热重载（path-resolver 改造 + StorageMigrationService + StorageConfigForm + /api/config/storage）
+  [x] 本地工具采集（session-parser 五种解析器 + ToolDirWatcher + ToolSourceList + /api/config/tool-sources）
+  [x] 用户画像演化可视化（画像加"学习中的领域"区块 + profile-changelog.jsonl + ProfilePanel + /api/profile）
+  [x] 浏览器历史/书签采集（history-collector + BrowserCollectScheduler，默认关闭）
 
 Phase 2 — 会话升级
   [ ] localStorage → JSONL 文件持久化

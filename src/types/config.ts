@@ -42,10 +42,49 @@ export type SkillConfig = {
   updatedAt: string;
 };
 
+export type StorageConfig = {
+  /** 笔记与 markdown 主存储根目录（运行时可热重载） */
+  notesPath: string;
+  /** 上次更新时间，用于缓存失效判断 */
+  updatedAt: string;
+};
+
+/**
+ * 本地工具监听源类型。
+ *
+ * 每种 toolType 对应一种解析策略：
+ * - codex:        ~/.codex/sessions/ 下的 jsonl 文件，每行一个事件 {type, payload}
+ * - claude-code:  ~/.claude/projects/ 下的 jsonl 文件，每行一个消息 {role, message}
+ * - cursor:       ~/.cursor/conversations/ 下的 json 文件，单个对话数组
+ * - markdown:     任意 .md 文件，直接当作笔记内容
+ * - text:         任意 .txt 文件，纯文本处理
+ */
+export type ToolType = "codex" | "claude-code" | "cursor" | "markdown" | "text";
+
+export type ToolWatchSource = {
+  id: string;
+  name: string;
+  /** 工具类型，决定解析策略 */
+  toolType: ToolType;
+  /** 监听目录的绝对路径，如 ~/.codex/sessions */
+  path: string;
+  /** 文件 glob 模式，如 'jsonl' 或 'md' 通配符 */
+  filePattern: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 自动归类的话题名（可选，不填则按工具类型归类） */
+  topic?: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AppConfig = {
   ai: AiConfig;
   mcpServers: McpServerConfig[];
   skills: SkillConfig[];
+  storage: StorageConfig;
+  toolSources: ToolWatchSource[];
 };
 
-export type ConfigSection = "ai" | "mcp" | "skills";
+export type ConfigSection = "ai" | "mcp" | "skills" | "storage" | "tool-sources";

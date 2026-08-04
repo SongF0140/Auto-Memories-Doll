@@ -10,8 +10,9 @@
 import { generateText } from "ai";
 import { createLanguageModel } from "../../lib/ai/provider";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { getProfilePath } from "../../lib/storage/path-resolver";
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from "fs";
+import { getProfilePath, getMemoryRoot } from "../../lib/storage/path-resolver";
+import { join } from "path";
 import { PromptCache } from "../../lib/prompt/cache";
 import { withLock } from "../../lib/storage/lock";
 import { logger } from "../../lib/logger";
@@ -35,6 +36,11 @@ Analyze the conversation and update ONLY the following sections in the profile:
 - Topics they ask about or discuss frequently
 - Domains they show curiosity about
 
+### 学习中的领域
+- New domains/skills the user is actively learning (very important — track learning progress)
+- Specific concepts they're struggling with or exploring
+- Learning resources they reference (books, courses, docs)
+
 ### 沟通风格
 - Preferred interaction style (concise vs detailed, formal vs casual)
 - Language preference indicators
@@ -56,6 +62,9 @@ Output ONLY the updated profile in Chinese, using this format exactly:
 ## 兴趣领域
 - item
 
+## 学习中的领域
+- item
+
 ## 沟通风格
 - item
 
@@ -72,6 +81,8 @@ export class ProfileUpdater {
   private analysisQueue: string[] = [];
   private analysisTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DEBOUNCE_MS = 30000; // 30 秒防抖，避免频繁分析
+  /** 画像相似度阈值：新旧画像 Jaccard 相似度高于此值则跳过回写，防止回写震荡（对应《架构检查文档.md》6.3） */
+  private readonly UPDATE_SIMILARITY_THRESHOLD = 0.85;
 
   static getInstance(): ProfileUpdater {
     if (!this.instance) {
@@ -132,12 +143,26 @@ export class ProfileUpdater {
 
       const updatedProfile = result.text.trim();
       if (updatedProfile && updatedProfile.length > 20) {
+        // 相似度阈值检查：避免画像无明显变化时反复回写导致 prompt 缓存震荡
+        const similarity = this.lineJaccardSimilarity(existingProfile, updatedProfile);
+        if (similarity >= this.UPDATE_SIMILARITY_THRESHOLD) {
+          logger.memory.info("[ProfileUpdater] 画像变化不显著，跳过回写", { similarity: similarity.toFixed(3) });
+          return;
+        }
+
+        // 计算变更摘要（新增了哪些行）
+        const addedLines = this.computeAddedLines(existingProfile, updatedProfile);
+
         await withLock(async () => {
           this.writeProfile(updatedProfile);
+          this.appendChangelog(similarity, addedLines);
         });
         // 画像更新后，让前缀缓存失效
         PromptCache.getInstance().invalidate("system-prefix");
-        logger.memory.info("[ProfileUpdater] 用户画像已更新");
+        logger.memory.info("[ProfileUpdater] 用户画像已更新", {
+          similarity: similarity.toFixed(3),
+          addedLines: addedLines.length,
+        });
       }
     } catch (error) {
       logger.memory.error("[ProfileUpdater] 分析失败:", { error: (error as Error).message });
@@ -163,6 +188,23 @@ export class ProfileUpdater {
     return "";
   }
 
+  /**
+   * 新旧画像的行级 Jaccard 相似度：|交集| / |并集|
+   * 用于判断 LLM 输出是否带来显著变化；完全空画像时返回 0（强制写入）。
+   */
+  private lineJaccardSimilarity(existing: string, updated: string): number {
+    if (!existing) return 0;
+    const setA = new Set(existing.split(/\n+/).map((l) => l.trim()).filter(Boolean));
+    const setB = new Set(updated.split(/\n+/).map((l) => l.trim()).filter(Boolean));
+    if (setA.size === 0 && setB.size === 0) return 1;
+    let intersection = 0;
+    for (const line of setA) {
+      if (setB.has(line)) intersection++;
+    }
+    const union = setA.size + setB.size - intersection;
+    return union > 0 ? intersection / union : 0;
+  }
+
   private writeProfile(content: string): void {
     try {
       const profilePath = getProfilePath();
@@ -170,6 +212,72 @@ export class ProfileUpdater {
       writeFileSync(profilePath, formatted, "utf-8");
     } catch (error) {
       logger.memory.error("[ProfileUpdater] 写入失败:", { error: (error as Error).message });
+    }
+  }
+
+  /**
+   * 计算新旧画像之间新增的行（用于变更摘要）。
+   */
+  private computeAddedLines(existing: string, updated: string): string[] {
+    const existingLines = new Set(
+      existing.split(/\n+/).map((l) => l.trim()).filter(Boolean),
+    );
+    const updatedLines = updated.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    return updatedLines.filter((line) => !existingLines.has(line) && !line.startsWith("#"));
+  }
+
+  /**
+   * 追加一条变更记录到 profile-changelog.jsonl。
+   * 每行一个 JSON 对象，便于流式读取和追加。
+   */
+  private appendChangelog(similarity: number, addedLines: string[]): void {
+    try {
+      const changelogPath = join(getMemoryRoot(), "profile-changelog.jsonl");
+      const entry = {
+        timestamp: new Date().toISOString(),
+        similarity: Number(similarity.toFixed(3)),
+        addedCount: addedLines.length,
+        addedHighlights: addedLines.slice(0, 5), // 最多记录前 5 条新增行作为摘要
+      };
+      appendFileSync(changelogPath, JSON.stringify(entry) + "\n", "utf-8");
+    } catch (error) {
+      logger.memory.error("[ProfileUpdater] 写入变更日志失败:", { error: (error as Error).message });
+    }
+  }
+
+  /**
+   * 读取最近的画像变更历史（供前端可视化）。
+   * @param limit 最多返回条数，默认 20
+   */
+  getChangelog(limit = 20): Array<{
+    timestamp: string;
+    similarity: number;
+    addedCount: number;
+    addedHighlights: string[];
+  }> {
+    try {
+      const changelogPath = join(getMemoryRoot(), "profile-changelog.jsonl");
+      if (!existsSync(changelogPath)) return [];
+      const content = readFileSync(changelogPath, "utf-8");
+      const lines = content.split("\n").filter(Boolean);
+      // 取最后 limit 条
+      const recent = lines.slice(-limit);
+      return recent
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean) as Array<{
+        timestamp: string;
+        similarity: number;
+        addedCount: number;
+        addedHighlights: string[];
+      }>;
+    } catch {
+      return [];
     }
   }
 }

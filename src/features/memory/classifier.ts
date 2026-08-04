@@ -4,80 +4,58 @@ export interface MemoryClassification {
   category: MemoryCategory;
   confidence: number;
   subcategories: string[];
+  matchedKeywords: string[];
 }
 
+/**
+ * 记忆分类器 —— 基于关键词命中率的真实置信度评分。
+ *
+ * 置信度公式：
+ *   base = 0.4（other 兜底）
+ *   + 0.13 * matchedCount     (每命中一个关键词 +0.13)
+ *   + 0.05 * positionBonus     (命中在开头 +0.05)
+ *   上限 0.95
+ *
+ * 与 AGENTS.md 4.4 "置信度评分" 和《架构检查文档.md》4.4 对齐：
+ * 区分"高可信事实"（多关键词命中）与"待确认推测"（单关键词）。
+ */
 export class MemoryClassifier {
+  private static readonly CATEGORY_KEYWORDS: Record<Exclude<MemoryCategory, "other">, string[]> = {
+    knowledge: ["学习", "知识", "了解", "研究", "掌握"],
+    experience: ["经历", "经验", "做过", "遇到", "实践"],
+    task: ["任务", "计划", "待办", "目标", "schedule"],
+    idea: ["想法", "创意", "构思", "灵感", "idea"],
+    note: ["笔记", "记录", "备忘", "摘要", "note"],
+  };
+
   classify(content: string): MemoryClassification {
     const lowerContent = content.toLowerCase();
 
-    if (
-      lowerContent.includes("学习") ||
-      lowerContent.includes("知识") ||
-      lowerContent.includes("了解") ||
-      lowerContent.includes("研究")
-    ) {
-      return {
-        category: "knowledge",
-        confidence: 0.85,
-        subcategories: this.extractSubcategories(content),
-      };
-    }
+    let bestCategory: MemoryCategory = "other";
+    let bestScore = 0.4; // other 兜底置信度
+    let bestMatched: string[] = [];
 
-    if (
-      lowerContent.includes("经历") ||
-      lowerContent.includes("经验") ||
-      lowerContent.includes("做过") ||
-      lowerContent.includes("遇到")
-    ) {
-      return {
-        category: "experience",
-        confidence: 0.8,
-        subcategories: this.extractSubcategories(content),
-      };
-    }
+    for (const [category, keywords] of Object.entries(MemoryClassifier.CATEGORY_KEYWORDS) as Array<
+      [Exclude<MemoryCategory, "other">, string[]]
+    >) {
+      const matched = keywords.filter((kw) => lowerContent.includes(kw.toLowerCase()));
+      if (matched.length === 0) continue;
 
-    if (
-      lowerContent.includes("任务") ||
-      lowerContent.includes("计划") ||
-      lowerContent.includes("待办") ||
-      lowerContent.includes("目标")
-    ) {
-      return {
-        category: "task",
-        confidence: 0.85,
-        subcategories: this.extractSubcategories(content),
-      };
-    }
+      const positionBonus = lowerContent.indexOf(matched[0].toLowerCase()) < 20 ? 0.05 : 0;
+      const score = Math.min(0.95, 0.5 + 0.13 * matched.length + positionBonus);
 
-    if (
-      lowerContent.includes("想法") ||
-      lowerContent.includes("创意") ||
-      lowerContent.includes("构思") ||
-      lowerContent.includes("灵感")
-    ) {
-      return {
-        category: "idea",
-        confidence: 0.8,
-        subcategories: this.extractSubcategories(content),
-      };
-    }
-
-    if (
-      lowerContent.includes("笔记") ||
-      lowerContent.includes("记录") ||
-      lowerContent.includes("备忘")
-    ) {
-      return {
-        category: "note",
-        confidence: 0.85,
-        subcategories: this.extractSubcategories(content),
-      };
+      if (score > bestScore) {
+        bestScore = score;
+        bestCategory = category;
+        bestMatched = matched;
+      }
     }
 
     return {
-      category: "other",
-      confidence: 0.5,
-      subcategories: [],
+      category: bestCategory,
+      confidence: bestScore,
+      subcategories: this.extractSubcategories(content),
+      matchedKeywords: bestMatched,
     };
   }
 
