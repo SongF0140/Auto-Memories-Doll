@@ -16,7 +16,7 @@ interface LoggerConfig {
   enableConsole: boolean;
 }
 
-let config: LoggerConfig = {
+const config: LoggerConfig = {
   level: (process.env.LOG_LEVEL as LogLevel) || "info",
   enableConsole: true,
 };

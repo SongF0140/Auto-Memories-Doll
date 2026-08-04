@@ -47,7 +47,7 @@ export async function startToolDirWatcher(): Promise<void> {
   if (entries.length > 0) return; // 已启动
 
   const configService = new ConfigService();
-  let sources: ToolWatchSource[] = [];
+  let sources: ToolWatchSource[];
   try {
     sources = configService.listEnabledToolSources();
   } finally {

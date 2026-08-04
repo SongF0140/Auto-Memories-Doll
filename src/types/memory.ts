@@ -93,6 +93,8 @@ export type PendingEvent = {
   eventId: string;
   memoryId: string;
   sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen";
+  /** 事件类型：缺省时由消费端按记忆是否存在区分 create/update；delete 必须显式声明 */
+  eventType?: "create" | "update" | "delete";
   candidate: string;
   changedFields: string[];
   createdAt: string;

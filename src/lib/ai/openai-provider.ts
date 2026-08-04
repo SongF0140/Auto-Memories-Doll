@@ -31,12 +31,11 @@ export class OpenAIProvider implements AiProvider {
     modelType?: ModelType;
   }): ReadableStream<AiEvent> {
     const { messages, temperature, tools: toolDefs, readonly, modelType } = options;
-    const self = this;
 
     return new ReadableStream<AiEvent>({
-      async start(controller) {
+      start: async (controller) => {
         try {
-          const model = self.createModel(modelType);
+          const model = this.createModel(modelType);
 
           // 将 AiToolDef 转为 Vercel AI SDK 的 tool 对象
           const sdkTools: Record<string, any> = {};

@@ -98,8 +98,8 @@ export class AgentDispatcher {
     try {
       const toDelete = memoryService.listMemories({ limit: 500 }).find((m) => query.includes(m.title));
       if (toDelete) {
-        memoryService.deleteMemory(toDelete.id);
-        return { type: "json", data: { content: `已删除记忆: ${toDelete.title}` } };
+        memoryService.stageDeleteMemory(toDelete.id);
+        return { type: "json", data: { content: `已提交删除请求，等待审计处理: ${toDelete.title}` } };
       }
       return { type: "json", data: { content: "未找到要删除的记忆，请提供记忆标题。" } };
     } finally {

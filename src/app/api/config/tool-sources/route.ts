@@ -2,30 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConfigService } from "../../../../server/services/config-service";
 import { restartToolDirWatcher } from "../../../../server/watchers/tool-dir-watcher";
 import { ToolType } from "../../../../types/config";
+import { TOOL_PRESETS } from "../../../../config/tool-presets";
 
 const VALID_TOOL_TYPES: ToolType[] = ["codex", "claude-code", "cursor", "markdown", "text"];
-
-/** 常见工具的预设路径，供前端选择 */
-export const TOOL_PRESETS: Record<string, { toolType: ToolType; path: string; filePattern: string; name: string }> = {
-  codex: {
-    name: "Codex CLI",
-    toolType: "codex",
-    path: "~/.codex/sessions",
-    filePattern: "*.jsonl",
-  },
-  "claude-code": {
-    name: "Claude Code",
-    toolType: "claude-code",
-    path: "~/.claude/projects",
-    filePattern: "**/*.jsonl",
-  },
-  cursor: {
-    name: "Cursor",
-    toolType: "cursor",
-    path: "~/.cursor/conversations",
-    filePattern: "*.json",
-  },
-};
 
 /**
  * GET /api/config/tool-sources

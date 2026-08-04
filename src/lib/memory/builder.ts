@@ -44,11 +44,13 @@ export const buildPendingEvent = (
   sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
   candidate: MemoryRecord,
   changedFields: string[],
+  eventType?: "create" | "update" | "delete",
 ): PendingEvent => {
   return {
     eventId: generateId(),
     memoryId,
     sourceType,
+    eventType,
     candidate: JSON.stringify(candidate),
     changedFields,
     createdAt: getCurrentTime(),

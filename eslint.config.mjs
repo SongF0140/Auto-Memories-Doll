@@ -9,6 +9,39 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Node.js 配置文件（CommonJS module.exports）
+  {
+    files: ["*.config.js", "*.config.mjs", "next.config.js", "postcss.config.js", "tailwind.config.js"],
+    languageOptions: {
+      globals: {
+        module: "readonly",
+        require: "readonly",
+        process: "readonly",
+        __dirname: "readonly",
+        console: "readonly",
+      },
+    },
+  },
+  // 浏览器脚本（public/ 下的 JS 文件）
+  {
+    files: ["public/**/*.js"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        location: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        console: "readonly",
+        URL: "readonly",
+        navigator: "readonly",
+        localStorage: "readonly",
+      },
+    },
+  },
   {
     plugins: {
       "@next/next": nextPlugin,

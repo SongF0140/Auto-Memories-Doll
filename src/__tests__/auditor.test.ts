@@ -73,7 +73,7 @@ function makeMockStore(opts: {
   memory?: MemoryRecord | null;
   event?: PendingEvent | null;
 }): MemoryStoreReader & { updateEventCalls: PendingEvent[]; dequeueCalls: number } {
-  let currentMemory = opts.memory !== undefined ? opts.memory : null;
+  const currentMemory = opts.memory !== undefined ? opts.memory : null;
   let currentEvent = opts.event ?? null;
   let dequeueCount = 0;
   const updateCalls: PendingEvent[] = [];

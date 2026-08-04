@@ -23,10 +23,9 @@ export class FakeProvider implements AiProvider {
     readonly?: boolean;
   }): ReadableStream<AiEvent> {
     const responseText = this.responses[0] || "假回复";
-    const self = this;
 
     return new ReadableStream<AiEvent>({
-      start(controller) {
+      start: (controller) => {
         controller.enqueue({ type: "text_start" });
         controller.enqueue({ type: "text_delta", content: responseText });
         controller.enqueue({ type: "text_end" });

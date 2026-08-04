@@ -58,6 +58,7 @@ export class MemoryService {
         eventId TEXT PRIMARY KEY,
         memoryId TEXT,
         sourceType TEXT,
+        eventType TEXT,
         candidate TEXT,
         changedFields TEXT,
         createdAt TEXT,
@@ -65,6 +66,12 @@ export class MemoryService {
         retryCount INTEGER
       )
     `);
+    // 迁移：旧数据库的 pending_events 可能缺少 eventType 列
+    try {
+      this.db.exec(`ALTER TABLE pending_events ADD COLUMN eventType TEXT`);
+    } catch {
+      // 列已存在，跳过
+    }
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS conflict_records (
         conflictId TEXT PRIMARY KEY,
@@ -223,6 +230,19 @@ export class MemoryService {
     return event.eventId;
   }
 
+  /**
+   * 外部入口统一使用：生成待删除记忆的 PendingEvent 并入队。
+   * 实际删除由 Orchestrator 在消费队列时完成，保证删除操作同样经过审计队列。
+   */
+  stageDeleteMemory(memoryId: string): string {
+    const existing = this.getMemory(memoryId);
+    if (!existing) throw new MemoryNotFoundError(memoryId);
+
+    const event = buildPendingEvent(memoryId, existing.sourceType, existing, [], "delete");
+    this.enqueueEvent(event);
+    return event.eventId;
+  }
+
   getMemory(id: string): MemoryRecord | null {
     const stmt = this.db.prepare("SELECT * FROM memories WHERE id = ?");
     const row = stmt.get(id) as any;
@@ -342,13 +362,14 @@ export class MemoryService {
   enqueueEvent(event: PendingEvent): void {
     const stmt = this.db.prepare(`
       INSERT INTO pending_events (
-        eventId, memoryId, sourceType, candidate, changedFields, createdAt, status, retryCount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        eventId, memoryId, sourceType, eventType, candidate, changedFields, createdAt, status, retryCount
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       event.eventId,
       event.memoryId,
       event.sourceType,
+      event.eventType || null,
       event.candidate,
       JSON.stringify(event.changedFields),
       event.createdAt,
@@ -379,6 +400,7 @@ export class MemoryService {
         eventId: row.eventId,
         memoryId: row.memoryId,
         sourceType: row.sourceType as PendingEvent["sourceType"],
+        eventType: (row.eventType || undefined) as PendingEvent["eventType"],
         candidate: row.candidate,
         changedFields: JSON.parse(row.changedFields),
         createdAt: row.createdAt,
@@ -405,6 +427,7 @@ export class MemoryService {
       eventId: row.eventId,
       memoryId: row.memoryId,
       sourceType: row.sourceType as PendingEvent["sourceType"],
+      eventType: (row.eventType || undefined) as PendingEvent["eventType"],
       candidate: row.candidate,
       changedFields: JSON.parse(row.changedFields),
       createdAt: row.createdAt,

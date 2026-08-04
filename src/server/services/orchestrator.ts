@@ -154,13 +154,27 @@ export class Orchestrator {
 
   private async processEvent(event: PendingEvent): Promise<string | void> {
     try {
-      event.status = "processing";
-      this.memoryService.updateEvent(event);
-
       const candidate: MemoryRecord = JSON.parse(event.candidate);
+
+      // 删除事件：直接删除记忆，不经过审计差异比对
+      if (event.eventType === "delete") {
+        event.status = "processing";
+        this.memoryService.updateEvent(event);
+
+        this.memoryService.deleteMemory(event.memoryId);
+
+        event.status = "done";
+        this.memoryService.updateEvent(event);
+        return;
+      }
+
       const existing = this.memoryService.getMemory(event.memoryId);
 
       if (!existing) {
+        // 新建路径：声明 processing 占位，避免并发重复创建
+        event.status = "processing";
+        this.memoryService.updateEvent(event);
+
         const filterResult = await this.qualityFilter.filter(candidate);
         if (!filterResult.ok) {
           event.status = "failed";
@@ -205,6 +219,8 @@ export class Orchestrator {
         return newId;
       }
 
+      // 更新路径：由 Auditor.process → dequeueEvent 原子声明（pending → processing）。
+      // 此处不能再提前置为 processing，否则 dequeueEvent 查不到 pending 事件会返回 null。
       const auditResult = await this.auditor.process(event.memoryId);
 
       if (!auditResult) {
