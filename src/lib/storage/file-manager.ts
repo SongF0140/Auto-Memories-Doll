@@ -9,6 +9,7 @@ import {
 } from "./path-resolver";
 import { sanitizeFilename } from "../utils/normalization";
 import { recordWrite } from "./write-tracker";
+import { logger } from "../logger";
 
 export const ensureDirectory = async (path: string): Promise<void> => {
   try {
@@ -29,7 +30,11 @@ export const initializeMemoryRoot = async (): Promise<void> => {
 export const readFile = async (path: string): Promise<string> => {
   try {
     return await fs.readFile(path, "utf-8");
-  } catch {
+  } catch (error) {
+    // 文件不存在是正常情况，其他错误记录日志
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      logger.storage.warn(`读取文件失败: ${path}`, { error: (error as Error).message });
+    }
     return "";
   }
 };
@@ -49,8 +54,10 @@ export const appendFile = async (path: string, content: string): Promise<void> =
 export const deleteFile = async (path: string): Promise<void> => {
   try {
     await fs.unlink(path);
-  } catch {
-    // File doesn't exist, ignore
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      logger.storage.warn(`删除文件失败: ${path}`, { error: (error as Error).message });
+    }
   }
 };
 
@@ -58,7 +65,10 @@ export const listFiles = async (directory: string): Promise<string[]> => {
   try {
     const files = await fs.readdir(directory);
     return files.filter((f) => f.endsWith(".md"));
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      logger.storage.warn(`列出目录失败: ${directory}`, { error: (error as Error).message });
+    }
     return [];
   }
 };

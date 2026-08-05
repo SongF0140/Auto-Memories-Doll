@@ -46,10 +46,9 @@ export async function POST(request: NextRequest) {
 
   const trimmedPath = notesPath.trim();
 
-  // 禁止设置为数据库所在目录的父级以上（避免误覆盖项目文件）
-  // 这里只做基本校验，详细的安全检查在迁移服务中执行
-  if (trimmedPath === "." || trimmedPath === "..") {
-    return NextResponse.json({ error: "路径不合法" }, { status: 400 });
+  // 禁止路径遍历：不允许包含 .. 片段
+  if (trimmedPath === "." || trimmedPath === ".." || trimmedPath.includes("..")) {
+    return NextResponse.json({ error: "路径不合法：不允许使用 .. 进行路径遍历" }, { status: 400 });
   }
 
   const migrationService = new StorageMigrationService();

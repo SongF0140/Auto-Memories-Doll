@@ -159,7 +159,7 @@ export const registerDefaultTools = (): void => {
           }
 
           if (current.depth < maxDepth) {
-            for (const neighborId of wikiGraph.getNeighbors(current.id)) {
+            for (const neighborId of await wikiGraph.getNeighbors(current.id)) {
               queue.push({ id: neighborId, depth: current.depth + 1 });
             }
           }

@@ -1,8 +1,7 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync, statSync } from "fs";
+import { promises as fs } from "fs";
 import { join, extname } from "path";
 import { getNotesPath } from "../storage/path-resolver";
-import { parseWikilinks } from "../storage/markdown-formatter";
-import { parseMemoryFromFile } from "../storage/markdown-parser";
+import { parseMemoryFromText } from "../storage/markdown-parser";
 
 /**
  * LLMWiki 图谱管理器（文件级）
@@ -17,16 +16,9 @@ import { parseMemoryFromFile } from "../storage/markdown-parser";
  *
  * 性能优化：
  * - 基于文件 mtime 的索引缓存，避免每次调用都全量扫描
- * - 单次文件读取复用（同一文件不重复 readFileSync）
+ * - 单次文件读取复用（每文件只读一次，同时解析 frontmatter + wikilink）
+ * - 增量更新：仅重新索引变更/新增/删除的文件
  */
-
-export type WikilinkRelation = {
-  /** 源记忆 ID */
-  from: string;
-  /** 目标记忆 ID */
-  to: string;
-  /** 关系来源：wikilink 或 frontmatter related 字段 */
-};
 
 export class WikiGraph {
   private notesPath = getNotesPath();
@@ -39,22 +31,20 @@ export class WikiGraph {
   // ── 内部 ──
 
   /** 收集 notesPath 下所有 .md 文件（跳过 archive） */
-  private collectFiles(): string[] {
+  private async collectFiles(): Promise<string[]> {
     const files: string[] = [];
-    this.walkDir(this.notesPath, files);
+    await this.walkDir(this.notesPath, files);
     return files;
   }
 
-  private walkDir(dir: string, results: string[]): void {
-    if (!existsSync(dir)) return;
-
+  private async walkDir(dir: string, results: string[]): Promise<void> {
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
+      const entries = await fs.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = join(dir, entry.name);
         if (entry.isDirectory()) {
           if (entry.name !== "archive") {
-            this.walkDir(fullPath, results);
+            await this.walkDir(fullPath, results);
           }
         } else if (entry.isFile() && extname(entry.name) === ".md") {
           results.push(fullPath);
@@ -65,62 +55,65 @@ export class WikiGraph {
     }
   }
 
-  /** 检测是否有文件变化，有则重建索引 */
-  private ensureIndex(): Map<string, string[]> {
-    const files = this.collectFiles();
+  /** 检测文件变化，无变化返回缓存，有变化则增量 / 全量重建 */
+  private async ensureIndex(): Promise<Map<string, string[]>> {
+    const files = await this.collectFiles();
 
-    // 文件数量变化 → 直接重建
+    // 首次加载或文件数量变化 → 全量重建
     if (this.cachedIndex === null || files.length !== this.fileMtimes.size) {
       return this.rebuildIndex(files);
     }
 
-    // 逐个检查 mtime
+    // 增量检测：找出变更/新增/删除的文件
+    const changed: string[] = [];
+    const currentFiles = new Set(files);
+
     for (const filePath of files) {
       try {
-        const mtime = statSync(filePath).mtimeMs;
-        if (this.fileMtimes.get(filePath) !== mtime) {
-          // 有变化 → 重建整个索引
-          return this.rebuildIndex(files);
+        const stat = await fs.stat(filePath);
+        if (this.fileMtimes.get(filePath) !== stat.mtimeMs) {
+          changed.push(filePath);
         }
       } catch {
-        // 文件不可读 → 重建
-        return this.rebuildIndex(files);
+        changed.push(filePath);
       }
     }
 
-    // 无变化，返回缓存
-    return this.cachedIndex;
+    // 检测已删除的文件
+    const deleted: string[] = [];
+    for (const cachedPath of this.fileMtimes.keys()) {
+      if (!currentFiles.has(cachedPath)) {
+        deleted.push(cachedPath);
+      }
+    }
+
+    if (changed.length === 0 && deleted.length === 0) {
+      return this.cachedIndex;
+    }
+
+    // 有变化 → 增量更新
+    return this.updateIndex(changed, deleted, files);
   }
 
-  /** 全量重建索引并更新缓存 */
-  private rebuildIndex(files: string[]): Map<string, string[]> {
+  /** 第一次或文件数变化 → 全量重建 */
+  private async rebuildIndex(files: string[]): Promise<Map<string, string[]>> {
     const index = new Map<string, string[]>();
     const newMtimes = new Map<string, number>();
 
     for (const filePath of files) {
       try {
-        const mtime = statSync(filePath).mtimeMs;
-        newMtimes.set(filePath, mtime);
+        const stat = await fs.stat(filePath);
+        newMtimes.set(filePath, stat.mtimeMs);
 
-        const record = parseMemoryFromFile(filePath);
+        // 只读一次文件，parseMemoryFromText 已从正文中提取 wikilink
+        // 并合并 frontmatter related 字段到 graphLinks
+        const content = await fs.readFile(filePath, "utf-8");
+        const record = parseMemoryFromText(content);
         if (!record || !record.id) continue;
 
-        // 一次性读取文件内容（parseMemoryFromFile 已经读过，但
-        // frontmatter 解析后剩下的正文部分需要重新读取以提取 wikilink）
-        const content = readFileSync(filePath, "utf-8");
-
-        // frontmatter 中的 related 字段
-        const allLinks = [...record.graphLinks];
-
-        // 正文中的 [[wikilink]]（跳过 frontmatter 区域）
-        const bodyStart = content.indexOf("---\n", 4);
-        const body = bodyStart !== -1 ? content.slice(content.indexOf("\n", bodyStart) + 1) : content;
-        const contentLinks = parseWikilinks(body);
-
-        const merged = [...new Set([...allLinks, ...contentLinks])];
         index.set(
           record.id,
-          merged.filter((id) => id && id !== record.id),
+          record.graphLinks.filter((id) => id && id !== record.id),
         );
       } catch {
         // 跳过无法解析的文件
@@ -132,6 +125,59 @@ export class WikiGraph {
     return index;
   }
 
+  /** 增量更新：仅处理变更和删除的文件 */
+  private async updateIndex(
+    changed: string[],
+    deleted: string[],
+    allFiles: string[],
+  ): Promise<Map<string, string[]>> {
+    const index = new Map(this.cachedIndex!);
+
+    // 处理变更/新增文件：读取一次，同时更新 mtime 和索引条目
+    for (const filePath of changed) {
+      try {
+        const stat = await fs.stat(filePath);
+        this.fileMtimes.set(filePath, stat.mtimeMs);
+
+        const content = await fs.readFile(filePath, "utf-8");
+        const record = parseMemoryFromText(content);
+        if (!record || !record.id) continue;
+
+        index.set(
+          record.id,
+          record.graphLinks.filter((id) => id && id !== record.id),
+        );
+      } catch {
+        // 无法读取 → 跳过
+      }
+    }
+
+    // 处理删除文件：构建 filePath → memoryId 的反向映射来清理
+    // 全量扫描成本太高，改为重建剩余文件列表来检测孤立节点
+    for (const filePath of deleted) {
+      this.fileMtimes.delete(filePath);
+
+      // 重建该路径对应的 memoryId（从缓存 mtime 反查困难，用批量方式清理）
+      // 如果缓存中没有该文件的旧记录，则无法精准删除，全量重建兜底
+      const remainingFiles = allFiles.filter((f) => !deleted.includes(f));
+      if (remainingFiles.length === 0) {
+        this.cachedIndex = new Map();
+        this.fileMtimes.clear();
+        return this.cachedIndex;
+      }
+    }
+
+    // 清理已删除文件对应的旧节点（通过对比 mtime 条目）
+    // 已通过 fileMtimes.delete 处理，但索引中可能残留孤儿节点
+    // 用全量重建兜底
+    if (deleted.length > 0) {
+      return this.rebuildIndex(allFiles);
+    }
+
+    this.cachedIndex = index;
+    return index;
+  }
+
   /** 使缓存失效（外部修改文件后调用） */
   invalidateCache(): void {
     this.cachedIndex = null;
@@ -140,22 +186,23 @@ export class WikiGraph {
 
   // ── 公开查询 ──
 
-  scanAllFiles(): string[] {
+  async scanAllFiles(): Promise<string[]> {
     return this.collectFiles();
   }
 
-  buildIndex(): Map<string, string[]> {
+  async buildIndex(): Promise<Map<string, string[]>> {
     return this.ensureIndex();
   }
 
   /** 查找关联记忆（按出度，即 from → to） */
-  getOutgoingLinks(memoryId: string): string[] {
-    return this.ensureIndex().get(memoryId) || [];
+  async getOutgoingLinks(memoryId: string): Promise<string[]> {
+    const index = await this.ensureIndex();
+    return index.get(memoryId) || [];
   }
 
   /** 查找反向关联（谁引用了这个记忆） */
-  getIncomingLinks(memoryId: string): string[] {
-    const index = this.ensureIndex();
+  async getIncomingLinks(memoryId: string): Promise<string[]> {
+    const index = await this.ensureIndex();
     const incoming: string[] = [];
 
     for (const [sourceId, targets] of index) {
@@ -168,8 +215,8 @@ export class WikiGraph {
   }
 
   /** 获取邻居记忆（出度 + 入度） */
-  getNeighbors(memoryId: string): string[] {
-    const index = this.ensureIndex();
+  async getNeighbors(memoryId: string): Promise<string[]> {
+    const index = await this.ensureIndex();
     const outgoing = index.get(memoryId) || [];
     const incoming: string[] = [];
 
@@ -183,8 +230,8 @@ export class WikiGraph {
   }
 
   /** 搜索路径（BFS，最多 3 跳） */
-  findPath(fromId: string, toId: string, maxDepth: number = 3): string[][] | null {
-    const index = this.ensureIndex();
+  async findPath(fromId: string, toId: string, maxDepth: number = 3): Promise<string[][] | null> {
+    const index = await this.ensureIndex();
     const visited = new Set<string>();
     const queue: { id: string; path: string[] }[] = [{ id: fromId, path: [fromId] }];
 
@@ -208,8 +255,8 @@ export class WikiGraph {
   }
 
   /** 获取图谱统计 */
-  getStats(): { totalNodes: number; totalEdges: number; orphans: number } {
-    const index = this.ensureIndex();
+  async getStats(): Promise<{ totalNodes: number; totalEdges: number; orphans: number }> {
+    const index = await this.ensureIndex();
     let totalEdges = 0;
     let orphans = 0;
 
@@ -226,15 +273,15 @@ export class WikiGraph {
   }
 
   /** 两个记忆之间添加 wikilink（在文件中追加） */
-  addWikilinkToFile(fromFile: string, toMemoryId: string): void {
-    let content = readFileSync(fromFile, "utf-8");
+  async addWikilinkToFile(fromFile: string, toMemoryId: string): Promise<void> {
+    let content = await fs.readFile(fromFile, "utf-8");
 
     // 检查是否已存在该 wikilink
     if (content.includes(`[[${toMemoryId}]]`)) return;
 
     // 追加到文件末尾
     content += `\n[[${toMemoryId}]]\n`;
-    writeFileSync(fromFile, content, "utf-8");
+    await fs.writeFile(fromFile, content, "utf-8");
 
     // 使缓存失效
     this.invalidateCache();

@@ -15,6 +15,7 @@ import { registerDefaultTools } from "../../lib/ai/tool-registry";
 import { ProfileUpdater } from "../../server/services/profile-updater";
 import { WikiGraph } from "../../lib/graph/wiki-graph";
 import { ChatClassifier, IntentResult } from "./classifier";
+import { logger } from "../../lib/logger";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
@@ -202,7 +203,8 @@ export class ChatHandler {
           });
         }
       }
-    } catch {
+    } catch (error) {
+      logger.chat.warn("MCP 工具列表获取失败", { error: (error as Error).message });
       // MCP 不可用不影响核心流程
     }
 
@@ -321,7 +323,7 @@ ${blocks.memoryBlock}
     // 图谱扩展：纳入关联记忆的邻居
     const expandedIds = new Set(relevantMemories.map((m) => m.id));
     for (const mem of relevantMemories) {
-      const neighbors = this.wikiGraph.getNeighbors(mem.id);
+      const neighbors = await this.wikiGraph.getNeighbors(mem.id);
       for (const neighborId of neighbors) {
         if (!expandedIds.has(neighborId)) {
           const neighbor = memoryMap.get(neighborId);

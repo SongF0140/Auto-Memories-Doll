@@ -1,7 +1,7 @@
 import { ConversationData, ConversationMessage } from "../../types/memory";
 import { MemoryExtractor } from "../memory/extractor";
 import { getTopicPath } from "../../lib/storage/path-resolver";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { promises as fs } from "fs";
 import { join } from "path";
 import { generateZhFields } from "../../lib/memory/translator";
 import { formatConversationAsMarkdown } from "../../lib/storage/markdown-formatter";
@@ -78,17 +78,15 @@ export class ConversationProcessor {
     return lines.join("\n");
   }
 
-  ensureTopicDir(topic: string): string {
+  async ensureTopicDir(topic: string): Promise<string> {
     const dirPath = getTopicPath(topic);
-    if (!existsSync(dirPath)) {
-      mkdirSync(dirPath, { recursive: true });
-    }
+    await fs.mkdir(dirPath, { recursive: true });
     return dirPath;
   }
 
   /** 保存为 LLMWiki 格式 Markdown（含 YAML frontmatter + wikilink） */
-  saveConversationFile(data: ConversationData, topic: string): string {
-    const dirPath = this.ensureTopicDir(topic);
+  async saveConversationFile(data: ConversationData, topic: string): Promise<string> {
+    const dirPath = await this.ensureTopicDir(topic);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
     const fileName = `note-${timestamp}.md`;
     const filePath = join(dirPath, fileName);
@@ -97,7 +95,7 @@ export class ConversationProcessor {
     const tags = data.tags || [];
     const markdown = formatConversationAsMarkdown(content, title, tags, topic);
 
-    writeFileSync(filePath, markdown, "utf-8");
+    await fs.writeFile(filePath, markdown, "utf-8");
     return filePath;
   }
 

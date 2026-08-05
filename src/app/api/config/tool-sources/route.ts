@@ -3,6 +3,7 @@ import { ConfigService } from "../../../../server/services/config-service";
 import { restartToolDirWatcher } from "../../../../server/watchers/tool-dir-watcher";
 import { ToolType } from "../../../../types/config";
 import { TOOL_PRESETS } from "../../../../config/tool-presets";
+import { logger } from "../../../../lib/logger";
 
 const VALID_TOOL_TYPES: ToolType[] = ["codex", "claude-code", "cursor", "markdown", "text"];
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     // 重启 watcher 让新源生效
     restartToolDirWatcher().catch((e) => {
-      console.error("[ToolSources] 重启 watcher 失败:", e);
+      logger.storage.error("重启 tool-dir-watcher 失败", { error: (e as Error).message });
     });
 
     return NextResponse.json(created, { status: 201 });

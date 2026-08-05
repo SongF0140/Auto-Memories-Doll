@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     const { title, content, topic } = processor.formatConversation(data);
 
     // 2. 保存对话文件到话题目录
-    const filePath = processor.saveConversationFile(data, topic);
+    const filePath = await processor.saveConversationFile(data, topic);
 
     // 3. 生成知识卡片
     const knowledgeCard = processor.generateKnowledgeCard(data);

@@ -282,15 +282,42 @@ export class MemoryService {
     };
   }
 
-  listMemories(opts?: { limit?: number; offset?: number }): MemoryRecord[] {
+  /** sortBy 字段白名单 —— 防御 SQL 注入，仅允许按这些字段排序 */
+  private static SORTABLE_FIELDS = new Set([
+    "createdAt", "updatedAt", "accessedAt", "accessCount",
+    "heatScore", "title", "sourceType", "topic",
+  ]);
+
+  listMemories(opts?: {
+    limit?: number;
+    offset?: number;
+    sortBy?: string;
+    sortOrder?: "asc" | "desc";
+    tag?: string;
+  }): MemoryRecord[] {
     const limit = opts?.limit ?? -1;
     const offset = opts?.offset ?? 0;
+    const sortBy = opts?.sortBy && MemoryService.SORTABLE_FIELDS.has(opts.sortBy)
+      ? opts.sortBy
+      : "updatedAt";
+    const sortOrder = opts?.sortOrder === "asc" ? "ASC" : "DESC";
+    const tag = opts?.tag?.trim() || undefined;
 
-    let sql = "SELECT * FROM memories ORDER BY updatedAt DESC";
-    if (limit > 0) sql += " LIMIT ? OFFSET ?";
+    const params: unknown[] = [];
+    let whereClause = "";
+    if (tag) {
+      whereClause = "WHERE tags LIKE ?";
+      params.push(`%"${tag}"%`);
+    }
+
+    let sql = `SELECT * FROM memories ${whereClause} ORDER BY ${sortBy} ${sortOrder}`;
+    if (limit > 0) {
+      sql += " LIMIT ? OFFSET ?";
+      params.push(limit, offset);
+    }
 
     const stmt = this.db.prepare(sql);
-    const rows = (limit > 0 ? stmt.all(limit, offset) : stmt.all()) as any[];
+    const rows = (params.length > 0 ? stmt.all(...params) : stmt.all()) as any[];
 
     return rows.map((row) => ({
       id: row.id,
@@ -316,9 +343,16 @@ export class MemoryService {
     }));
   }
 
-  /** 资料库记忆总量（用于去重样本不足时发出警告） */
-  count(): number {
-    const row = this.db.prepare("SELECT COUNT(*) as cnt FROM memories").get() as any;
+  /** 资料库记忆总量（用于去重样本不足时发出警告），可选 tag 过滤 */
+  count(tag?: string): number {
+    let sql = "SELECT COUNT(*) as cnt FROM memories";
+    const tagFilter = tag?.trim();
+    if (tagFilter) {
+      sql += " WHERE tags LIKE ?";
+      const row = this.db.prepare(sql).get(`%"${tagFilter}"%`) as any;
+      return row?.cnt ?? 0;
+    }
+    const row = this.db.prepare(sql).get() as any;
     return row?.cnt ?? 0;
   }
 

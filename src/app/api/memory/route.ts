@@ -16,33 +16,25 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20")));
-  const tag = searchParams.get("tag");
+  const tag = searchParams.get("tag")?.trim() || undefined;
   const rawSortBy = searchParams.get("sortBy") || "updatedAt";
   const sortBy = SORTABLE_FIELDS.has(rawSortBy) ? rawSortBy : "updatedAt";
   const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+  const offset = (page - 1) * pageSize;
 
   const service = new MemoryService();
 
   try {
-    const result = service.listMemories();
-
-    const filtered = tag ? result.filter((m) => m.tags.includes(tag)) : result;
-
-    const orderMul = sortOrder === "asc" ? 1 : -1;
-    filtered.sort((a, b) => {
-      const aVal = (a as any)[sortBy] ?? "";
-      const bVal = (b as any)[sortBy] ?? "";
-      if (typeof aVal === "number" && typeof bVal === "number") {
-        return (aVal - bVal) * orderMul;
-      }
-      return String(aVal).localeCompare(String(bVal)) * orderMul;
+    const items = service.listMemories({
+      limit: pageSize,
+      offset,
+      sortBy,
+      sortOrder: sortOrder as "asc" | "desc",
+      tag,
     });
+    const total = service.count(tag);
 
-    const total = filtered.length;
-    const start = (page - 1) * pageSize;
-    const paged = filtered.slice(start, start + pageSize);
-
-    return NextResponse.json(apiResponse({ items: paged, total, page, pageSize }));
+    return NextResponse.json(apiResponse({ items, total, page, pageSize }));
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     logger.api.error("[Memory] 列表查询失败:", { message });
