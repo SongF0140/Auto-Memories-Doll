@@ -266,6 +266,123 @@ describe("MemoryService — createMemory 完整流程", () => {
   });
 });
 
+describe("MemoryService — listMemories 排序与过滤", () => {
+  it("sorts by title ascending", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "C-标题", "C", "S");
+    await svc.createMemory("test", "manual", "A-标题", "C", "S");
+    await svc.createMemory("test", "manual", "B-标题", "C", "S");
+
+    const result = svc.listMemories({ sortBy: "title", sortOrder: "asc" });
+    expect(result[0].title).toBe("A-标题");
+    expect(result[1].title).toBe("B-标题");
+    expect(result[2].title).toBe("C-标题");
+  });
+
+  it("sorts by createdAt descending (default)", async () => {
+    const svc = new MemoryService();
+    const id1 = await svc.createMemory("test", "manual", "最早", "C", "S");
+    await new Promise((r) => setTimeout(r, 10));
+    const id2 = await svc.createMemory("test", "manual", "最新", "C", "S");
+
+    const result = svc.listMemories({ sortBy: "createdAt", sortOrder: "desc" });
+    expect(result[0].id).toBe(id2); // 最新在前
+    expect(result[1].id).toBe(id1);
+  });
+
+  it("sorts by accessCount ascending with pagination", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "T1", "C", "S");
+    await svc.createMemory("test", "manual", "T2", "C", "S");
+    svc.incrementAccess(svc.listMemories({ sortBy: "title", sortOrder: "asc" })[0].id);
+
+    const result = svc.listMemories({ sortBy: "accessCount", sortOrder: "asc", limit: 2, offset: 0 });
+    expect(result[0].accessCount).toBe(0);
+    expect(result[1].accessCount).toBe(1);
+  });
+
+  it("filters by tag", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "包含标签", "C", "S", ["react"]);
+    await svc.createMemory("test", "manual", "不含标签", "C", "S", ["vue"]);
+    await svc.createMemory("test", "manual", "也包含", "C", "S", ["react", "typescript"]);
+
+    const result = svc.listMemories({ tag: "react" });
+    expect(result).toHaveLength(2);
+    expect(result.every((m) => m.tags.includes("react"))).toBe(true);
+  });
+
+  it("filters by tag with pagination", async () => {
+    const svc = new MemoryService();
+    for (let i = 0; i < 5; i++) {
+      await svc.createMemory("test", "manual", `T${i}`, "C", "S", ["api"]);
+    }
+    await svc.createMemory("test", "manual", "其他", "C", "S", ["other"]);
+
+    const page = svc.listMemories({ tag: "api", limit: 3, offset: 0 });
+    expect(page).toHaveLength(3);
+  });
+
+  it("tag filter combined with sortBy", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "Z-标题", "C", "S", ["ai"]);
+    await svc.createMemory("test", "manual", "A-标题", "C", "S", ["ai"]);
+    await svc.createMemory("test", "manual", "M-标题", "C", "S", ["other"]);
+
+    const result = svc.listMemories({ tag: "ai", sortBy: "title", sortOrder: "asc" });
+    expect(result).toHaveLength(2);
+    expect(result[0].title).toBe("A-标题");
+    expect(result[1].title).toBe("Z-标题");
+  });
+
+  it("invalid sortBy falls back to updatedAt", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "T1", "C", "S");
+    await svc.createMemory("test", "manual", "T2", "C", "S");
+
+    // 传非法字段名不应崩溃，应回退到默认排序
+    const result = svc.listMemories({ sortBy: "malicious; DROP TABLE" as any });
+    expect(result).toHaveLength(2);
+  });
+
+  it("no tag match returns empty list", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "T", "C", "S", ["js"]);
+
+    const result = svc.listMemories({ tag: "nonexistent" });
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe("MemoryService — count with tag filter", () => {
+  it("counts all memories without tag", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "T1", "C", "S");
+    await svc.createMemory("test", "manual", "T2", "C", "S");
+    expect(svc.count()).toBe(2);
+  });
+
+  it("counts memories filtered by tag", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "T1", "C", "S", ["nextjs"]);
+    await svc.createMemory("test", "manual", "T2", "C", "S", ["nextjs"]);
+    await svc.createMemory("test", "manual", "T3", "C", "S", ["python"]);
+
+    expect(svc.count("nextjs")).toBe(2);
+    expect(svc.count("python")).toBe(1);
+  });
+
+  it("count returns 0 for unmatched tag", () => {
+    const svc = new MemoryService();
+    expect(svc.count("nonexistent")).toBe(0);
+  });
+
+  it("count returns 0 for empty database", () => {
+    const svc = new MemoryService();
+    expect(svc.count()).toBe(0);
+  });
+});
+
 describe("MemoryService — CRUD 边界", () => {
   it("getMemory returns null for non-existent id", () => {
     const svc = new MemoryService();
