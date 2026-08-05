@@ -113,7 +113,7 @@ export class MemoryRetentionService {
     const prompt = `请将以下 ${topic} 话题的 ${memories.length} 条历史记忆压缩成一段简洁的中文摘要，保留关键事实、决策和背景，去除重复和琐碎细节。\n\n${input}\n\n摘要：`;
 
     try {
-      const response = await ModelAdapter.generate(prompt, "pro");
+      const response = await ModelAdapter.generate(prompt, "flagship");
       return response.content.trim() || `# ${topic} 历史摘要\n\n${input}`;
     } catch (error) {
       logger.retention.warn("LLM 摘要失败，使用拼接回退", { error: (error as Error).message });

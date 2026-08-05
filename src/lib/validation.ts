@@ -1,16 +1,28 @@
 import { z } from "zod";
 
-export const aiConfigSchema = z.object({
-  provider: z.enum(["openai", "openai-compatible", "anthropic", "custom"]),
-  baseURL: z.string().url("baseURL 必须是有效的 URL"),
-  apiKey: z.string().min(1, "apiKey 不能为空"),
-  chatModel: z.string().min(1, "chatModel 不能为空"),
-  embeddingModel: z.string().min(1, "embeddingModel 不能为空"),
-  embeddingDimensions: z.number().int().min(1).max(8192),
+const modelTierSchema = z.object({
+  model: z.string().min(1, "model 不能为空"),
   maxTokens: z.number().int().min(1).max(131072),
   temperature: z.number().min(0).max(2),
   timeout: z.number().int().min(1000).max(120000),
   maxRetries: z.number().int().min(0).max(10),
+});
+
+const embeddingSchema = z.object({
+  model: z.string().min(1, "embedding model 不能为空"),
+  dimensions: z.number().int().min(1).max(8192),
+  maxConcurrency: z.number().int().min(1).max(50),
+  queueTimeoutMs: z.number().int().min(1000).max(300000),
+});
+
+export const aiConfigSchema = z.object({
+  provider: z.enum(["openai", "openai-compatible", "anthropic", "custom"]),
+  baseURL: z.string().url("baseURL 必须是有效的 URL"),
+  apiKey: z.string().min(1, "apiKey 不能为空"),
+  flagship: modelTierSchema,
+  standard: modelTierSchema,
+  budget: modelTierSchema,
+  embedding: embeddingSchema,
 });
 
 export const chatRequestSchema = z.object({

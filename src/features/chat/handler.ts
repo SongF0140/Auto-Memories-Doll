@@ -21,6 +21,12 @@ const TEMPLATE_HASH = "chat-memory-v3";
 /** Agent 循环最大工具迭代轮次 */
 const MAX_AGENT_ROUNDS = 5;
 
+type SystemBlocks = {
+  systemPrefix: string;
+  intentBlock: string;
+  memoryBlock: string;
+};
+
 export class ChatHandler {
   private templateManager: TemplateManager;
   private memoryService: MemoryService;
@@ -57,9 +63,30 @@ export class ChatHandler {
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
-    const prompt = this.buildPrompt(processedMessages, memoryContent);
+    const blocks = this.buildSystemBlocks(memoryContent);
+    const systemMessage = this.assembleSystemMessage(blocks);
 
-    const response = await ModelAdapter.generate(prompt, "mini");
+    const apiMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+      { role: "system", content: systemMessage },
+      ...processedMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    ];
+
+    const response = await ModelAdapter.generateStream({
+      messages: apiMessages,
+      readonly: true,
+      modelType: "standard",
+    });
+
+    // 非流式响应：从 ReadableStream 收集完整文本
+    let content = "";
+    const reader = response.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value.type === "text_delta" && "content" in value) {
+        content += value.content;
+      }
+    }
 
     // 对话结束后入队画像分析
     const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
@@ -68,7 +95,7 @@ export class ChatHandler {
     }
 
     return {
-      content: response.content,
+      content,
       memoryReferences: [],
     };
   }
@@ -92,15 +119,24 @@ export class ChatHandler {
   ): Promise<ReadableStream<AiEvent>> {
     const processedMessages = await this.applySkills(messages);
 
-    // 意图分类：本地轻量计算（不耗 LLM），结果注入 prompt 引导模型选择工具与回复风格
-    // 对应《架构检查文档.md》4.4 "分类驱动路由" —— 让 LLM 知道用户意图，而非只看消息内容
+    // 意图分类：本地轻量计算（不耗 LLM），结果注入 system prompt 引导模型选择工具与回复风格
     const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
     const intent = lastUserMsg ? this.classifier.classify(lastUserMsg.content) : null;
 
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
-    const prompt = this.buildPrompt(processedMessages, memoryContent, intent);
+    const blocks = this.buildSystemBlocks(memoryContent, intent);
+    const systemMessage = this.assembleSystemMessage(blocks);
+
+    // 系统消息 + 原始对话角色，保留多轮上下文的 role 结构
+    const apiMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+      { role: "system", content: systemMessage },
+      ...processedMessages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    ];
 
     // 对话结束后入队画像分析（lastUserMsg 已在意图分类时获取）
     if (lastUserMsg) {
@@ -111,10 +147,10 @@ export class ChatHandler {
     const toolDefs = await this.collectToolDefs(mode);
 
     return ModelAdapter.generateStream({
-      messages: [{ role: "user", content: prompt }],
+      messages: apiMessages,
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       readonly: mode !== "memory",
-      modelType: "mini",
+      modelType: "standard",
     });
   }
 
@@ -174,24 +210,18 @@ export class ChatHandler {
   }
 
   /**
-   * 构建完整 prompt：缓存前缀（系统提示词 + 用户画像）+ 意图 + 动态记忆 + 对话历史
+   * 构建系统消息的各个区块：缓存前缀 + 意图 + 动态记忆。
+   * 返回分块数据，由调用方决定如何组装到 system 消息中。
    *
-   * 意图块（intent block）仅在分类结果非 chat 时注入，让 LLM 知道用户意图
-   * 并据此选择工具调用策略与回复风格。
+   * 意图块仅在分类结果非 chat 时注入，让 LLM 知道用户意图并据此选择工具调用策略与回复风格。
    */
-  private buildPrompt(
-    messages: { role: string; content: string }[],
+  private buildSystemBlocks(
     memoryContent: string,
     intent?: IntentResult | null,
-  ): string {
+  ): SystemBlocks {
     const promptCache = PromptCache.getInstance();
     const systemPrefix = promptCache.getSystemPrefix(TEMPLATE_HASH);
     const memoryBlock = promptCache.getMemoryCache(memoryContent);
-
-    const conversationHistory = messages
-      .slice(-10)
-      .map((msg) => `${msg.role}: ${msg.content}`)
-      .join("\n");
 
     const intentBlock =
       intent && intent.type !== "chat"
@@ -202,13 +232,17 @@ export class ChatHandler {
           }`
         : "";
 
-    return `${systemPrefix}
-${intentBlock}
+    return { systemPrefix, intentBlock, memoryBlock };
+  }
 
-${memoryBlock}
+  /**
+   * 将系统消息各区块组装为完整 system message 内容。
+   */
+  private assembleSystemMessage(blocks: SystemBlocks): string {
+    return `${blocks.systemPrefix}
+${blocks.intentBlock}
 
-## 对话历史
-${conversationHistory}
+${blocks.memoryBlock}
 
 你现在要以记忆伴侣的身份，根据以上信息为用户提供最贴心的回答。`;
   }

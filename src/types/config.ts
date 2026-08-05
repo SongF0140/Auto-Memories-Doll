@@ -1,16 +1,43 @@
 export type AiProvider = "openai" | "openai-compatible" | "anthropic" | "custom";
 
-export type AiConfig = {
-  provider: AiProvider;
-  baseURL: string;
-  apiKey: string;
-  chatModel: string;
-  embeddingModel: string;
-  embeddingDimensions: number;
+/** 模型分层槽位标识（chat 模型 + embedding 模型） */
+export type ModelSlot = "flagship" | "standard" | "budget" | "embedding";
+
+/** 单层 chat 模型配置（Provider/API Key 共享，仅模型名和参数独立） */
+export type ModelTierConfig = {
+  model: string;
   maxTokens: number;
   temperature: number;
   timeout: number;
   maxRetries: number;
+};
+
+/** Embedding 模型配置 — 独立槽位，字段不同于 chat 模型 */
+export type EmbeddingConfig = {
+  model: string;
+  dimensions: number;
+  /** 最大并发调用数 */
+  maxConcurrency: number;
+  /** 排队超时 (ms) */
+  queueTimeoutMs: number;
+};
+
+/**
+ * AI 配置：provider / baseURL / apiKey 为所有模型共享，
+ * flagship / standard / budget / embedding 各自独立配置模型名和参数。
+ */
+export type AiConfig = {
+  provider: AiProvider;
+  baseURL: string;
+  apiKey: string;
+  /** 旗舰模型 — 分流、评估、审计 */
+  flagship: ModelTierConfig;
+  /** 普通模型 — 对话、代码生成 */
+  standard: ModelTierConfig;
+  /** 廉价模型 — 测试生成、摘要、简单提取 */
+  budget: ModelTierConfig;
+  /** Embedding 模型 — 向量生成与检索 */
+  embedding: EmbeddingConfig;
 };
 
 export type McpServerConfig = {

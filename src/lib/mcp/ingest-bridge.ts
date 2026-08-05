@@ -21,7 +21,7 @@ export type IngestPayload = {
  *    将返回的结构化数据转为 IngestPayload，通过 MemoryService.stageCreateMemory 入队。
  * 2. 遍历已启用的 skills，对标记为 `autoIngest: true` 的 skill 执行采集。
  *
- * 当 MCP 服务器未真正实现协议时（当前 McpManager 是占位实现），自动跳过不报错。
+ * 当 MCP 服务器连接失败或未实现 `collect_memory` 工具时，自动跳过不报错。
  */
 export class McpIngestBridge {
   private mcpManager: McpManager;

@@ -6,8 +6,10 @@ import { OpenAIProvider } from "./openai-provider";
 import { AiProvider, AiEvent } from "./ai-events";
 import { logger } from "../logger";
 import { apiConfig } from "../../config/api.config";
+import { ModelPool, ConcurrencyTimeoutError } from "./model-pool";
+import type { ModelSlot } from "../../types/config";
 
-export type ModelType = "mini" | "pro";
+export type ModelType = "flagship" | "standard" | "budget";
 
 export type LlmResponse = {
   content: string;
@@ -40,8 +42,16 @@ export class ModelAdapter {
   private static isDegraded = false;
   private static healthCheckTimer: ReturnType<typeof setInterval> | null = null;
 
+  /** 全系统模型调用池 — 按层级限制并发，防止 API 请求风暴 */
+  private static pool = new ModelPool(apiConfig.concurrency);
+
   static get isDegradedMode(): boolean {
     return this.isDegraded;
+  }
+
+  /** 获取并发池统计信息 */
+  static getPoolStats() {
+    return this.pool.getStats();
   }
 
   /** 启动健康检查：周期性测试 API 连通性，恢复后自动解除降级 */
@@ -80,17 +90,44 @@ export class ModelAdapter {
     modelType?: ModelType;
   }): ReadableStream<AiEvent> {
     const config = getConfig();
+    const slot: ModelSlot = options.modelType || "standard";
 
     if (!config.apiKey || config.apiKey.trim() === "") {
       return this.createFallbackStream("当前处于离线模式，请前往设置页面配置 AI API Key 和 baseURL。");
     }
 
-    try {
-      const provider = getProvider();
-      return provider.generateStream(options);
-    } catch {
-      return this.createFallbackStream("当前处于离线模式，请检查 AI 配置。");
-    }
+    // 通过池化调度：流创建本身受并发限制，流消费不受限
+    // 创建 ReadableStream 时异步获取槽位，超时则返回降级流
+    return new ReadableStream<AiEvent>({
+      start: async (controller) => {
+        try {
+          const provider = getProvider();
+          const stream = await this.pool.execute(slot, () =>
+            Promise.resolve(provider.generateStream(options)),
+          );
+
+          // 将池化后的流 pipe 到调用方的 controller
+          const reader = stream.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+          controller.close();
+        } catch (error) {
+          if (error instanceof ConcurrencyTimeoutError) {
+            const msg = `[${slot}] 模型并发已满 (${error.timeoutMs}ms 超时)，请稍后重试。`;
+            controller.enqueue({ type: "text_start" } as any);
+            controller.enqueue({ type: "text_delta", content: msg } as any);
+            controller.enqueue({ type: "text_end" } as any);
+            controller.enqueue({ type: "done", finishReason: "error" } as any);
+          } else {
+            controller.enqueue({ type: "error", message: (error as Error).message } as AiEvent);
+          }
+          controller.close();
+        }
+      },
+    });
   }
 
   private static createFallbackStream(message: string): ReadableStream<AiEvent> {
@@ -109,12 +146,16 @@ export class ModelAdapter {
 
   static async generate(prompt: string, modelType: ModelType): Promise<LlmResponse> {
     const config = getConfig();
+    const slot: ModelSlot = modelType;
+    const tier = config[slot] || config.standard;
 
     try {
-      const model = createLanguageModel(modelType);
-      const result = await generateText({
-        model,
-        messages: [{ role: "user", content: prompt }],
+      const result = await this.pool.execute(slot, async () => {
+        const model = createLanguageModel(modelType);
+        return generateText({
+          model,
+          messages: [{ role: "user", content: prompt }],
+        });
       });
 
       this.isDegraded = false;
@@ -122,17 +163,27 @@ export class ModelAdapter {
       return {
         content: result.text,
         finishReason: result.finishReason || "unknown",
-        model: config.chatModel,
+        model: tier.model,
         timestamp: getCurrentTime(),
       };
     } catch (error) {
+      if (error instanceof ConcurrencyTimeoutError) {
+        logger.api.warn(`[generate] ${slot} 并发超时`, { timeoutMs: error.timeoutMs });
+        return {
+          content: this.getFallbackResponse(prompt),
+          finishReason: "degraded",
+          model: tier.model,
+          timestamp: getCurrentTime(),
+        };
+      }
+
       this.isDegraded = true;
       logger.api.error("LLM API 调用失败", { error: (error as Error).message });
 
       return {
         content: this.getFallbackResponse(prompt),
         finishReason: "degraded",
-        model: config.chatModel,
+        model: tier.model,
         timestamp: getCurrentTime(),
       };
     }
@@ -145,28 +196,40 @@ export class ModelAdapter {
       logger.vector.warn("未配置 API Key，跳过向量生成");
       return {
         embedding: [],
-        model: config.embeddingModel,
+        model: config.embedding.model,
         timestamp: getCurrentTime(),
       };
     }
 
     try {
-      const provider = getProvider();
-      const embedding = await provider.generateEmbedding(text);
+      // embedding 使用独立的 embedding 池
+      const embedding = await this.pool.execute("embedding", async () => {
+        const provider = getProvider();
+        return provider.generateEmbedding(text);
+      });
 
       this.isDegraded = false;
       return {
         embedding,
-        model: config.embeddingModel,
+        model: config.embedding.model,
         timestamp: getCurrentTime(),
       };
     } catch (error) {
+      if (error instanceof ConcurrencyTimeoutError) {
+        logger.vector.warn("[generateEmbedding] 并发超时");
+        return {
+          embedding: [],
+          model: config.embedding.model,
+          timestamp: getCurrentTime(),
+        };
+      }
+
       this.isDegraded = true;
       logger.vector.error("Embedding API 调用失败", { error: (error as Error).message });
 
       return {
         embedding: [],
-        model: config.embeddingModel,
+        model: config.embedding.model,
         timestamp: getCurrentTime(),
       };
     }

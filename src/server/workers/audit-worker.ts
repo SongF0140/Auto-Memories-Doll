@@ -31,19 +31,18 @@ export class AuditWorker {
   }
 
   async retryFailedEvents(): Promise<void> {
-    const stmt = this.orchestrator["memoryService"]["db"].prepare(
-      "SELECT * FROM pending_events WHERE status = 'failed' AND retryCount < 3",
-    );
-    const rows = stmt.all() as any[];
+    const retried = this.orchestrator.retryFailedEvents();
+    if (retried > 0) {
+      logger.audit.info(`重试 ${retried} 个失败事件`);
+    }
 
-    for (const row of rows) {
-      const delay = RETRY_DELAYS[row.retryCount] || 60000;
-      await this.sleep(delay);
-
-      const stmtUpdate = this.orchestrator["memoryService"]["db"].prepare(
-        "UPDATE pending_events SET status = 'pending' WHERE eventId = ?",
-      );
-      stmtUpdate.run(row.eventId);
+    // 为重试事件设置递增延迟
+    const pending = this.orchestrator.getPendingEvents();
+    for (const event of pending) {
+      if (event.retryCount > 0) {
+        const delay = RETRY_DELAYS[event.retryCount] || 60000;
+        await this.sleep(delay);
+      }
     }
   }
 

@@ -118,13 +118,19 @@ export const registerDefaultTools = (): void => {
         if (!existing) {
           return { success: false, error: "Memory not found", id };
         }
-        service.deleteMemory(id);
-        return { success: true, id, title: existing.title };
+        service.stageDeleteMemory(id);
+        return {
+          success: true,
+          id,
+          title: existing.title,
+          content: `记忆 "${existing.title}" 删除请求已入队，等待审计处理。`,
+          data: { memoryId: id, status: "pending_audit" },
+        };
       } finally {
         service.close();
       }
     },
-    "删除指定 ID 的记忆记录",
+    "删除指定 ID 的记忆记录（标记删除，经审计队列处理后执行）",
   );
 
   ToolCaller.registerTool(

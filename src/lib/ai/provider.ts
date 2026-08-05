@@ -2,9 +2,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { LanguageModel } from "ai";
 import { ConfigService } from "../../server/services/config-service";
-import { AiConfig } from "../../types/config";
+import { AiConfig, ModelTierConfig } from "../../types/config";
 import { AiServiceError } from "../errors";
-import { apiConfig } from "../../config/api.config";
 import type { ModelType } from "./model-adapter";
 
 function getConfig(): AiConfig {
@@ -16,25 +15,28 @@ function getConfig(): AiConfig {
   }
 }
 
+function getTier(config: AiConfig, modelType?: ModelType): ModelTierConfig {
+  const slot = modelType || "standard";
+  return config[slot];
+}
+
 export function createLanguageModel(modelType?: ModelType): LanguageModel {
   const config = getConfig();
-  const modelName = modelType === "mini" ? apiConfig.miniLlmModel
-    : modelType === "pro" ? apiConfig.proLlmModel
-    : config.chatModel;
+  const tier = getTier(config, modelType);
 
   if (config.provider === "anthropic") {
     const anthropic = createAnthropic({
       apiKey: config.apiKey,
       baseURL: config.baseURL,
     });
-    return anthropic(modelName);
+    return anthropic(tier.model);
   }
 
   const openai = createOpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
   });
-  return openai(modelName);
+  return openai(tier.model);
 }
 
 export function createEmbeddingModel() {
@@ -50,5 +52,5 @@ export function createEmbeddingModel() {
     apiKey: config.apiKey,
     baseURL: config.baseURL,
   });
-  return openai.embedding(config.embeddingModel);
+  return openai.embedding(config.embedding.model);
 }

@@ -23,7 +23,7 @@ export class QualityFilterService {
     const prompt = this.buildPrompt(candidate);
 
     try {
-      const response = await ModelAdapter.generate(prompt, "pro");
+      const response = await ModelAdapter.generate(prompt, "flagship");
       const text = response.content.trim().toUpperCase();
 
       if (text.startsWith("PASS")) {

@@ -2,9 +2,7 @@ import { streamText, smoothStream, tool, isStepCount } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { AiEvent, AiProvider, AiToolDef } from "./ai-events";
-import { AiConfig } from "../../types/config";
-import { apiConfig } from "../../config/api.config";
-import { createLanguageModel } from "./provider";
+import { AiConfig, ModelTierConfig } from "../../types/config";
 import type { ModelType } from "./model-adapter";
 
 /** 指数退避等待 */
@@ -110,7 +108,8 @@ export class OpenAIProvider implements AiProvider {
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    const maxRetries = apiConfig.maxRetries;
+    const tier = this.config.standard;
+    const maxRetries = tier.maxRetries;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -118,14 +117,13 @@ export class OpenAIProvider implements AiProvider {
           apiKey: this.config.apiKey,
           baseURL: this.config.baseURL,
         });
-        const model = openai.embedding(this.config.embeddingModel);
+        const model = openai.embedding(this.config.embedding.model);
         const result = await model.doEmbed({ values: [text] });
         return result.embeddings[0] || [];
       } catch (error) {
         if (attempt === maxRetries) {
           return [];
         }
-        // 指数退避：1s, 2s, 4s...
         await delay(Math.pow(2, attempt) * 1000);
       }
     }
@@ -133,23 +131,27 @@ export class OpenAIProvider implements AiProvider {
     return [];
   }
 
+  /** 根据 ModelType 解析对应 tier 配置 */
+  private getTier(modelType?: ModelType): ModelTierConfig {
+    const tier = modelType || "standard";
+    return this.config[tier];
+  }
+
   private createModel(modelType?: ModelType) {
-    const modelName = modelType === "mini" ? apiConfig.miniLlmModel
-      : modelType === "pro" ? apiConfig.proLlmModel
-      : this.config.chatModel;
+    const tier = this.getTier(modelType);
 
     if (this.config.provider === "anthropic") {
       const anthropic = createAnthropic({
         apiKey: this.config.apiKey,
         baseURL: this.config.baseURL,
       });
-      return anthropic(modelName);
+      return anthropic(tier.model);
     }
 
     const openai = createOpenAI({
       apiKey: this.config.apiKey,
       baseURL: this.config.baseURL,
     });
-    return openai(modelName);
+    return openai(tier.model);
   }
 }

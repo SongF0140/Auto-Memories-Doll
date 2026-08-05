@@ -242,13 +242,33 @@ export class ConfigService {
       provider: "openai-compatible",
       baseURL: "https://api.openai.com/v1",
       apiKey: "",
-      chatModel: "gpt-4o-mini",
-      embeddingModel: "text-embedding-3-small",
-      embeddingDimensions: 1536,
-      maxTokens: 2048,
-      temperature: 0.7,
-      timeout: 30000,
-      maxRetries: 2,
+      flagship: {
+        model: "gpt-4o",
+        maxTokens: 8192,
+        temperature: 0.3,
+        timeout: 60000,
+        maxRetries: 3,
+      },
+      standard: {
+        model: "gpt-4o-mini",
+        maxTokens: 4096,
+        temperature: 0.7,
+        timeout: 30000,
+        maxRetries: 2,
+      },
+      budget: {
+        model: "gpt-4o-mini",
+        maxTokens: 2048,
+        temperature: 0.6,
+        timeout: 15000,
+        maxRetries: 1,
+      },
+      embedding: {
+        model: "text-embedding-3-small",
+        dimensions: 1536,
+        maxConcurrency: 8,
+        queueTimeoutMs: 60000,
+      },
     };
   }
 

@@ -83,10 +83,10 @@ export class McpNotFoundError extends AppError {
 
 /** MCP 服务器未配置 */
 export class McpNotConfiguredError extends AppError {
-  constructor(serverName: string) {
+  constructor(serverName: string, cause?: string) {
     super(
       "MCP_NOT_CONFIGURED",
-      `MCP 服务器 "${serverName}" 尚未配置通信协议。请在设置中为该 MCP 服务器提供有效的 stdio 命令或 SSE 端点。`,
+      `MCP 服务器 "${serverName}" 通信失败${cause ? `: ${cause}` : "：尚未配置通信协议"}`,
       { serverName },
     );
     this.name = "McpNotConfiguredError";

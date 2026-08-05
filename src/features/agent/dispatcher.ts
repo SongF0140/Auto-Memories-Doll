@@ -4,6 +4,7 @@ import { ChatClassifier } from "../chat/classifier";
 import { ChatExtractor } from "../chat/extractor";
 import { ChatHandler } from "../chat/handler";
 import { MemoryService } from "../../server/services/memory-service";
+import { VectorRetriever } from "../../lib/vector/retriever";
 
 export type DispatchResult =
   | { type: "json"; data: Record<string, unknown> }
@@ -65,58 +66,91 @@ export class AgentDispatcher {
     }
   }
 
-  private handleMemoryQuery(query: string): DispatchResult {
+  private async handleMemoryQuery(query: string): Promise<DispatchResult> {
     const memoryService = new MemoryService();
+    const retriever = new VectorRetriever();
     try {
       const searchText = query.replace(/查询|查找|搜索|回忆/g, "").trim();
-      const all = memoryService.listMemories({ limit: 500 });
-      const matched = all.filter(
-        (m) =>
-          m.tags.some((t) => query.includes(t)) ||
-          m.title.includes(searchText) ||
-          m.summary.includes(searchText),
-      );
-      if (matched.length === 0) {
+      if (!searchText) {
+        return { type: "json", data: { content: "请提供要查询的关键词。", memoryReferences: [] } };
+      }
+
+      // 向量语义检索 → 相似度过滤 → top-10
+      const results = await retriever.search(searchText, 10);
+      if (results.length === 0) {
         return { type: "json", data: { content: "没有找到相关记忆。", memoryReferences: [] } };
       }
+
+      // 取 top-5 并发读取记忆详情
+      const topResults = results.slice(0, 5);
+      const memories = topResults
+        .map((r) => memoryService.getMemory(r.memoryId))
+        .filter(Boolean);
+
+      const matched = memories.map((m) => ({
+        memoryId: m!.id,
+        title: m!.title,
+        summary: m!.summary,
+        relevance: topResults.find((r) => r.memoryId === m!.id)?.similarity ?? 0.5,
+      }));
+
       return {
         type: "json",
         data: {
-          content: `找到 ${matched.length} 条相关记忆:\n${matched.map((m) => `- ${m.title}: ${m.summary}`).join("\n")}`,
-          memoryReferences: matched.slice(0, 5).map((m) => ({
-            memoryId: m.id, title: m.title, relevance: 1.0,
-          })),
+          content: `找到 ${matched.length} 条相关记忆:\n${matched.map((m) => `- ${m.title}: ${m.summary} (相似度 ${(m.relevance * 100).toFixed(0)}%)`).join("\n")}`,
+          memoryReferences: matched,
         },
       };
     } finally {
+      retriever.close();
       memoryService.close();
     }
   }
 
-  private handleMemoryDelete(query: string): DispatchResult {
+  private async handleMemoryDelete(query: string): Promise<DispatchResult> {
     const memoryService = new MemoryService();
+    const retriever = new VectorRetriever();
     try {
-      const toDelete = memoryService.listMemories({ limit: 500 }).find((m) => query.includes(m.title));
-      if (toDelete) {
-        memoryService.stageDeleteMemory(toDelete.id);
-        return { type: "json", data: { content: `已提交删除请求，等待审计处理: ${toDelete.title}` } };
+      const searchText = query.replace(/删除|移除|去掉/g, "").trim();
+      if (!searchText) {
+        return { type: "json", data: { content: "请提供要删除的记忆标题或关键词。" } };
       }
-      return { type: "json", data: { content: "未找到要删除的记忆，请提供记忆标题。" } };
+      const results = await retriever.search(searchText, 1);
+      if (results.length === 0) {
+        return { type: "json", data: { content: "未找到要删除的记忆，请提供记忆标题或关键词。" } };
+      }
+      const memory = memoryService.getMemory(results[0].memoryId);
+      if (!memory) {
+        return { type: "json", data: { content: "未找到要删除的记忆。" } };
+      }
+      memoryService.stageDeleteMemory(memory.id);
+      return { type: "json", data: { content: `已提交删除请求，等待审计处理: ${memory.title}` } };
     } finally {
+      retriever.close();
       memoryService.close();
     }
   }
 
-  private handleMemoryUpdate(query: string): DispatchResult {
+  private async handleMemoryUpdate(query: string): Promise<DispatchResult> {
     const memoryService = new MemoryService();
+    const retriever = new VectorRetriever();
     try {
-      const toUpdate = memoryService.listMemories({ limit: 500 }).find((m) => query.includes(m.title));
-      if (toUpdate) {
-        memoryService.stageUpdateMemory(toUpdate.id, { updatedAt: new Date().toISOString() });
-        return { type: "json", data: { content: `已更新记忆（待审计）: ${toUpdate.title}` } };
+      const searchText = query.replace(/更新|修改|变更/g, "").trim();
+      if (!searchText) {
+        return { type: "json", data: { content: "请提供要更新的记忆标题或关键词。" } };
       }
-      return { type: "json", data: { content: "未找到要更新的记忆，请提供记忆标题。" } };
+      const results = await retriever.search(searchText, 1);
+      if (results.length === 0) {
+        return { type: "json", data: { content: "未找到要更新的记忆，请提供记忆标题或关键词。" } };
+      }
+      const memory = memoryService.getMemory(results[0].memoryId);
+      if (!memory) {
+        return { type: "json", data: { content: "未找到要更新的记忆。" } };
+      }
+      memoryService.stageUpdateMemory(memory.id, { updatedAt: new Date().toISOString() });
+      return { type: "json", data: { content: `已更新记忆（待审计）: ${memory.title}` } };
     } finally {
+      retriever.close();
       memoryService.close();
     }
   }

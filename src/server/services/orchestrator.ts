@@ -21,7 +21,12 @@ import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const LIST_LIMIT = 500;
-/** 去重时拉取的最近记忆条数，避免全量加载 */
+/**
+ * 去重时拉取的最近记忆条数。
+ *
+ * 限制：样本量固定，当资料库超过此值时，只对最近
+ * N 条做去重。长期建议改为基于向量的语义去重。
+ */
 const DEDUP_SAMPLE_SIZE = 200;
 
 export class Orchestrator {
@@ -62,9 +67,15 @@ export class Orchestrator {
     tags: string[] = [],
   ): Promise<string> {
     // 1. 预处理：清洗 + 去重 + 拆包
-    const existingContents = this.memoryService
-      .listMemories({ limit: DEDUP_SAMPLE_SIZE })
-      .map((m) => m.content);
+    const allMemories = this.memoryService.listMemories({ limit: DEDUP_SAMPLE_SIZE });
+    const totalCount = this.memoryService.count(); // 资料库总量
+    if (totalCount > DEDUP_SAMPLE_SIZE) {
+      logger.ingest.warn(
+        `资料库已有 ${totalCount} 条记忆，去重仅检查最近 ${DEDUP_SAMPLE_SIZE} 条。` +
+        `建议启用环境变量配置更大的 DEDUP_SAMPLE_SIZE 或升级为向量语义去重。`,
+      );
+    }
+    const existingContents = allMemories.map((m) => m.content);
 
     const pipelineResult = await processJsonPipeline(content, existingContents);
 
@@ -298,8 +309,24 @@ export class Orchestrator {
     }
   }
 
-  private getPendingEvents(): PendingEvent[] {
+  getPendingEvents(): PendingEvent[] {
     return this.memoryService.getPendingEvents();
+  }
+
+  /** 重试失败事件：将 retryCount < 3 的失败事件重置为 pending。供 AuditWorker 调用。 */
+  retryFailedEvents(): number {
+    const memory = this.memoryService;
+    // 导出接口：listPendingEvents 返回完整列表供重试用
+    const pending = memory.getPendingEvents();
+    let retried = 0;
+
+    for (const event of pending) {
+      if (event.status === "failed" && event.retryCount < 3) {
+        memory.updateEvent({ ...event, status: "pending" });
+        retried++;
+      }
+    }
+    return retried;
   }
 
   close(): void {

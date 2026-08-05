@@ -97,18 +97,6 @@ export class ToolCaller {
     }
   }
 
-  /** 用于 Vercel AI SDK 的 tools 参数 */
-  static toAISdkTools(): Record<string, { description: string; parameters: unknown }> {
-    const tools: Record<string, { description: string; parameters: unknown }> = {};
-    for (const [name, entry] of this.tools) {
-      tools[name] = {
-        description: entry.description,
-        parameters: entry.schema,
-      };
-    }
-    return tools;
-  }
-
   static getAvailableTools(): string[] {
     return Array.from(this.tools.keys());
   }

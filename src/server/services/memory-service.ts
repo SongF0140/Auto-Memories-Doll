@@ -10,6 +10,16 @@ import { MemoryNotFoundError, MemoryValidationError } from "../../lib/errors";
 import { logger } from "../../lib/logger";
 import Database from "better-sqlite3";
 
+/** 安全 JSON 解析：损坏数据不崩溃，返回兜底值并记录日志 */
+function safeJsonParse<T>(raw: string, fallback: T, context: string): T {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    logger.memory.warn(`JSON 解析失败 [${context}]，使用兜底值`, { raw: raw.substring(0, 100) });
+    return fallback;
+  }
+}
+
 export class MemoryService {
   private db: Database.Database;
 
@@ -258,8 +268,8 @@ export class MemoryService {
       content: row.content,
       summary: row.summary,
       summaryZh: row.summaryZh || undefined,
-      tags: JSON.parse(row.tags),
-      tagsZh: row.tagsZh ? JSON.parse(row.tagsZh) : undefined,
+      tags: safeJsonParse(row.tags, [] as string[], `memory ${row.id} tags`),
+      tagsZh: row.tagsZh ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`) : undefined,
       topic: row.topic || "uncategorized",
       topicZh: row.topicZh || undefined,
       createdAt: row.createdAt,
@@ -268,7 +278,7 @@ export class MemoryService {
       accessCount: row.accessCount,
       heatScore: row.heatScore,
       vectorId: row.vectorId,
-      graphLinks: JSON.parse(row.graphLinks),
+      graphLinks: safeJsonParse(row.graphLinks, [] as string[], `memory ${row.id} graphLinks`),
     };
   }
 
@@ -292,8 +302,8 @@ export class MemoryService {
       content: row.content,
       summary: row.summary,
       summaryZh: row.summaryZh || undefined,
-      tags: JSON.parse(row.tags),
-      tagsZh: row.tagsZh ? JSON.parse(row.tagsZh) : undefined,
+      tags: safeJsonParse(row.tags, [] as string[], `memory ${row.id} tags`),
+      tagsZh: row.tagsZh ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`) : undefined,
       topic: row.topic || "uncategorized",
       topicZh: row.topicZh || undefined,
       createdAt: row.createdAt,
@@ -302,8 +312,14 @@ export class MemoryService {
       accessCount: row.accessCount,
       heatScore: row.heatScore,
       vectorId: row.vectorId,
-      graphLinks: JSON.parse(row.graphLinks),
+      graphLinks: safeJsonParse(row.graphLinks, [] as string[], `memory ${row.id} graphLinks`),
     }));
+  }
+
+  /** 资料库记忆总量（用于去重样本不足时发出警告） */
+  count(): number {
+    const row = this.db.prepare("SELECT COUNT(*) as cnt FROM memories").get() as any;
+    return row?.cnt ?? 0;
   }
 
   updateMemory(id: string, updates: Partial<MemoryRecord>): void {
@@ -402,7 +418,7 @@ export class MemoryService {
         sourceType: row.sourceType as PendingEvent["sourceType"],
         eventType: (row.eventType || undefined) as PendingEvent["eventType"],
         candidate: row.candidate,
-        changedFields: JSON.parse(row.changedFields),
+        changedFields: safeJsonParse(row.changedFields, [] as string[], `event ${row.eventId} changedFields`),
         createdAt: row.createdAt,
         status: "processing" as PendingEvent["status"],
         retryCount: row.retryCount,
@@ -429,7 +445,7 @@ export class MemoryService {
       sourceType: row.sourceType as PendingEvent["sourceType"],
       eventType: (row.eventType || undefined) as PendingEvent["eventType"],
       candidate: row.candidate,
-      changedFields: JSON.parse(row.changedFields),
+      changedFields: safeJsonParse(row.changedFields, [] as string[], `event ${row.eventId} changedFields`),
       createdAt: row.createdAt,
       status: row.status as PendingEvent["status"],
       retryCount: row.retryCount,
@@ -476,7 +492,7 @@ export class MemoryService {
       memoryId: row.memoryId,
       category: row.category,
       confidence: row.confidence,
-      subcategories: JSON.parse(row.subcategories || "[]"),
+      subcategories: safeJsonParse(row.subcategories || "[]", [] as string[], `classification ${row.memoryId} subcategories`),
       updatedAt: row.updatedAt,
     };
   }
@@ -498,7 +514,7 @@ export class MemoryService {
       memoryId: row.memoryId,
       category: row.category,
       confidence: row.confidence,
-      subcategories: JSON.parse(row.subcategories || "[]"),
+      subcategories: safeJsonParse(row.subcategories || "[]", [] as string[], `classification ${row.memoryId} subcategories`),
       updatedAt: row.updatedAt,
     }));
   }

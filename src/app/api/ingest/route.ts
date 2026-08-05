@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { InputParser } from "../../../features/ingest/parser";
-import { InputNormalizer } from "../../../features/ingest/normalizer";
-import { IngestAdapter } from "../../../features/ingest/adapter";
-import { MemoryService } from "../../../server/services/memory-service";
+import { Orchestrator } from "../../../server/services/orchestrator";
 import { ingestRequestSchema } from "../../../lib/validation";
+import { MemoryValidationError } from "../../../lib/errors";
 import { logger } from "../../../lib/logger";
 
 export async function POST(request: NextRequest) {
@@ -21,40 +19,29 @@ export async function POST(request: NextRequest) {
 
   const { content, format } = parsed.data;
 
-  const parser = new InputParser();
-  const normalizer = new InputNormalizer();
-  const adapter = new IngestAdapter();
-  const memoryService = new MemoryService();
+  const orchestrator = new Orchestrator();
 
   try {
-    let events;
-    if (format === "json") {
-      events = parser.parseJson(content);
-    } else {
-      events = [parser.parseText(content)];
-    }
-
-    const normalizedEvents = normalizer.normalize(events);
-    const memoryRecords = adapter.adaptBatch(normalizedEvents);
-
-    const results = memoryRecords.map((record) =>
-      memoryService.stageCreateMemory(
-        record.source,
-        record.sourceType,
-        record.title,
-        record.content,
-        record.summary,
-        record.tags,
-        record.topic,
-      ),
+    // 文本格式：直接送入 Orchestrator 预处理管线（清洗 → 去重 → 拆包 → 入队）
+    const textContent = format === "json" ? content : content;
+    const eventId = await orchestrator.processIngest(
+      "ingest-api",
+      "ingest",
+      textContent,
+      format === "json" ? "导入的 JSON 数据" : "文本导入",
+      "",
+      [],
     );
 
-    return NextResponse.json({ success: true, memories: results });
+    return NextResponse.json({ success: true, eventId });
   } catch (error) {
+    if (error instanceof MemoryValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : "未知错误";
     logger.api.error("[Ingest] 导入失败:", { message });
     return NextResponse.json({ error: `导入失败: ${message}` }, { status: 500 });
   } finally {
-    memoryService.close();
+    orchestrator.close();
   }
 }

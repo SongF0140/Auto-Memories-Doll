@@ -125,7 +125,7 @@ export class AuditService {
       stmt = this.db.prepare("SELECT * FROM conflict_records");
     }
 
-    const rows = stmt.all(status) as any[];
+    const rows = status ? (stmt.all(status) as any[]) : (stmt.all() as any[]);
     return rows.map((row) => ({
       conflictId: row.conflictId,
       memoryId: row.memoryId,

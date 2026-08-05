@@ -82,4 +82,5 @@ export const logger = {
   vector: createLogger("vector"),
   retention: createLogger("retention"),
   quality: createLogger("quality"),
+  mcp: createLogger("mcp"),
 };
