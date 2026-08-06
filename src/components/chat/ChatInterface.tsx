@@ -257,7 +257,7 @@ export default function ChatInterface() {
               <div className="flex items-center gap-4">
                 <div className="violet-letter-mark hidden h-20 w-28 shrink-0 md:block">
                   <div className="absolute left-5 top-5 h-1.5 w-12 rounded-full bg-accent/25" />
-                  <div className="absolute left-5 top-9 h-1.5 w-16 rounded-full bg-[#b88735]/25" />
+                  <div className="absolute left-5 top-9 h-1.5 w-16 rounded-full bg-gold/25" />
                   <div className="absolute left-5 top-[52px] h-1.5 w-10 rounded-full bg-accent/20" />
                 </div>
                 <div>
@@ -284,7 +284,7 @@ export default function ChatInterface() {
                 alt="淡紫花园、信件与打字机的动漫感背景"
                 className="h-full w-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-r from-[#f6f0df]/72 via-[#f6f0df]/18 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-r from-bg/70 via-bg/20 to-transparent" />
             </div>
           </div>
         </MagicCard>
@@ -321,7 +321,7 @@ export default function ChatInterface() {
                         e.stopPropagation();
                         removeSession(id);
                       }}
-                      className="ml-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[11px] text-text-tertiary hover:bg-red-50 hover:text-red-500 transition-colors"
+                      className="ml-0.5 w-5 h-5 flex items-center justify-center rounded-full text-[11px] text-text-tertiary hover:bg-error-bg hover:text-error transition-colors"
                       title="删除会话"
                     >
                       ×
@@ -335,15 +335,15 @@ export default function ChatInterface() {
           <div className="flex-1 overflow-y-auto px-6 py-8">
             {/* 降级模式提示 */}
             {degraded && (
-              <div className="max-w-3xl mx-auto mb-5 rounded-2xl border border-amber-200/60 bg-amber-50/80 backdrop-blur-xl px-4 py-3 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <span className="relative flex h-2.5 w-2.5 mt-1.5 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium text-amber-900">离线模式</p>
-                    <p className="text-xs text-amber-700/80 mt-0.5 leading-relaxed">
+              <div className="max-w-3xl mx-auto mb-5 rounded-2xl border border-warning-bg bg-warning-bg backdrop-blur-xl px-4 py-3 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="relative flex-shrink-0 mt-0.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warning" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-warning">离线模式</p>
+                      <p className="text-xs text-warning/80 mt-0.5 leading-relaxed">
                       当前 AI API 连接异常，已切换为离线模式。系统会自动重试恢复连接，恢复后将解除此提示。
                     </p>
                   </div>

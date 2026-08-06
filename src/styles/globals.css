@@ -33,6 +33,9 @@
   --color-error-bg: #fdf2f0;
   --color-success: #3d6b4a;
   --color-success-bg: #f0f7f1;
+  --color-warning: #7b5e2f;
+  --color-warning-bg: #fdf7e8;
+  --color-gold: #b88735;
 
   /* 淡紫金色美术渐变 */
   --gradient-warm: linear-gradient(135deg, #fbf4df 0%, #f1e5cf 42%, #ece0f3 100%);

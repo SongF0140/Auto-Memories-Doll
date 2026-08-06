@@ -24,6 +24,9 @@ module.exports = {
         "error-bg": "var(--color-error-bg)",
         success: "var(--color-success)",
         "success-bg": "var(--color-success-bg)",
+        warning: "var(--color-warning)",
+        "warning-bg": "var(--color-warning-bg)",
+        gold: "var(--color-gold)",
       },
       borderRadius: {
         sm: "8px",

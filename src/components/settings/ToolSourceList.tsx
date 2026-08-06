@@ -202,7 +202,7 @@ export default function ToolSourceList({ sources, presets, onChange }: ToolSourc
               />
             </div>
           </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-error">{error}</p>}
           <div className="flex gap-2">
             <button onClick={handleAdd} className="btn h-9 px-4 text-sm">
               创建
@@ -265,7 +265,7 @@ export default function ToolSourceList({ sources, presets, onChange }: ToolSourc
                 </button>
                 <button
                   onClick={() => handleDelete(source.id)}
-                  className="text-text-tertiary hover:text-red-500 transition-colors text-xs px-2"
+                  className="text-text-tertiary hover:text-error transition-colors text-xs px-2"
                 >
                   删除
                 </button>

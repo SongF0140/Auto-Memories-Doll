@@ -111,7 +111,66 @@ export class ProfileUpdater {
   }
 
   /**
-   * 立即执行画像分析并更新 profile.md
+   * 深夜督查专用：使用旗舰模型进行深度画像分析。
+   *
+   * 与标准 runAnalysis() 的区别：
+   * - 使用 flagship 模型（更强推理能力）
+   * - 分析全部累积队列（不是只取前 30 条）
+   * - 温度更低（0.3），分析更精准
+   * - 关注知识演进方向、技能成长路径等长期趋势
+   */
+  async runAnalysisWithFlagship(): Promise<void> {
+    if (this.analysisQueue.length === 0) return;
+    if (ModelAdapter.isDegradedMode) return;
+
+    const conversation = this.analysisQueue.join("\n\n---\n\n");
+    this.analysisQueue = [];
+
+    const existingProfile = this.readExistingProfile();
+
+    try {
+      const model = createLanguageModel("flagship");
+      const result = await generateText({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: PROFILE_ANALYSIS_PROMPT.replace(
+              "{existing}",
+              existingProfile || "暂无画像",
+            ).replace("{conversation}", conversation),
+          },
+        ],
+        maxOutputTokens: 1200,
+        temperature: 0.3,
+      });
+
+      const updatedProfile = result.text.trim();
+      if (updatedProfile && updatedProfile.length > 20) {
+        const similarity = this.lineJaccardSimilarity(existingProfile, updatedProfile);
+        if (similarity >= this.UPDATE_SIMILARITY_THRESHOLD) {
+          logger.memory.info("[ProfileUpdater:flagship] 画像变化不显著，跳过回写", { similarity: similarity.toFixed(3) });
+          return;
+        }
+
+        const addedLines = this.computeAddedLines(existingProfile, updatedProfile);
+        await withLock(async () => {
+          this.writeProfile(updatedProfile);
+          this.appendChangelog(similarity, addedLines);
+        });
+        PromptCache.getInstance().invalidate("system-prefix");
+        logger.memory.info("[ProfileUpdater:flagship] 用户画像已更新", {
+          similarity: similarity.toFixed(3),
+          addedLines: addedLines.length,
+        });
+      }
+    } catch (error) {
+      logger.memory.error("[ProfileUpdater:flagship] 旗舰模型分析失败:", { error: (error as Error).message });
+    }
+  }
+
+  /**
+   * 立即执行画像分析并更新 profile.md（标准模型）
    */
   async runAnalysis(): Promise<void> {
     if (this.analysisQueue.length === 0) return;

@@ -1,5 +1,6 @@
 import { VectorRecord } from "../../types/memory";
 import { getDatabase } from "../storage/database";
+import { cosineSimilarity } from "./similarity";
 import Database from "better-sqlite3";
 
 export class VectorIndex {
@@ -65,7 +66,7 @@ export class VectorIndex {
 
     const results = rows.map((row) => {
       const rowEmbedding = JSON.parse(row.embedding as string);
-      const similarity = this.cosineSimilarity(embedding, rowEmbedding);
+      const similarity = cosineSimilarity(embedding, rowEmbedding);
       return { memoryId: row.memoryId, similarity };
     });
 
@@ -82,22 +83,6 @@ export class VectorIndex {
       dimensions: row.dimensions,
       updatedAt: row.updatedAt,
     }));
-  }
-
-  private cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) return 0;
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
-    }
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   close(): void {

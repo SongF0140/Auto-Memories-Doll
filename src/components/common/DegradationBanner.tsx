@@ -42,15 +42,15 @@ export default function DegradationBanner() {
   if (!degraded) return null;
 
   return (
-    <div className="sticky top-0 z-50 w-full border-b border-amber-200/60 bg-amber-50/95 backdrop-blur-xl">
+    <div className="sticky top-0 z-50 w-full border-b border-warning-bg bg-warning-bg/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
         <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-warning" />
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-amber-900">AI API 降级模式</p>
-          <p className="text-xs text-amber-700/80 leading-relaxed">
+          <p className="text-sm font-medium text-warning">AI API 降级模式</p>
+          <p className="text-xs text-warning/80 leading-relaxed">
             当前 AI 服务连接异常，系统已切换到有限功能模式。向量召回降级为关键词匹配，新记忆标记为&quot;向量待生成&quot;。恢复后将自动解除。
           </p>
         </div>

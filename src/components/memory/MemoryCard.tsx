@@ -49,7 +49,7 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
       <div className="mb-3 flex items-start justify-between gap-4">
         <h3 className="text-lg font-semibold leading-tight text-text-primary">{displayTitle}</h3>
         <div className="flex items-center gap-2">
-          <Badge className="bg-[#e8dcc8] text-[#6b5a3e]">{displayTopic}</Badge>
+          <Badge className="bg-muted text-text-secondary">{displayTopic}</Badge>
           <Badge>{memory.sourceType === "listen" ? "监听导入" : memory.sourceType}</Badge>
         </div>
       </div>

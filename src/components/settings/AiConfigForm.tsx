@@ -32,8 +32,21 @@ const tierFields: { key: keyof ModelTierConfig; label: string; type: string; ste
   { key: "maxRetries", label: "Max Retries", type: "number", min: 0, max: 10, placeholder: "3" },
 ];
 
+const tierDefaults: ModelTierConfig = { model: "", maxTokens: 8192, temperature: 0.3, timeout: 60000, maxRetries: 3 };
+const embeddingDefaults: EmbeddingConfig = { model: "", dimensions: 1536, maxConcurrency: 8, queueTimeoutMs: 30000 };
+
+function ensureSlots(config: AiConfig): AiConfig {
+  return {
+    ...config,
+    flagship: config.flagship || { ...tierDefaults },
+    standard: config.standard || { ...tierDefaults },
+    budget: config.budget || { ...tierDefaults },
+    embedding: config.embedding || { ...embeddingDefaults },
+  };
+}
+
 export default function AiConfigForm({ config, onSave, saving }: AiConfigFormProps) {
-  const [form, setForm] = useState<AiConfig>(config);
+  const [form, setForm] = useState<AiConfig>(() => ensureSlots(config));
 
   const updateShared = <K extends "provider" | "baseURL" | "apiKey">(
     key: K,

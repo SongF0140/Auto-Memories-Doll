@@ -186,12 +186,12 @@ export default function StorageConfigForm({ config, onChanged }: StorageConfigFo
 
         {/* 错误/成功提示 */}
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+          <div className="rounded-lg border border-error-bg bg-error-bg px-4 py-2.5 text-sm text-error">
             {error}
           </div>
         )}
         {success && (
-          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          <div className="rounded-lg border border-success-bg bg-success-bg px-4 py-2.5 text-sm text-success">
             {success}
           </div>
         )}

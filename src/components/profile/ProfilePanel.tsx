@@ -130,13 +130,13 @@ export default function ProfilePanel() {
         </div>
 
         {data?.degradedMode && (
-          <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2.5 text-sm text-yellow-700">
+          <div className="mb-4 rounded-lg border border-warning-bg bg-warning-bg px-4 py-2.5 text-sm text-warning">
             AI 当前处于降级模式，画像分析暂停。恢复后可点击"立即分析"。
           </div>
         )}
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+          <div className="mb-4 rounded-lg border border-error-bg bg-error-bg px-4 py-2.5 text-sm text-error">
             {error}
           </div>
         )}

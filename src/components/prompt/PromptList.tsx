@@ -20,7 +20,8 @@ export default function PromptList() {
     try {
       const response = await fetch("/api/prompt");
       const data = await response.json();
-      setTemplates(data);
+      const templates = Array.isArray(data) ? data : (data.data || []);
+      setTemplates(Array.isArray(templates) ? templates : []);
     } catch (error) {
       console.error("获取模板失败:", error);
     } finally {

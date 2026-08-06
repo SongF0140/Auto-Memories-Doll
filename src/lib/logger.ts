@@ -83,4 +83,5 @@ export const logger = {
   retention: createLogger("retention"),
   quality: createLogger("quality"),
   mcp: createLogger("mcp"),
+  nightly: createLogger("nightly"),
 };

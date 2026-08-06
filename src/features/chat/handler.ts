@@ -14,7 +14,7 @@ import { ToolCaller } from "../../lib/ai/tool-caller";
 import { registerDefaultTools } from "../../lib/ai/tool-registry";
 import { ProfileUpdater } from "../../server/services/profile-updater";
 import { WikiGraph } from "../../lib/graph/wiki-graph";
-import { ChatClassifier, IntentResult } from "./classifier";
+import { ChatClassifier, IntentResult, ExtractedMemoryEntity } from "./classifier";
 import { logger } from "../../lib/logger";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
@@ -120,14 +120,25 @@ export class ChatHandler {
   ): Promise<ReadableStream<AiEvent>> {
     const processedMessages = await this.applySkills(messages);
 
-    // 意图分类：本地轻量计算（不耗 LLM），结果注入 system prompt 引导模型选择工具与回复风格
+    // 意图分类：Layer 1 关键词（<1ms）→ Layer 2 embedding 语义回退（~100ms）
+    // 结果注入 system prompt 引导模型选择工具与回复风格
     const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
-    const intent = lastUserMsg ? this.classifier.classify(lastUserMsg.content) : null;
+    const intent = lastUserMsg ? await this.classifier.classifyAsync(lastUserMsg.content) : null;
+
+    // Layer 3: 若意图为记忆创建/更新，用 budget LLM 提取结构化实体
+    let extractedEntity: ExtractedMemoryEntity | null = null;
+    if (intent && (intent.type === "memory_create" || intent.type === "memory_update") && lastUserMsg) {
+      try {
+        extractedEntity = await this.classifier.extractMemoryEntity(lastUserMsg.content);
+      } catch {
+        // 实体提取失败不影响主流程
+      }
+    }
 
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
-    const blocks = this.buildSystemBlocks(memoryContent, intent);
+    const blocks = this.buildSystemBlocks(memoryContent, intent, extractedEntity);
     const systemMessage = this.assembleSystemMessage(blocks);
 
     // 系统消息 + 原始对话角色，保留多轮上下文的 role 结构
@@ -220,19 +231,34 @@ export class ChatHandler {
   private buildSystemBlocks(
     memoryContent: string,
     intent?: IntentResult | null,
+    extractedEntity?: ExtractedMemoryEntity | null,
   ): SystemBlocks {
     const promptCache = PromptCache.getInstance();
     const systemPrefix = promptCache.getSystemPrefix(TEMPLATE_HASH);
     const memoryBlock = promptCache.getMemoryCache(memoryContent);
 
-    const intentBlock =
-      intent && intent.type !== "chat"
-        ? `\n## 用户意图\n${intent.type} (置信度 ${(intent.confidence * 100).toFixed(0)}%)${
-            intent.matchedKeywords.length > 0
-              ? `，命中关键词: ${intent.matchedKeywords.join(", ")}`
-              : ""
-          }`
-        : "";
+    let intentBlock = "";
+    if (intent && intent.type !== "chat") {
+      const parts: string[] = [];
+      parts.push(`## 用户意图\n${intent.type} (置信度 ${(intent.confidence * 100).toFixed(0)}%)`);
+      if (intent.matchedKeywords.length > 0) {
+        parts.push(`命中关键词: ${intent.matchedKeywords.join(", ")}`);
+      }
+      if (intent.alternatives && intent.alternatives.length > 0) {
+        const altStr = intent.alternatives
+          .map((a) => `${a.type} (${(a.confidence * 100).toFixed(0)}%)`)
+          .join(", ");
+        parts.push(`备选意图: ${altStr}`);
+      }
+      if (extractedEntity) {
+        parts.push(`\n已提取实体:`);
+        if (extractedEntity.title) parts.push(`- 标题: ${extractedEntity.title}`);
+        if (extractedEntity.tags.length > 0) parts.push(`- 标签: ${extractedEntity.tags.join(", ")}`);
+        if (extractedEntity.topic) parts.push(`- 主题: ${extractedEntity.topic}`);
+        if (extractedEntity.content) parts.push(`- 内容摘要: ${extractedEntity.content.substring(0, 200)}`);
+      }
+      intentBlock = parts.join("\n");
+    }
 
     return { systemPrefix, intentBlock, memoryBlock };
   }

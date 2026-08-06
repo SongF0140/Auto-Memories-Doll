@@ -95,7 +95,7 @@ export default function MemoryViewer({
   if (loading) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-sm"
         onClick={onClose}
       >
         <div
@@ -115,7 +115,7 @@ export default function MemoryViewer({
   if (!memory) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-sm"
         onClick={onClose}
       >
         <div
@@ -133,7 +133,7 @@ export default function MemoryViewer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 backdrop-blur-sm py-12"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-bg/80 backdrop-blur-sm py-12"
       onClick={onClose}
     >
       <div
@@ -217,7 +217,7 @@ export default function MemoryViewer({
                   <span>版本: {memory.version}</span>
                   <span>
                     话题:{" "}
-                    <Badge className="bg-[#e8dcc8] text-[#6b5a3e]">{display(memory).topic}</Badge>
+                    <Badge className="bg-muted text-text-secondary">{display(memory).topic}</Badge>
                   </span>
                   <span>
                     来源:{" "}
