@@ -16,6 +16,7 @@ const ensureDir = (dirPath: string): void => {
  * 数据库留在项目目录（或 env 配置的位置，通常在 SSD 上），笔记可独立迁移到大容量盘。
  */
 export const getDatabasePath = (): string => {
+  ensureDir(env.MEMORY_ROOT);
   return join(env.MEMORY_ROOT, "memory.db");
 };
 

@@ -66,7 +66,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, [pathname]);
 
   const toggle = useCallback((id: string) => {
-    setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }, []);
 
   const isActive = (href: string) => {
