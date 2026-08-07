@@ -1,13 +1,15 @@
 import { VectorRecord } from "../../types/memory";
 import { getDatabase } from "../storage/database";
-import { cosineSimilarity } from "./similarity";
+import { createVectorSearchBackend, VectorSearchBackend } from "./backend";
 import Database from "better-sqlite3";
 
 export class VectorIndex {
   private db: Database.Database;
+  private searchBackend: VectorSearchBackend;
 
   constructor() {
     this.db = getDatabase();
+    this.searchBackend = createVectorSearchBackend();
     this.init();
   }
 
@@ -64,13 +66,14 @@ export class VectorIndex {
     const stmt = this.db.prepare("SELECT * FROM vector_records");
     const rows = stmt.all() as any[];
 
-    const results = rows.map((row) => {
-      const rowEmbedding = JSON.parse(row.embedding as string);
-      const similarity = cosineSimilarity(embedding, rowEmbedding);
-      return { memoryId: row.memoryId, similarity };
-    });
-
-    return results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
+    return this.searchBackend.search(
+      embedding,
+      rows.map((row) => ({
+        memoryId: row.memoryId,
+        embedding: JSON.parse(row.embedding as string),
+      })),
+      limit,
+    );
   }
 
   list(): VectorRecord[] {

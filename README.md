@@ -319,3 +319,15 @@ memory-root/                      # 笔记根目录（可在设置面板修改�
 | `README.md` | 开发者 | 项目架构、快速开始、API 一览 |
 | `AGENTS.md` | AI Agent | 项目约定、架构细节、开发规范 |
 | `架构检查文档.md` | 验收 | 架构验收要点与完成度判定标准 |
+
+## Native Module Troubleshooting
+
+This project uses `better-sqlite3`, which ships native Node.js bindings. Use Node.js `>=20 <23` with npm `>=10`.
+
+If tests or startup fail with a `NODE_MODULE_VERSION` mismatch, rebuild native modules for the active Node.js version:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+If the mismatch remains, remove `node_modules` and reinstall with the same Node.js version you use to run the app.

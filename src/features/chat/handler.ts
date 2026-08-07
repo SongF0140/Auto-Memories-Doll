@@ -16,17 +16,12 @@ import { ProfileUpdater } from "../../server/services/profile-updater";
 import { WikiGraph } from "../../lib/graph/wiki-graph";
 import { ChatClassifier, IntentResult, ExtractedMemoryEntity } from "./classifier";
 import { logger } from "../../lib/logger";
+import { assembleSystemMessage, SystemBlocks } from "./system-prompt";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
 /** Agent 循环最大工具迭代轮次 */
 const MAX_AGENT_ROUNDS = 5;
-
-type SystemBlocks = {
-  systemPrefix: string;
-  intentBlock: string;
-  memoryBlock: string;
-};
 
 export class ChatHandler {
   private templateManager: TemplateManager;
@@ -65,7 +60,7 @@ export class ChatHandler {
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
     const blocks = this.buildSystemBlocks(memoryContent);
-    const systemMessage = this.assembleSystemMessage(blocks);
+    const systemMessage = assembleSystemMessage(blocks);
 
     const apiMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
       { role: "system", content: systemMessage },
@@ -139,7 +134,7 @@ export class ChatHandler {
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
     const blocks = this.buildSystemBlocks(memoryContent, intent, extractedEntity);
-    const systemMessage = this.assembleSystemMessage(blocks);
+    const systemMessage = assembleSystemMessage(blocks);
 
     // 系统消息 + 原始对话角色，保留多轮上下文的 role 结构
     const apiMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [

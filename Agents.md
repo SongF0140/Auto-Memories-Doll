@@ -8,7 +8,7 @@
 | **Agent 循环** | 用户消息 → 记忆检索 → 组装提示 → AI 流式响应 → 工具调用 → 候选记忆写入待审计队列 | `src/features/chat/handler.ts` |
 | **待审计队列** | 候选记忆写回前暂存的 SQLite 队列，按 `memoryId` 串行消费 | `src/server/services/memory-service.ts` |
 | **LLMWiki** | Markdown + YAML frontmatter 格式，每条记忆自包含 | `src/lib/storage/markdown-formatter.ts` |
-| **向量召回** | SQLite 存储向量 + JavaScript 内存余弦相似度计算，语义检索相关记忆 | `src/lib/vector/retriever.ts` |
+| **向量召回** | SQLite 存储向量 + 可插拔向量搜索后端；默认 JavaScript 余弦相似度，预留 `sqlite-vec` fallback 适配 | `src/lib/vector/retriever.ts` / `src/lib/vector/backend.ts` |
 | **图谱关系** | 文件内 `[[wikilink]]` 构建的内存索引，替代图数据库边表 | `src/lib/graph/wiki-graph.ts` |
 | **降级模式** | LLM API 不可用时切换为本地检索模板回复，Embedding 不可用时降级为关键词匹配 | `src/lib/ai/model-adapter.ts` |
 | **工具系统** | Zod schema 校验 + 异步执行器，结果分层为 `content`（给模型）和 `data`（给 UI） | `src/lib/ai/tool-caller.ts` |
@@ -48,7 +48,7 @@
 - 状态管理：React Context
 - **主存储：LLMWiki（Markdown + YAML frontmatter）**——每条记忆自包含，人类和 LLM 均可直读
 - 加速层：SQLite（`better-sqlite3`）仅做向量索引和全文搜索缓存，主数据源是 Markdown 文件
-- 向量存储：SQLite 承载 `vector_records` 表，JavaScript 内存余弦相似度计算
+- 向量存储：SQLite 承载 `vector_records` 表，`VectorSearchBackend` 抽象搜索实现；默认 JavaScript 内存余弦相似度，`VECTOR_BACKEND=sqlite-vec` 时使用显式 fallback，后续可替换为 native 扩展
 - 关系管理：`[[wikilink]]` 内嵌在 Markdown 正文中，替代传统图数据库边表
 - 图谱查询：`src/lib/graph/wiki-graph.ts` 从文件扫描 wikilink 构建内存索引
 - 队列存储：SQLite 表 `pending_events`，承载 `PendingEvent` 待审计队列，支持按 `memoryId` 串行消费
@@ -263,7 +263,7 @@ Agent 循环不知道 Next.js 路由细节、React 组件、会话文件落盘�
 - 关系存储：`src/lib/graph/*`，负责记忆关系边和关系查询
 - 更新策略：短时记忆要点更新 `notes/*/Agent.md`，长时记忆更新 `notes/*/note-*.md`，索引地图更新 `index-map.md`，推荐权重更新 `profile.md`
 - 落盘与版本：记忆正文用 Node.js 文件系统 API 写入 Markdown 文件；向量、图谱、队列和冲突记录用 SQLite 事务写入
-- 向量存储：`src/lib/vector/*` 使用 SQLite + `better-sqlite3` 驱动，通过 `vector_records` 表存储；召回时先做向量近邻查询（JavaScript 内存余弦相似度）再做内存重排
+- 向量存储：`src/lib/vector/*` 使用 SQLite + `better-sqlite3` 驱动，通过 `vector_records` 表存储；搜索经 `VectorSearchBackend` 抽象，默认 JavaScript 内存余弦相似度，`sqlite-vec` native 扩展可在该边界替换
 - 图谱存储：`src/lib/graph/wiki-graph.ts`（主路径）从文件扫描 `[[wikilink]]` 构建内存索引；`src/lib/graph/manager.ts`（已废弃，保留兼容）使用 SQLite 表 `graph_edges` 存储关系边
 - 队列存储：`src/features/audit/queue.ts`（内存 Map 实现，进程重启丢失）和 `src/server/services/memory-service.ts`（SQLite `pending_events` 表）提供双版本队列；推荐使用 SQLite 版本以保证持久化
 - 冲突记录：`src/features/audit/*` 使用 SQLite 表 `conflict_records` 存储需人工裁决的冲突，支持按 `status` 过滤
@@ -420,7 +420,7 @@ memory-root/
 - API 降级策略：当 LLM API 不可用时（网络错误、超时、认证失败），快轨层切换为基于本地检索的模板回复（不调用 LLM 生成），后台加工层暂停记忆提取任务并排队等待恢复；当 embedding API 不可用时，向量召回降级为关键词召回，新记忆仍写入文件但标记为"向量待生成"，恢复后批量补建。
 - 降级状态必须在前端展示明确提示，告知用户当前处于降级模式及影响范围。
 - 向量模型默认使用 `text-embedding-3-small`（维度 1536）；embedding 模型配置通过 `EmbeddingModelConfig`（见 5.5）管理，更换模型时必须同步更新维度约束和重建全部向量索引。
-- 向量索引持久化使用 SQLite，存储于 `memory-root/memory.db` 的 `vector_records` 表
+- 向量索引持久化使用 SQLite，存储于 `memory-root/memory.db` 的 `vector_records` 表；查询经 `src/lib/vector/backend.ts` 后端接口执行
 - 图谱关系通过文件内 `[[wikilink]]` 维护，`WikiGraph` 从文件扫描构建索引，无需独立图数据库
 - 检索重排默认采用 `MMR`；当需要更高精度时可在实现层切换为交叉编码器重排，但必须保持结果可回写。
 - 检索结果写回前必须保留召回来源、重排得分和最终入选理由，方便审计和调试。
@@ -789,10 +789,11 @@ export type ConflictRecord = {
 | memory/search 性能 | 无约束 | 已修复：`listMemories()` 调用处统一加 limit 约束（handler: 500, tool-registry: 200, orchestrator: 500） | ~~P1~~ |
 | 文件锁实现 | 未描述实现细节 | 已修复：`fs.open(path, O_WRONLY \| O_CREAT \| O_EXCL)` 原子操作 | ~~P2~~ |
 | 日志系统 | 未提及 | 已修复：核心链路（model-adapter, memory-service, orchestrator）迁移到 `logger` | ~~P3~~ |
-| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：8 文件 112 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor；Agent 循环与降级路径待补充 | ~~P2~~ |
+| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：22 文件 274 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路 | ~~P2~~ |
 | 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
 | 会话系统提示快照 | 持久化 system 消息 | 已修复：`saveSession` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
 | 提供商配置 | AI 配置仅前端表单 | 新增 `src/config/providers.json` 声明式目录 + `provider-loader.ts` 读写层 | P2 |
+| docs 目录未纳入版本控制 | 第 2 节要求文档跟随实现，差异有记录 | 已修复：`.gitignore` 不再忽略 `docs-zh/`，仅继续忽略 `docs-zh/.obsidian/workspace.json` 这类个人编辑器状态；项目文档可进入版本控制 | ~~P2~~ |
 | 降级状态恢复 | 第 4.11 节描述降级但未提恢复 | 已修复：`ModelAdapter.startHealthCheck()` 周期性轮询，恢复后自动退出降级；scheduler setInterval 类型修复 | ~~P1~~ |
 | 记忆创建绕过审计 | 第 4.8 节要求先入队再审计 | 已修复：tool-registry 的 create_memory/update_memory 改为生成 PendingEvent 入队而非直接写库 | ~~P0~~ |
 | MMR 重排 | 第 4.11 节"重排默认采用 MMR" | 已修复：`Ranker.rankWithMMR()` 实现真正的 MMR（α*score - (1-α)*max_sim），用 tags Jaccard 作为文档间相似度，α 默认 0.7；handler.ts 已切换到 rankWithMMR；保留 `rank()` 作为基础多因子加权排序供其他场景使用 | ~~P2~~ |
@@ -808,6 +809,9 @@ export type ConflictRecord = {
 | 分类驱动路由未生效 | 第 4.14 节工具调用流程 + 《架构检查文档》4.4 "分类驱动路由" | 已修复：`ChatHandler.streamResponse` 调用 `ChatClassifier.classify` 对最近 user 消息做本地意图分类，结果注入 prompt 的"用户意图"块（零 LLM 开销），引导模型选择工具与回复风格 | ~~P0~~ |
 | 置信度评分为硬编码常量 | 第 4.11 节"模型与检索约束"未约束置信度算法；《架构检查文档》4.4 要求区分"高可信事实"与"待确认推测" | 已修复：`ChatClassifier`/`MemoryClassifier` 改为 `score = min(0.95, 0.5 + 0.12*命中数 + 0.05*位置加分)`，区分多关键词命中（高可信）与单关键词命中（待确认） | ~~P1~~ |
 | 审计可读文本缺失 | 第 4.10 节"冲突分级策略" + 《架构检查文档》4.7 "markdown 流式转码 + LLM 检查" | 已修复：`AuditReporter.generateMarkdownReport()` 生成按来源/话题分布 + 冲突清单 + 最近记忆的可读 Markdown；`Orchestrator.processQueue` 末尾自动落盘到 `archive/audits/audit-{timestamp}.md` | ~~P1~~ |
+| ChatHandler 职责偏重 | Agent 循环负责检索、意图、提示词、流式输出 | 已修复：系统提示组装拆到 `src/features/chat/system-prompt.ts`，`ChatHandler` 只传入 `SystemBlocks` 并消费组装结果；新增 `chat-system-prompt.test.ts` 覆盖提示块契约 | ~~P3~~ |
+| Orchestrator 审计报告 I/O 内联 | 审计持久化层应由服务拆分职责 | 已修复：审计报告落盘拆到 `src/server/services/audit-report-writer.ts`，`Orchestrator` 仅调度 `AuditReportWriter.write()`；新增独立单测覆盖路径、文件名与写入内容 | ~~P3~~ |
+| 向量搜索后端固定 JS 实现 | Phase 3 规划升级 `sqlite-vec` | 已修复：新增 `src/lib/vector/backend.ts` 的 `VectorSearchBackend` 抽象，默认 JS 余弦搜索；`VECTOR_BACKEND=sqlite-vec` 时提供显式 fallback，保留 native 扩展替换边界；新增 `vector-backend.test.ts` | ~~P3~~ |
 | 画像回写无阈值 | 《架构检查文档》6.3 "回写震荡风险：自动更新 loop 如果太激进，会导致提示词频繁变化、标签漂移" | 已修复：`ProfileUpdater` 新增 `UPDATE_SIMILARITY_THRESHOLD=0.85`，新旧画像行级 Jaccard 相似度 ≥ 阈值时跳过回写，避免 `profile.md` 反复刷新导致 `PromptCache` 震荡 | ~~P2~~ |
 | API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 已修复：`chat/stream/route.ts` 接入 `chatRequestSchema`；`prompt/route.ts` 接入 `promptCreateSchema`；`prompt/[id]/route.ts` 接入 `promptUpdateSchema`；统一 `apiResponse`/`apiError` 包装与 `ErrorCode` 枚举；`validation.ts` 中 `promptCreateSchema` 加必填 `id`、`promptUpdateSchema` 去掉不存在的 `trigger` 字段与 `PromptTemplate` 接口对齐 | ~~P2~~ |
 | 存储路径硬编码 | 第 8 节"本地存储目录：使用 `memory-root/` 作为根目录"未支持运行时可配置 | 已修复：`path-resolver.ts` 改造为 `getDatabasePath()` 固定用 env（避免循环依赖），`getMemoryRoot()` 从 db storage_config 读取带缓存；新增 `StorageMigrationService`（停 watcher→复制→更新 config→invalidatePathCache→重启 watcher）；`/api/config/storage` API（GET/POST/PATCH 预览）；`StorageConfigForm` 前端组件 | ~~P1~~ |
@@ -851,9 +855,9 @@ Phase 1 — 核心稳定 [IN PROGRESS]
   [x] 浏览器历史/书签采集（history-collector + BrowserCollectScheduler，默认关闭）
 
 Phase 2 — 会话升级
-  [ ] localStorage → JSONL 文件持久化
-  [ ] 多会话列表 + 切换（完善 switchSession / removeSession UI）
-  [ ] 会话恢复系统提示重建（当前 ChatHandler 已支持）
+  [x] localStorage → JSONL 文件持久化（useChatSession 本地恢复 + ChatSessionService 追加 JSONL 快照）
+  [x] 多会话列表 + 切换（switchSession / removeSession UI 已接入）
+  [x] 会话恢复系统提示重建（ChatHandler 已支持，system 消息不持久化）
 
 Phase 3 — 智能增强
   [ ] 会话上下文压缩（旧消息 AI 摘要替换）
@@ -861,9 +865,16 @@ Phase 3 — 智能增强
   [ ] 向量检索升级为 sqlite-vec（替代 JS 内存余弦相似度）
 
 Phase 4 — 测试与质量
-  [ ] 快轨层测试（降级路径、候选记忆生成）
+  [x] 快轨层测试（ChatHandler Agent 循环、降级路径、候选记忆生成）
   [ ] 后台加工层测试（清洗去重、分类打分）
   [x] 审计持久化层测试（冲突分级、版本管理）
-  [ ] 集成测试（端到端：用户输入 → 快轨 → 审计 → 文件写回）
+  [x] 集成测试（端到端：用户输入 → 快轨 → 审计 → 文件写回）
 ```
 
+## 12. 本轮补充记录
+
+- 已完成 `ChatHandler` 系统提示拆分：`src/features/chat/system-prompt.ts`
+- 已完成审计报告写入拆分：`src/server/services/audit-report-writer.ts`
+- 已完成向量搜索后端抽象：`src/lib/vector/backend.ts`
+- 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`
+- 当前测试总量已更新为 274 用例，覆盖快轨、审计、向量后端与关键集成链路

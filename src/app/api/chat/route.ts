@@ -4,6 +4,8 @@ import { chatRequestSchema } from "../../../lib/validation";
 import { aiEventStreamToResponse } from "../../../lib/ai";
 import { apiError } from "../../../lib/api-response";
 import { ErrorCode } from "../../../lib/api-errors";
+import { ChatSessionService } from "../../../server/services/chat-session-service";
+import { logger } from "../../../lib/logger";
 
 /**
  * POST /api/chat
@@ -26,6 +28,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { messages, mode, sessionId, memoryIds } = parsed.data;
+
+    try {
+      new ChatSessionService().appendSnapshot({ sessionId, mode, messages });
+    } catch (error) {
+      logger.chat.warn("会话 JSONL 持久化失败", { error: (error as Error).message });
+    }
 
     const result = await dispatcher.dispatch(messages, mode, sessionId, memoryIds);
 

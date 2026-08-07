@@ -1,5 +1,6 @@
 import { MemoryService } from "./memory-service";
 import { AuditService } from "./audit-service";
+import { AuditReportWriter } from "./audit-report-writer";
 import { Auditor } from "../../features/audit/auditor";
 import { AuditReporter } from "../../features/audit/reporter";
 import { QualityFilterService } from "./quality-filter-service";
@@ -11,14 +12,10 @@ import { VectorIndex } from "../../lib/vector/index";
 import { updateIndexMap } from "../../lib/storage/index-writer";
 import { writeMemoryMarkdown, updateAgentMarkdown } from "../../lib/storage/memory-writer";
 import { createFailureRecord } from "../../lib/storage/file-manager";
-import { getArchivePath } from "../../lib/storage/path-resolver";
 import { processJsonPipeline } from "../pipelines/json-pipeline";
 import { MemoryValidationError } from "../../lib/errors";
 import { generateId } from "../../lib/utils/id";
-import { getCurrentTime } from "../../lib/utils/date";
 import { logger } from "../../lib/logger";
-import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
 
 const LIST_LIMIT = 500;
 /**
@@ -35,12 +32,14 @@ export class Orchestrator {
   private auditor: Auditor;
   private qualityFilter: QualityFilterService;
   private reporter: AuditReporter;
+  private auditReportWriter: AuditReportWriter;
 
   constructor() {
     this.memoryService = new MemoryService();
     this.auditService = new AuditService();
     this.qualityFilter = new QualityFilterService();
     this.reporter = new AuditReporter();
+    this.auditReportWriter = new AuditReportWriter(this.reporter);
     this.auditor = new Auditor({
       getMemory: (id) => this.memoryService.getMemory(id),
       dequeueEvent: (memoryId) => this.memoryService.dequeueEvent(memoryId),
@@ -146,21 +145,10 @@ export class Orchestrator {
       );
 
       // 队列处理完成后生成可读 Markdown 审计报告，对应《架构检查文档.md》4.7
-      await this.writeMarkdownAuditReport().catch((err) =>
+      await this.auditReportWriter.write().catch((err) =>
         logger.audit.error("Markdown audit report generation failed", { error: (err as Error).message }),
       );
     }
-  }
-
-  /** 生成 Markdown 审计报告并落盘到 archive/audits/audit-{timestamp}.md */
-  private async writeMarkdownAuditReport(): Promise<void> {
-    const markdown = await this.reporter.generateMarkdownReport();
-    const auditsDir = join(getArchivePath(), "audits");
-    mkdirSync(auditsDir, { recursive: true });
-    const timestamp = getCurrentTime().replace(/[:.]/g, "-").substring(0, 19);
-    const filePath = join(auditsDir, `audit-${timestamp}.md`);
-    writeFileSync(filePath, markdown, "utf-8");
-    logger.audit.info("Markdown 审计报告已落盘", { path: filePath });
   }
 
   private async processEvent(event: PendingEvent): Promise<string | void> {
