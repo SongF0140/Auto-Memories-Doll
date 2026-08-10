@@ -108,3 +108,58 @@ export const skillSchema = z.object({
   description: z.string().optional(),
   prompt: z.string().min(1, "提示词不能为空"),
 });
+
+const notesPathSchema = z
+  .string()
+  .trim()
+  .min(1, "notesPath 不能为空")
+  .refine(
+    (notesPath) => notesPath !== "." && notesPath !== ".." && !notesPath.includes(".."),
+    "路径不合法：不允许使用 .. 进行路径遍历",
+  );
+
+export const storageConfigUpdateSchema = z
+  .object({
+    notesPath: notesPathSchema,
+    copyExisting: z.boolean().default(true),
+  })
+  .strict();
+
+export const storageConfigPreviewSchema = z
+  .object({
+    notesPath: notesPathSchema,
+  })
+  .strict();
+
+export const toolTypeSchema = z.enum(["codex", "claude-code", "cursor", "markdown", "text"]);
+
+const optionalTrimmedTextSchema = z
+  .string()
+  .trim()
+  .transform((value) => value || undefined)
+  .optional();
+
+export const toolSourceCreateSchema = z
+  .object({
+    name: z.string().trim().min(1, "name 不能为空"),
+    toolType: toolTypeSchema,
+    path: z.string().trim().min(1, "path 不能为空"),
+    filePattern: z.string().trim().min(1, "filePattern 不能为空").default("*.jsonl"),
+    enabled: z.boolean().default(true),
+    topic: optionalTrimmedTextSchema,
+    description: optionalTrimmedTextSchema,
+  })
+  .strict();
+
+export const toolSourceUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1, "name 不能为空").optional(),
+    toolType: toolTypeSchema.optional(),
+    path: z.string().trim().min(1, "path 不能为空").optional(),
+    filePattern: z.string().trim().min(1, "filePattern 不能为空").optional(),
+    enabled: z.boolean().optional(),
+    topic: optionalTrimmedTextSchema,
+    description: optionalTrimmedTextSchema,
+  })
+  .strict()
+  .refine((updates) => Object.keys(updates).length > 0, "至少提供一个可更新字段");

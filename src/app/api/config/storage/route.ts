@@ -3,6 +3,7 @@ import { ConfigService } from "../../../../server/services/config-service";
 import { StorageMigrationService } from "../../../../server/services/storage-migration-service";
 import { getDatabasePath } from "../../../../lib/storage/path-resolver";
 import { logger } from "../../../../lib/logger";
+import { storageConfigPreviewSchema, storageConfigUpdateSchema } from "../../../../lib/validation";
 
 /**
  * GET /api/config/storage
@@ -38,24 +39,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "请求体必须是合法的 JSON" }, { status: 400 });
   }
 
-  const { notesPath, copyExisting = true } = body as { notesPath?: string; copyExisting?: boolean };
-
-  if (!notesPath || typeof notesPath !== "string" || !notesPath.trim()) {
-    return NextResponse.json({ error: "notesPath 不能为空" }, { status: 400 });
+  const parsed = storageConfigUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-
-  const trimmedPath = notesPath.trim();
-
-  // 禁止路径遍历：不允许包含 .. 片段
-  if (trimmedPath === "." || trimmedPath === ".." || trimmedPath.includes("..")) {
-    return NextResponse.json({ error: "路径不合法：不允许使用 .. 进行路径遍历" }, { status: 400 });
-  }
+  const { notesPath, copyExisting } = parsed.data;
 
   const migrationService = new StorageMigrationService();
 
   try {
     // 先预览，让前端可以展示迁移规模（这里直接执行，前端可单独调 preview）
-    const preview = await migrationService.previewMigration(trimmedPath);
+    const preview = await migrationService.previewMigration(notesPath);
 
     logger.storage.info("[API] 开始迁移笔记存储路径", {
       from: preview.oldPath,
@@ -64,21 +58,18 @@ export async function POST(request: NextRequest) {
       copyExisting,
     });
 
-    await migrationService.migrate(trimmedPath, copyExisting);
+    await migrationService.migrate(notesPath, copyExisting);
 
     return NextResponse.json({
       success: true,
-      notesPath: trimmedPath,
+      notesPath,
       migrated: copyExisting,
       fileCount: preview.fileCount,
       totalBytes: preview.totalBytes,
     });
   } catch (error) {
     logger.storage.error("[API] 笔记路径迁移失败", { error: (error as Error).message });
-    return NextResponse.json(
-      { error: `迁移失败: ${(error as Error).message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `迁移失败: ${(error as Error).message}` }, { status: 500 });
   }
 }
 
@@ -94,19 +85,17 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "请求体必须是合法的 JSON" }, { status: 400 });
   }
 
-  const { notesPath } = body as { notesPath?: string };
-  if (!notesPath || !notesPath.trim()) {
-    return NextResponse.json({ error: "notesPath 不能为空" }, { status: 400 });
+  const parsed = storageConfigPreviewSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
+  const { notesPath } = parsed.data;
 
   const migrationService = new StorageMigrationService();
   try {
-    const preview = await migrationService.previewMigration(notesPath.trim());
+    const preview = await migrationService.previewMigration(notesPath);
     return NextResponse.json(preview);
   } catch (error) {
-    return NextResponse.json(
-      { error: `预览失败: ${(error as Error).message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `预览失败: ${(error as Error).message}` }, { status: 500 });
   }
 }

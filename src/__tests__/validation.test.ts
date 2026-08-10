@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { chatRequestSchema, memoryCreateSchema, memoryUpdateSchema } from "../lib/validation";
+import {
+  chatRequestSchema,
+  memoryCreateSchema,
+  memoryUpdateSchema,
+  storageConfigPreviewSchema,
+  storageConfigUpdateSchema,
+  toolSourceCreateSchema,
+  toolSourceUpdateSchema,
+} from "../lib/validation";
 
 describe("chatRequestSchema", () => {
   const validBody = {
@@ -69,5 +77,83 @@ describe("memoryUpdateSchema", () => {
   it("rejects empty object", () => {
     const result = memoryUpdateSchema.safeParse({});
     expect(result.success).toBe(true); // all fields optional
+  });
+});
+
+describe("storage config schemas", () => {
+  it("trims notesPath and defaults copyExisting", () => {
+    const result = storageConfigUpdateSchema.safeParse({ notesPath: "  memory-root-new  " });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ notesPath: "memory-root-new", copyExisting: true });
+    }
+  });
+
+  it("rejects a non-boolean copyExisting value", () => {
+    expect(
+      storageConfigUpdateSchema.safeParse({
+        notesPath: "memory-root-new",
+        copyExisting: "false",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects traversal and non-string preview paths", () => {
+    expect(storageConfigPreviewSchema.safeParse({ notesPath: "../outside" }).success).toBe(false);
+    expect(storageConfigPreviewSchema.safeParse({ notesPath: 123 }).success).toBe(false);
+  });
+});
+
+describe("tool source schemas", () => {
+  it("normalizes a valid create request and applies defaults", () => {
+    const result = toolSourceCreateSchema.safeParse({
+      name: "  Codex  ",
+      toolType: "codex",
+      path: "  C:/sessions  ",
+      topic: "   ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        name: "Codex",
+        toolType: "codex",
+        path: "C:/sessions",
+        filePattern: "*.jsonl",
+        enabled: true,
+        topic: undefined,
+      });
+    }
+  });
+
+  it("rejects wrong primitive types instead of relying on assertions", () => {
+    expect(
+      toolSourceCreateSchema.safeParse({
+        name: 123,
+        toolType: "codex",
+        path: "C:/sessions",
+      }).success,
+    ).toBe(false);
+    expect(
+      toolSourceCreateSchema.safeParse({
+        name: "Codex",
+        toolType: "codex",
+        path: "C:/sessions",
+        enabled: "false",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts the real update fields and rejects stale field names", () => {
+    expect(
+      toolSourceUpdateSchema.safeParse({
+        toolType: "markdown",
+        path: "C:/notes",
+        filePattern: "*.md",
+        topic: "notes",
+        description: "Markdown notes",
+      }).success,
+    ).toBe(true);
+    expect(toolSourceUpdateSchema.safeParse({ dirPath: "C:/notes" }).success).toBe(false);
+    expect(toolSourceUpdateSchema.safeParse({}).success).toBe(false);
   });
 });

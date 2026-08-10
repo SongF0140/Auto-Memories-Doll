@@ -791,7 +791,7 @@ export type ConflictRecord = {
 | memory/search 性能 | 无约束 | 已修复：`listMemories()` 调用处统一加 limit 约束（handler: 500, tool-registry: 200, orchestrator: 500） | ~~P1~~ |
 | 文件锁实现 | 未描述实现细节 | 已修复：`fs.open(path, O_WRONLY \| O_CREAT \| O_EXCL)` 原子操作 | ~~P2~~ |
 | 日志系统 | 未提及 | 已修复：核心链路（model-adapter, memory-service, orchestrator）迁移到 `logger` | ~~P3~~ |
-| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：22 文件 274 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路 | ~~P2~~ |
+| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：24 文件 291 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路及配置 API 请求体验证 | ~~P2~~ |
 | 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
 | 会话系统提示快照 | 持久化 system 消息 | 已修复：`ChatSessionService.appendSnapshot` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
 | 提供商配置 | AI 配置仅前端表单 | 新增 `src/config/providers.json` 声明式目录 + `provider-loader.ts` 读写层 | P2 |
@@ -815,7 +815,8 @@ export type ConflictRecord = {
 | Orchestrator 审计报告 I/O 内联 | 审计持久化层应由服务拆分职责 | 已修复：审计报告落盘拆到 `src/server/services/audit-report-writer.ts`，`Orchestrator` 仅调度 `AuditReportWriter.write()`；新增独立单测覆盖路径、文件名与写入内容 | ~~P3~~ |
 | 向量搜索后端固定 JS 实现 | Phase 3 规划升级 `sqlite-vec` | 已修复：新增 `src/lib/vector/backend.ts` 的 `VectorSearchBackend` 抽象，默认 JS 余弦搜索；`VECTOR_BACKEND=sqlite-vec` 时提供显式 fallback，保留 native 扩展替换边界；新增 `vector-backend.test.ts` | ~~P3~~ |
 | 画像回写无阈值 | 《架构检查文档》6.3 "回写震荡风险：自动更新 loop 如果太激进，会导致提示词频繁变化、标签漂移" | 已修复：`ProfileUpdater` 新增 `UPDATE_SIMILARITY_THRESHOLD=0.85`，新旧画像行级 Jaccard 相似度 ≥ 阈值时跳过回写，避免 `profile.md` 反复刷新导致 `PromptCache` 震荡 | ~~P2~~ |
-| API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 已修复：`chat/stream/route.ts` 接入 `chatRequestSchema`；`prompt/route.ts` 接入 `promptCreateSchema`；`prompt/[id]/route.ts` 接入 `promptUpdateSchema`；统一 `apiResponse`/`apiError` 包装与 `ErrorCode` 枚举；`validation.ts` 中 `promptCreateSchema` 加必填 `id`、`promptUpdateSchema` 去掉不存在的 `trigger` 字段与 `PromptTemplate` 接口对齐 | ~~P2~~ |
+| API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 请求体 Zod 覆盖已完成；响应体 schema、错误码表和 handler 导出仍未覆盖所有路由，继续按目标规范推进 | P2 |
+| 配置 API 请求体验证 | 当前阶段至少保证 Zod 请求体校验覆盖 | 已修复：`config/storage` POST/PATCH 与 `config/tool-sources` POST/PUT 统一使用 `validation.ts` 中的 Zod schema；工具源 PUT 字段与 `ToolWatchSource` 契约对齐，并补充错误类型、默认值、路径遍历和旧字段名测试 | ~~P1~~ |
 | 存储路径硬编码 | 第 8 节"本地存储目录：使用 `memory-root/` 作为根目录"未支持运行时可配置 | 已修复：`path-resolver.ts` 改造为 `getDatabasePath()` 固定用 env（避免循环依赖），`getMemoryRoot()` 从 db storage_config 读取带缓存；新增 `StorageMigrationService`（停 watcher→复制→更新 config→invalidatePathCache→重启 watcher）；`/api/config/storage` API（GET/POST/PATCH 预览）；`StorageConfigForm` 前端组件 | ~~P1~~ |
 | 本地工具对话无法采集 | 第 4.6.2 节仅描述 API 监听和书签抓取，无本地工具工作目录采集 | 已修复：新增 `ToolWatchSource` 类型 + `ConfigService` CRUD + `session-parser.ts`（Codex/Claude Code/Cursor/Markdown/Text 五种解析器，递归提取 content）+ `ToolDirWatcher`（多源 chokidar + mtime+size 去重）+ `/api/config/tool-sources` API + `ToolSourceList` 前端组件（预设快速添加） | ~~P1~~ |
 | 用户画像无演化可视化 | 第 4.8 节"profile.md 由审计持久化层更新"但用户无法感知画像变化 | 已修复：`ProfileUpdater` 新增"学习中的领域"区块 + `profile-changelog.jsonl` 变更历史记录 + `getChangelog` 方法 + `/api/profile` API（GET 画像+历史 / POST 手动分析）+ `ProfilePanel` 前端组件（分区块展示 + 演化时间线）+ Navbar 加画像 tab | ~~P2~~ |

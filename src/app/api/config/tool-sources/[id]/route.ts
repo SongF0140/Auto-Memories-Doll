@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ConfigService } from "../../../../../server/services/config-service";
 import { restartToolDirWatcher } from "../../../../../server/watchers/tool-dir-watcher";
 import { logger } from "../../../../../lib/logger";
+import { toolSourceUpdateSchema } from "../../../../../lib/validation";
 
 const idSchema = z.string().min(1).max(128);
 
@@ -14,22 +15,11 @@ function validateId(params: { id: string }) {
   return null;
 }
 
-const toolSourceUpdateSchema = z.object({
-  name: z.string().min(1).optional(),
-  dirPath: z.string().min(1).optional(),
-  format: z.string().min(1).optional(),
-  enabled: z.boolean().optional(),
-  autoIngest: z.boolean().optional(),
-});
-
 /**
  * PUT /api/config/tool-sources/:id
  * 更新监听源，并重启 watcher。
  */
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const err = validateId(params);
   if (err) return err;
 
@@ -47,7 +37,7 @@ export async function PUT(
 
   const service = new ConfigService();
   try {
-    const updated = service.updateToolSource(params.id, parsed.data as Record<string, unknown>);
+    const updated = service.updateToolSource(params.id, parsed.data);
     if (!updated) {
       return NextResponse.json({ error: "监听源不存在" }, { status: 404 });
     }
@@ -66,10 +56,7 @@ export async function PUT(
  * DELETE /api/config/tool-sources/:id
  * 删除监听源，并重启 watcher。
  */
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
   const err = validateId(params);
   if (err) return err;
 
