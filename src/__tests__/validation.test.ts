@@ -29,6 +29,14 @@ describe("chatRequestSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects a session id that could escape the sessions directory", () => {
+    const result = chatRequestSchema.safeParse({
+      messages: validBody.messages,
+      sessionId: "../outside",
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("memoryCreateSchema", () => {

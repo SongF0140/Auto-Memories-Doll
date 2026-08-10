@@ -12,7 +12,7 @@
 | **图谱关系** | 文件内 `[[wikilink]]` 构建的内存索引，替代图数据库边表 | `src/lib/graph/wiki-graph.ts` |
 | **降级模式** | LLM API 不可用时切换为本地检索模板回复，Embedding 不可用时降级为关键词匹配 | `src/lib/ai/model-adapter.ts` |
 | **工具系统** | Zod schema 校验 + 异步执行器，结果分层为 `content`（给模型）和 `data`（给 UI） | `src/lib/ai/tool-caller.ts` |
-| **会话系统** | 前端内存 + localStorage 持久化，系统消息不保存（恢复时重建） | `src/components/chat/useChatSession.ts` |
+| **会话系统** | 前端内存维护当前状态，服务端 JSONL 作为持久化真源；系统消息不保存（恢复时重建） | `src/components/chat/useChatSession.ts` / `src/server/services/chat-session-service.ts` |
 | **提供商目录** | `providers.json` 声明式注册 AI 提供商和模型，零代码接入新端点 | `src/config/providers.json` |
 | **存储路径热重载** | 数据库路径固定（env），笔记路径存 db 配置表可在设置面板修改并自动迁移 | `src/lib/storage/path-resolver.ts` |
 | **工具会话采集** | 监听 Cursor/Codex/Claude Code 工作目录，解析会话文件自动入队 | `src/server/watchers/tool-dir-watcher.ts` |
@@ -499,32 +499,34 @@ Auto-Memeries-Doll 将工具定义与 UI 层分离：
 
 **设计**
 
-Auto-Memeries-Doll 的会话采用轻量级内存模型：
+Auto-Memeries-Doll 的会话采用“前端内存状态 + 服务端追加式 JSONL”模型：
 
-- `sessionId` 由前端生成（UUID），通过请求体传递给 API。
-- 消息历史存储在 React Context（`ChatContext`），生命周期等同于浏览器标签页。
-- 每次对话请求携带完整 `messages` 数组，服务端无状态、不持久化会话。
-- `ChatMode`（`normal` | `memory`）切换影响工具清单和系统提示。
+- `sessionId` 由前端生成，通过请求体传递给 API。
+- 当前消息历史保存在 React state；每次对话请求仍携带完整 `messages` 数组。
+- 服务端在请求开始和 AI 回答结束时向 `memory-root/sessions/{sessionId}.jsonl` 追加快照，JSONL 是恢复与列表的唯一真源。
+- 系统消息不写入快照，恢复后由当前 `ChatHandler` 配置重建。
+- `ChatMode`（`chat` | `memory` | `prompt`）随会话快照保存；localStorage 只保留界面偏好与一次性迁移标记。
 
 **职责**
 
-- 维护当前会话的消息列表（user / assistant / tool 角色）。
+- 维护当前会话的消息列表（user / assistant / system 角色）。
 - 在每次请求时将完整对话历史发送给 API。
 - 支持流式响应中增量追加 assistant 消息。
-- 管理 `ChatMode` 切换：`normal` 模式仅对话，`memory` 模式启用记忆检索和写回工具。
+- 通过 `/api/chat/sessions` 提供会话列表、恢复、追加快照、删除标记和旧 localStorage 迁移。
+- 管理 `ChatMode` 切换：`chat` 模式仅对话，`memory` 模式启用记忆检索和写回工具。
 
 **非职责**
 
 会话系统不负责：
-- 跨标签页共享状态（单标签页设计）。
-- 会话持久化到磁盘（页面刷新后历史丢失，当前待实现）。
+- 实时同步多个已打开标签页中的当前 UI 状态。
 - 多会话分支和树状回放（不在当前路线图中）。
 - 系统提示的版本管理（每次请求从当前配置重建）。
 
 **边界**
 
-- 会话状态管理属于 `src/components/chat/`（ChatContext）。
-- 会话 ID 和模式切换属于入口层（`page.tsx` 的 Tab 面板）。
+- 会话状态管理属于 `src/components/chat/useChatSession.ts`。
+- JSONL 的追加、读取和投影属于 `src/server/services/chat-session-service.ts`。
+- HTTP 查询与迁移入口属于 `src/app/api/chat/sessions/`。
 - 消息序列化和 API 传输属于快轨层（`ChatHandler.streamResponse()`）。
 - 会话不干预记忆持久化；记忆写回始终通过审计持久化层。
 
@@ -532,8 +534,8 @@ Auto-Memeries-Doll 的会话采用轻量级内存模型：
 
 | 限制 | 影响 | 计划 |
 |------|------|------|
-| 纯内存存储 | 刷新页面丢失所有对话历史 | 后续引入 localStorage 或 IndexedDB 持久化 |
-| 单标签页 | 多 Tab 互不可见 | 保持当前设计，本地单机场景无需多 Tab 同步 |
+| 快照重复完整消息 | 长会话的 JSONL 文件增长较快 | 后续增加压缩/归档，不修改既有行 |
+| 多标签页无实时通知 | 一个 Tab 的列表变更不会立即推送到另一个 Tab | 切回页面时刷新，后续可增加轻量通知 |
 | 无分支/回放 | 无法回溯历史决策路径 | 非当前优先级 |
 
 ## 5. 数据类型
@@ -791,7 +793,7 @@ export type ConflictRecord = {
 | 日志系统 | 未提及 | 已修复：核心链路（model-adapter, memory-service, orchestrator）迁移到 `logger` | ~~P3~~ |
 | 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：22 文件 274 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路 | ~~P2~~ |
 | 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
-| 会话系统提示快照 | 持久化 system 消息 | 已修复：`saveSession` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
+| 会话系统提示快照 | 持久化 system 消息 | 已修复：`ChatSessionService.appendSnapshot` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
 | 提供商配置 | AI 配置仅前端表单 | 新增 `src/config/providers.json` 声明式目录 + `provider-loader.ts` 读写层 | P2 |
 | docs 目录未纳入版本控制 | 第 2 节要求文档跟随实现，差异有记录 | 已修复：`.gitignore` 不再忽略 `docs-zh/`，仅继续忽略 `docs-zh/.obsidian/workspace.json` 这类个人编辑器状态；项目文档可进入版本控制 | ~~P2~~ |
 | 降级状态恢复 | 第 4.11 节描述降级但未提恢复 | 已修复：`ModelAdapter.startHealthCheck()` 周期性轮询，恢复后自动退出降级；scheduler setInterval 类型修复 | ~~P1~~ |
@@ -855,8 +857,8 @@ Phase 1 — 核心稳定 [IN PROGRESS]
   [x] 浏览器历史/书签采集（history-collector + BrowserCollectScheduler，默认关闭）
 
 Phase 2 — 会话升级
-  [x] localStorage → JSONL 文件持久化（useChatSession 本地恢复 + ChatSessionService 追加 JSONL 快照）
-  [x] 多会话列表 + 切换（switchSession / removeSession UI 已接入）
+  [x] localStorage → JSONL 文件持久化（服务端列表/恢复/删除 API + 最终 assistant 回复落盘 + 一次性旧数据迁移）
+  [x] 多会话列表 + 切换（JSONL 为唯一真源，switchSession / removeSession UI 已接入）
   [x] 会话恢复系统提示重建（ChatHandler 已支持，system 消息不持久化）
 
 Phase 3 — 智能增强

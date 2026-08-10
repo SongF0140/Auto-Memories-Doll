@@ -3,68 +3,109 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { ChatMessage, ChatMode } from "../../types/api";
 
-/** 存储键名 */
-const STORAGE_KEY_PREFIX = "amd_session_";
+const LEGACY_SESSION_PREFIX = "amd_session_";
 const STORAGE_MODE_KEY = "amd_chat_mode";
+const MIGRATION_KEY = "amd_session_migration_v1";
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-/** 生成唯一 sessionId */
+type ApiEnvelope<T> = {
+  success: boolean;
+  data?: T;
+  error?: { message: string };
+};
+
+type SessionSummary = {
+  sessionId: string;
+  mode: ChatMode;
+  title: string;
+  messageCount: number;
+  updatedAt: string;
+};
+
+type SessionSnapshot = {
+  sessionId: string;
+  mode: ChatMode;
+  messages: ChatMessage[];
+  createdAt: string;
+};
+
 function generateSessionId(): string {
   return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** 安全判断是否在浏览器环境 */
-const isBrowser = () => typeof window !== "undefined";
-
-/** 从 localStorage 恢复会话 */
-function loadSession(sessionId: string): ChatMessage[] | null {
-  if (!isBrowser()) return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_PREFIX + sessionId);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    return parsed as ChatMessage[];
-  } catch {
-    return null;
+async function requestApi<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  const payload = (await response.json()) as ApiEnvelope<T>;
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new Error(payload.error?.message || `请求失败 (${response.status})`);
   }
+  return payload.data;
 }
 
-/** 保存会话到 localStorage（过滤掉 system 消息，恢复时由 ChatHandler 重建系统提示） */
-function saveSession(sessionId: string, messages: ChatMessage[]): void {
-  if (!isBrowser()) return;
-  try {
-    const persistable = messages.filter((m) => m.role !== "system");
-    localStorage.setItem(STORAGE_KEY_PREFIX + sessionId, JSON.stringify(persistable));
-  } catch {
-    // localStorage 满时静默失败
-  }
+async function listServerSessions(): Promise<SessionSummary[]> {
+  const data = await requestApi<{ sessions: SessionSummary[] }>("/api/chat/sessions");
+  return data.sessions;
 }
 
-/** 获取所有已保存的会话 ID 列表 */
-function listSessionIds(): string[] {
-  if (!isBrowser()) return [];
-  try {
-    const ids: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(STORAGE_KEY_PREFIX)) {
-        ids.push(key.slice(STORAGE_KEY_PREFIX.length));
+async function loadServerSession(sessionId: string): Promise<SessionSnapshot> {
+  const data = await requestApi<{ session: SessionSnapshot }>(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+  );
+  return data.session;
+}
+
+function readLegacySessions(mode: ChatMode) {
+  if (localStorage.getItem(MIGRATION_KEY) === "done") return [];
+
+  const sessions: Array<{ sessionId: string; mode: ChatMode; messages: ChatMessage[] }> = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(LEGACY_SESSION_PREFIX)) continue;
+    const sessionId = key.slice(LEGACY_SESSION_PREFIX.length);
+    if (!SESSION_ID_PATTERN.test(sessionId)) continue;
+
+    try {
+      const messages = JSON.parse(localStorage.getItem(key) || "null") as unknown;
+      if (
+        !Array.isArray(messages) ||
+        !messages.every(
+          (message) =>
+            typeof message === "object" &&
+            message !== null &&
+            ["user", "assistant", "system"].includes(message.role) &&
+            typeof message.content === "string",
+        )
+      ) {
+        continue;
       }
+      sessions.push({
+        sessionId,
+        mode,
+        messages: messages as ChatMessage[],
+      });
+    } catch {
+      // 保留无法解析的旧数据，避免迁移失败时误删。
     }
-    return ids.sort().reverse(); // 最新的在前
-  } catch {
-    return [];
   }
+  return sessions;
 }
 
-/** 删除指定会话 */
-function deleteSession(sessionId: string): void {
-  if (!isBrowser()) return;
-  try {
-    localStorage.removeItem(STORAGE_KEY_PREFIX + sessionId);
-  } catch {
-    // 静默失败
+async function migrateLegacySessions(mode: ChatMode): Promise<void> {
+  if (localStorage.getItem(MIGRATION_KEY) === "done") return;
+  const sessions = readLegacySessions(mode);
+
+  if (sessions.length > 0) {
+    await requestApi<{ imported: number; skipped: number }>("/api/chat/sessions/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessions }),
+    });
+    for (const session of sessions) {
+      localStorage.removeItem(LEGACY_SESSION_PREFIX + session.sessionId);
+    }
   }
+
+  localStorage.setItem(MIGRATION_KEY, "done");
 }
 
 export interface ChatSessionState {
@@ -72,136 +113,202 @@ export interface ChatSessionState {
   messages: ChatMessage[];
   mode: ChatMode;
   loading: boolean;
+  hydrating: boolean;
+  sessionError: string;
   sessionIds: string[];
 }
 
 export function useChatSession() {
-  // SSR 安全初始化：不访问 localStorage，避免服务端渲染报错
   const [state, setState] = useState<ChatSessionState>(() => ({
     sessionId: generateSessionId(),
     messages: [],
     mode: "chat",
     loading: false,
+    hydrating: true,
+    sessionError: "",
     sessionIds: [],
   }));
+  const sessionRequestRef = useRef(0);
 
-  // 客户端挂载后从 localStorage 恢复会话和模式
   useEffect(() => {
-    if (!isBrowser()) return;
-    const savedMode = (localStorage.getItem(STORAGE_MODE_KEY) as ChatMode) || "chat";
-    const existingIds = listSessionIds();
-    if (existingIds.length > 0) {
-      const msgs = loadSession(existingIds[0]) || [];
-      setState({
-        sessionId: existingIds[0],
-        messages: msgs,
-        mode: savedMode,
-        loading: false,
-        sessionIds: existingIds,
-      });
-    } else {
-      setState((prev) => ({ ...prev, mode: savedMode }));
+    let cancelled = false;
+
+    async function restoreSession() {
+      const storedMode = localStorage.getItem(STORAGE_MODE_KEY);
+      const savedMode: ChatMode =
+        storedMode === "memory" || storedMode === "prompt" ? storedMode : "chat";
+      try {
+        await migrateLegacySessions(savedMode);
+        const sessions = await listServerSessions();
+        if (cancelled) return;
+
+        if (sessions.length === 0) {
+          setState((previous) => ({
+            ...previous,
+            mode: savedMode,
+            hydrating: false,
+            sessionIds: [],
+          }));
+          return;
+        }
+
+        const session = await loadServerSession(sessions[0].sessionId);
+        if (cancelled) return;
+        setState((previous) => ({
+          ...previous,
+          sessionId: session.sessionId,
+          messages: session.messages,
+          mode: session.mode,
+          hydrating: false,
+          sessionError: "",
+          sessionIds: sessions.map((item) => item.sessionId),
+        }));
+      } catch (error) {
+        if (cancelled) return;
+        setState((previous) => ({
+          ...previous,
+          mode: savedMode,
+          hydrating: false,
+          sessionError: `会话恢复失败: ${(error as Error).message}`,
+        }));
+      }
+    }
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const sessions = await listServerSessions();
+      setState((previous) => ({
+        ...previous,
+        sessionIds: sessions.map((item) => item.sessionId),
+        sessionError: "",
+      }));
+      return sessions;
+    } catch (error) {
+      setState((previous) => ({
+        ...previous,
+        sessionError: `会话列表刷新失败: ${(error as Error).message}`,
+      }));
+      return [];
     }
   }, []);
 
-  // 消息变更时自动保存（节流 500ms）
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveSession(state.sessionId, state.messages);
-      // 刷新会话列表
-      setState((prev) => ({ ...prev, sessionIds: listSessionIds() }));
-    }, 500);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [state.messages, state.sessionId]);
-
-  // 模式变更时保存
   const setMode = useCallback((mode: ChatMode) => {
-    setState((prev) => ({ ...prev, mode }));
-    if (isBrowser()) {
-      localStorage.setItem(STORAGE_MODE_KEY, mode);
-    }
+    setState((previous) => ({ ...previous, mode }));
+    localStorage.setItem(STORAGE_MODE_KEY, mode);
   }, []);
 
   const setMessages = useCallback(
-    (messagesOrFn: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
-      setState((prev) => ({
-        ...prev,
+    (messagesOrFn: ChatMessage[] | ((previous: ChatMessage[]) => ChatMessage[])) => {
+      setState((previous) => ({
+        ...previous,
         messages:
-          typeof messagesOrFn === "function"
-            ? messagesOrFn(prev.messages)
-            : messagesOrFn,
+          typeof messagesOrFn === "function" ? messagesOrFn(previous.messages) : messagesOrFn,
       }));
     },
     [],
   );
 
   const setLoading = useCallback((loading: boolean) => {
-    setState((prev) => ({ ...prev, loading }));
+    setState((previous) => ({ ...previous, loading }));
   }, []);
 
-  /** 新建会话 */
   const newSession = useCallback(() => {
-    // 先保存当前会话
-    if (state.messages.length > 0) {
-      saveSession(state.sessionId, state.messages);
-    }
-    const newId = generateSessionId();
-    setState((prev) => ({
-      ...prev,
-      sessionId: newId,
+    sessionRequestRef.current += 1;
+    setState((previous) => ({
+      ...previous,
+      sessionId: generateSessionId(),
       messages: [],
-      sessionIds: listSessionIds(),
+      hydrating: false,
+      sessionError: "",
     }));
-  }, [state.messages, state.sessionId]);
+  }, []);
 
-  /** 切换到指定会话 */
-  const switchSession = useCallback(
-    (targetId: string) => {
-      // 保存当前
-      if (state.messages.length > 0) {
-        saveSession(state.sessionId, state.messages);
-      }
-      const msgs = loadSession(targetId) || [];
-      setState((prev) => ({
-        ...prev,
-        sessionId: targetId,
-        messages: msgs,
-        sessionIds: listSessionIds(),
+  const switchSession = useCallback(async (targetId: string) => {
+    const requestId = ++sessionRequestRef.current;
+    setState((previous) => ({ ...previous, hydrating: true, sessionError: "" }));
+
+    try {
+      const session = await loadServerSession(targetId);
+      if (requestId !== sessionRequestRef.current) return;
+      setState((previous) => ({
+        ...previous,
+        sessionId: session.sessionId,
+        messages: session.messages,
+        mode: session.mode,
+        hydrating: false,
       }));
-    },
-    [state.messages, state.sessionId],
-  );
+    } catch (error) {
+      if (requestId !== sessionRequestRef.current) return;
+      setState((previous) => ({
+        ...previous,
+        hydrating: false,
+        sessionError: `会话加载失败: ${(error as Error).message}`,
+      }));
+    }
+  }, []);
 
-  /** 删除会话 */
   const removeSession = useCallback(
-    (targetId: string) => {
-      deleteSession(targetId);
-      const remainingIds = listSessionIds();
-      if (targetId === state.sessionId) {
-        // 正在删除当前会话，切换到最近的或新建
-        if (remainingIds.length > 0) {
-          const msgs = loadSession(remainingIds[0]) || [];
-          setState((prev) => ({
-            ...prev,
-            sessionId: remainingIds[0],
-            messages: msgs,
+    async (targetId: string) => {
+      const requestId = ++sessionRequestRef.current;
+      const deletingActiveSession = targetId === state.sessionId;
+      if (deletingActiveSession) {
+        setState((previous) => ({ ...previous, hydrating: true, sessionError: "" }));
+      }
+
+      try {
+        await requestApi<{ sessionId: string; deleted: boolean }>(
+          `/api/chat/sessions/${encodeURIComponent(targetId)}`,
+          { method: "DELETE" },
+        );
+        const sessions = await listServerSessions();
+        if (requestId !== sessionRequestRef.current) return;
+        const remainingIds = sessions.map((item) => item.sessionId);
+
+        if (!deletingActiveSession) {
+          setState((previous) => ({
+            ...previous,
             sessionIds: remainingIds,
+            sessionError: "",
           }));
-        } else {
-          const newId = generateSessionId();
-          setState((prev) => ({
-            ...prev,
-            sessionId: newId,
+          return;
+        }
+
+        if (sessions.length === 0) {
+          setState((previous) => ({
+            ...previous,
+            sessionId: generateSessionId(),
             messages: [],
+            hydrating: false,
+            sessionError: "",
             sessionIds: [],
           }));
+          return;
         }
-      } else {
-        setState((prev) => ({ ...prev, sessionIds: remainingIds }));
+
+        const session = await loadServerSession(sessions[0].sessionId);
+        if (requestId !== sessionRequestRef.current) return;
+        setState((previous) => ({
+          ...previous,
+          sessionId: session.sessionId,
+          messages: session.messages,
+          mode: session.mode,
+          hydrating: false,
+          sessionError: "",
+          sessionIds: remainingIds,
+        }));
+      } catch (error) {
+        if (requestId !== sessionRequestRef.current) return;
+        setState((previous) => ({
+          ...previous,
+          hydrating: false,
+          sessionError: `会话删除失败: ${(error as Error).message}`,
+        }));
       }
     },
     [state.sessionId],
@@ -212,6 +319,7 @@ export function useChatSession() {
     setMessages,
     setMode,
     setLoading,
+    refreshSessions,
     newSession,
     switchSession,
     removeSession,

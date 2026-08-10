@@ -3,6 +3,8 @@ import { ChatHandler } from "../../../../features/chat/handler";
 import { chatRequestSchema } from "../../../../lib/validation";
 import { apiError } from "../../../../lib/api-response";
 import { ErrorCode } from "../../../../lib/api-errors";
+import { ChatSessionService } from "../../../../server/services/chat-session-service";
+import { logger } from "../../../../lib/logger";
 
 /**
  * POST /api/chat/stream
@@ -15,25 +17,46 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json(apiError(ErrorCode.INVALID_JSON, "请求体必须是合法的 JSON"), { status: 400 });
+    return NextResponse.json(apiError(ErrorCode.INVALID_JSON, "请求体必须是合法的 JSON"), {
+      status: 400,
+    });
   }
 
   const parsed = chatRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(apiError(ErrorCode.VALIDATION_FAILED, parsed.error.issues[0].message), { status: 400 });
+    return NextResponse.json(
+      apiError(ErrorCode.VALIDATION_FAILED, parsed.error.issues[0].message),
+      { status: 400 },
+    );
   }
 
   const { messages, mode, sessionId, memoryIds } = parsed.data;
   const handler = new ChatHandler();
+  const sessionService = new ChatSessionService();
+  let closeHandlerInFinally = true;
 
   try {
+    try {
+      sessionService.appendSnapshot({ sessionId, mode, messages });
+    } catch (error) {
+      logger.chat.warn("会话 JSONL 持久化失败", { error: (error as Error).message });
+    }
+
     const result = await handler.streamResponse(messages, mode, sessionId, memoryIds);
+    const persistedStream = sessionService.captureAssistantStream({
+      stream: result,
+      sessionId,
+      mode,
+      messages,
+      onComplete: () => handler.close(),
+    });
+    closeHandlerInFinally = false;
 
     // 将 AiEvent ReadableStream 转为 SSE Response
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const reader = result.getReader();
+        const reader = persistedStream.getReader();
         try {
           while (true) {
             const { done, value } = await reader.read();
@@ -42,7 +65,7 @@ export async function POST(request: NextRequest) {
           }
         } catch (err) {
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "error", message: String(err) })}\n\n`)
+            encoder.encode(`data: ${JSON.stringify({ type: "error", message: String(err) })}\n\n`),
           );
         }
         controller.close();
@@ -57,8 +80,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json(apiError(ErrorCode.INTERNAL_ERROR, (error as Error).message), { status: 500 });
+    return NextResponse.json(apiError(ErrorCode.INTERNAL_ERROR, (error as Error).message), {
+      status: 500,
+    });
   } finally {
-    handler.close();
+    if (closeHandlerInFinally) handler.close();
   }
 }

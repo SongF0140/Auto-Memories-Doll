@@ -1,5 +1,29 @@
 import { z } from "zod";
 
+export const chatSessionIdSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, "sessionId 格式无效");
+
+export const chatMessageSchema = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string(),
+  id: z.string().optional(),
+  timestamp: z.string().optional(),
+});
+
+export const chatSessionWriteSchema = z.object({
+  mode: z.enum(["chat", "memory", "prompt"]).default("chat"),
+  messages: z.array(chatMessageSchema),
+});
+
+export const chatSessionImportSchema = z.object({
+  sessions: z
+    .array(
+      chatSessionWriteSchema.extend({
+        sessionId: chatSessionIdSchema,
+      }),
+    )
+    .max(100, "单次最多迁移 100 个会话"),
+});
+
 const modelTierSchema = z.object({
   model: z.string().min(1, "model 不能为空"),
   maxTokens: z.number().int().min(1).max(131072),
@@ -26,16 +50,9 @@ export const aiConfigSchema = z.object({
 });
 
 export const chatRequestSchema = z.object({
-  messages: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant", "system"]),
-        content: z.string(),
-      }),
-    )
-    .min(1, "messages 至少需要一条消息"),
+  messages: z.array(chatMessageSchema).min(1, "messages 至少需要一条消息"),
   mode: z.enum(["chat", "memory", "prompt"]).default("chat"),
-  sessionId: z.string().default("default"),
+  sessionId: chatSessionIdSchema.default("default"),
   memoryIds: z.array(z.string()).optional(),
 });
 
