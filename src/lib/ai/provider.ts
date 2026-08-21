@@ -36,7 +36,7 @@ export function createLanguageModel(modelType?: ModelType): LanguageModel {
     apiKey: config.apiKey,
     baseURL: config.baseURL,
   });
-  return openai(tier.model);
+  return openai.chat(tier.model);
 }
 
 export function createEmbeddingModel() {

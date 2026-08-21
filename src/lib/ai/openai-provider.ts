@@ -29,6 +29,14 @@ export class OpenAIProvider implements AiProvider {
     modelType?: ModelType;
   }): ReadableStream<AiEvent> {
     const { messages, temperature, tools: toolDefs, readonly, modelType } = options;
+    const tier = this.getTier(modelType);
+    // AI SDK 7 将系统提示从 messages 移到 instructions。保留对上层
+    // AiEvent / ChatMessage 契约的兼容，由 Provider 在边界处完成转换。
+    const instructions = messages
+      .filter((message) => message.role === "system")
+      .map((message) => message.content)
+      .join("\n\n");
+    const conversationMessages = messages.filter((message) => message.role !== "system");
 
     return new ReadableStream<AiEvent>({
       start: async (controller) => {
@@ -49,8 +57,12 @@ export class OpenAIProvider implements AiProvider {
 
           const result = streamText({
             model,
-            messages: messages as any,
+            instructions: instructions || undefined,
+            messages: conversationMessages as any,
             temperature,
+            // 必须将设置页中的额度传给提供商。DeepSeek 等推理模型会先输出
+            // reasoning token，未设置额度时可能耗尽默认上限而没有最终文本。
+            maxOutputTokens: tier.maxTokens,
             tools: toolDefs && toolDefs.length > 0 ? sdkTools : undefined,
             stopWhen: isStepCount(readonly ? 1 : 5),
             experimental_transform: smoothStream(),
@@ -151,7 +163,39 @@ export class OpenAIProvider implements AiProvider {
     const openai = createOpenAI({
       apiKey: this.config.apiKey,
       baseURL: this.config.baseURL,
+      // DeepSeek V4 enables thinking by default. The current chat event contract only
+      // renders final text, so a short/default completion can otherwise end after
+      // reasoning tokens with no text delta. Disable thinking until it is modeled as
+      // a first-class UI event.
+      ...(this.isDeepSeekEndpoint()
+        ? {
+            fetch: async (input, init) => {
+              if (typeof init?.body !== "string") {
+                return fetch(input, init);
+              }
+
+              try {
+                const body = JSON.parse(init.body) as Record<string, unknown>;
+                return fetch(input, {
+                  ...init,
+                  body: JSON.stringify({ ...body, thinking: { type: "disabled" } }),
+                });
+              } catch {
+                return fetch(input, init);
+              }
+            },
+          }
+        : {}),
     });
-    return openai(tier.model);
+    return openai.chat(tier.model);
+  }
+
+  private isDeepSeekEndpoint(): boolean {
+    try {
+      const hostname = new URL(this.config.baseURL).hostname;
+      return hostname === "api.deepseek.com" || hostname.endsWith(".deepseek.com");
+    } catch {
+      return false;
+    }
   }
 }
