@@ -83,7 +83,10 @@ export class VectorRetriever {
       }));
     }
 
-    const results = this.index.search(embedding, memories.length);
+    // ANN 不需要扫描整个记忆集合；扩大候选池后再按允许的 memoryId 过滤。
+    // 4x/至少 50 条能兼顾选定子集过滤与查询延迟。
+    const candidateLimit = Math.min(memories.length, Math.max(limit * 4, 50));
+    const results = this.index.search(embedding, candidateLimit);
 
     const memoryMap = new Map(memories.map((m) => [m.id, m]));
 

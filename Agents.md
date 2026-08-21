@@ -8,7 +8,7 @@
 | **Agent 循环** | 用户消息 → 记忆检索 → 组装提示 → AI 流式响应 → 工具调用 → 候选记忆写入待审计队列 | `src/features/chat/handler.ts` |
 | **待审计队列** | 候选记忆写回前暂存的 SQLite 队列，按 `memoryId` 串行消费 | `src/server/services/memory-service.ts` |
 | **LLMWiki** | Markdown + YAML frontmatter 格式，每条记忆自包含 | `src/lib/storage/markdown-formatter.ts` |
-| **向量召回** | SQLite 存储向量 + 可插拔向量搜索后端；默认 JavaScript 余弦相似度，预留 `sqlite-vec` fallback 适配 | `src/lib/vector/retriever.ts` / `src/lib/vector/backend.ts` |
+| **向量召回** | SQLite 保存向量真源 + USearch HNSW ANN；版本失配自动重建，JS 精确扫描仅作降级 | `src/lib/vector/retriever.ts` / `src/lib/vector/backend.ts` |
 | **图谱关系** | 文件内 `[[wikilink]]` 构建的内存索引，替代图数据库边表 | `src/lib/graph/wiki-graph.ts` |
 | **降级模式** | LLM API 不可用时切换为本地检索模板回复，Embedding 不可用时降级为关键词匹配 | `src/lib/ai/model-adapter.ts` |
 | **工具系统** | Zod schema 校验 + 异步执行器，结果分层为 `content`（给模型）和 `data`（给 UI） | `src/lib/ai/tool-caller.ts` |
@@ -48,7 +48,7 @@
 - 状态管理：React Context
 - **主存储：LLMWiki（Markdown + YAML frontmatter）**——每条记忆自包含，人类和 LLM 均可直读
 - 加速层：SQLite（`better-sqlite3`）仅做向量索引和全文搜索缓存，主数据源是 Markdown 文件
-- 向量存储：SQLite 承载 `vector_records` 表，`VectorSearchBackend` 抽象搜索实现；默认 JavaScript 内存余弦相似度，`VECTOR_BACKEND=sqlite-vec` 时使用显式 fallback，后续可替换为 native 扩展
+- 向量存储：SQLite 承载 `vector_records` 真源，`VectorSearchBackend` 抽象搜索实现；默认 USearch HNSW ANN，索引以 `.usearch` sidecar 持久化且可从 SQLite 自动重建，`VECTOR_BACKEND=js` 时使用精确余弦 fallback
 - 关系管理：`[[wikilink]]` 内嵌在 Markdown 正文中，替代传统图数据库边表
 - 图谱查询：`src/lib/graph/wiki-graph.ts` 从文件扫描 wikilink 构建内存索引
 - 队列存储：SQLite 表 `pending_events`，承载 `PendingEvent` 待审计队列，支持按 `memoryId` 串行消费
@@ -175,7 +175,7 @@ next.config.js                  # Next.js 配置，启用 instrumentationHook
 - 长时记忆：可追溯的具体事实与事件，存放在 `notes/*/note-*.md`。
 - 索引地图：记录目录、标签、关系入口和引用路径的 `index-map.md`。
 - 关系映射层：描述记忆之间关系的本地图结构，使用文件内 `[[wikilink]]` 替代数据库边表；`wiki-graph.ts` 从文件扫描构建索引
-- 向量索引适配层：负责 embedding 生成、更新、检索和重排的本地模块，底层使用 SQLite 存储向量 + JavaScript 内存余弦相似度计算（后续可升级为 `sqlite-vec`）。
+- 向量索引适配层：负责 embedding 生成、更新、ANN 检索和重排的本地模块；SQLite 保存 `vector_records` 真源，USearch HNSW 图作为可重建 sidecar，JS 精确余弦仅作降级。
 - 待审计队列：后台加工层产出的候选记忆事件在写入最终文件前暂存的持久化队列，存储于 SQLite 表 `pending_events`，按 `memoryId` 串行消费。
 - 冲突分级：审计持久化层对候选记忆与现有记忆进行差异比对后的分级判断，分为自动可合并、需人工裁决和不可合并三级。
 - API 降级：当模型 API（LLM 或 embedding）不可用时，系统自动切换到有限功能的备用模式，保证本地数据操作不受影响。
@@ -263,7 +263,7 @@ Agent 循环不知道 Next.js 路由细节、React 组件、会话文件落盘�
 - 关系存储：`src/lib/graph/*`，负责记忆关系边和关系查询
 - 更新策略：短时记忆要点更新 `notes/*/Agent.md`，长时记忆更新 `notes/*/note-*.md`，索引地图更新 `index-map.md`，推荐权重更新 `profile.md`
 - 落盘与版本：记忆正文用 Node.js 文件系统 API 写入 Markdown 文件；向量、图谱、队列和冲突记录用 SQLite 事务写入
-- 向量存储：`src/lib/vector/*` 使用 SQLite + `better-sqlite3` 驱动，通过 `vector_records` 表存储；搜索经 `VectorSearchBackend` 抽象，默认 JavaScript 内存余弦相似度，`sqlite-vec` native 扩展可在该边界替换
+- 向量存储：`src/lib/vector/*` 使用 SQLite + `better-sqlite3` 驱动，通过 `vector_records` 表保存真源；搜索经 `VectorSearchBackend` 抽象，默认 USearch HNSW ANN，JS 精确扫描仅作显式/故障 fallback
 - 图谱存储：`src/lib/graph/wiki-graph.ts`（主路径）从文件扫描 `[[wikilink]]` 构建内存索引；`src/lib/graph/manager.ts`（已废弃，保留兼容）使用 SQLite 表 `graph_edges` 存储关系边
 - 队列存储：`src/features/audit/queue.ts`（内存 Map 实现，进程重启丢失）和 `src/server/services/memory-service.ts`（SQLite `pending_events` 表）提供双版本队列；推荐使用 SQLite 版本以保证持久化
 - 冲突记录：`src/features/audit/*` 使用 SQLite 表 `conflict_records` 存储需人工裁决的冲突，支持按 `status` 过滤
@@ -422,7 +422,7 @@ memory-root/
 - API 降级策略：当 LLM API 不可用时（网络错误、超时、认证失败），快轨层切换为基于本地检索的模板回复（不调用 LLM 生成），后台加工层暂停记忆提取任务并排队等待恢复；当 embedding API 不可用时，向量召回降级为关键词召回，新记忆仍写入文件但标记为"向量待生成"，恢复后批量补建。
 - 降级状态必须在前端展示明确提示，告知用户当前处于降级模式及影响范围。
 - 向量模型默认使用 `text-embedding-3-small`（维度 1536）；embedding 模型配置通过 `EmbeddingModelConfig`（见 5.5）管理，更换模型时必须同步更新维度约束和重建全部向量索引。
-- 向量索引持久化使用 SQLite，存储于 `memory-root/memory.db` 的 `vector_records` 表；查询经 `src/lib/vector/backend.ts` 后端接口执行
+- 向量真源持久化于 `memory-root/memory.db` 的 `vector_records` 表；HNSW 加速图保存为同目录的 `memory.db.ann-{dimensions}.usearch`，通过 SQLite sourceVersion 校验一致性，失配或损坏时自动重建；查询经 `src/lib/vector/backend.ts` 后端接口执行
 - 图谱关系通过文件内 `[[wikilink]]` 维护，`WikiGraph` 从文件扫描构建索引，无需独立图数据库
 - 检索重排默认采用 `MMR`；当需要更高精度时可在实现层切换为交叉编码器重排，但必须保持结果可回写。
 - 检索结果写回前必须保留召回来源、重排得分和最终入选理由，方便审计和调试。
@@ -815,7 +815,7 @@ export type ConflictRecord = {
 | 审计可读文本缺失 | 第 4.10 节"冲突分级策略" + 《架构检查文档》4.7 "markdown 流式转码 + LLM 检查" | 已修复：`AuditReporter.generateMarkdownReport()` 生成按来源/话题分布 + 冲突清单 + 最近记忆的可读 Markdown；`Orchestrator.processQueue` 末尾自动落盘到 `archive/audits/audit-{timestamp}.md` | ~~P1~~ |
 | ChatHandler 职责偏重 | Agent 循环负责检索、意图、提示词、流式输出 | 已修复：系统提示组装拆到 `src/features/chat/system-prompt.ts`，`ChatHandler` 只传入 `SystemBlocks` 并消费组装结果；新增 `chat-system-prompt.test.ts` 覆盖提示块契约 | ~~P3~~ |
 | Orchestrator 审计报告 I/O 内联 | 审计持久化层应由服务拆分职责 | 已修复：审计报告落盘拆到 `src/server/services/audit-report-writer.ts`，`Orchestrator` 仅调度 `AuditReportWriter.write()`；新增独立单测覆盖路径、文件名与写入内容 | ~~P3~~ |
-| 向量搜索后端固定 JS 实现 | Phase 3 规划升级 `sqlite-vec` | 已修复：新增 `src/lib/vector/backend.ts` 的 `VectorSearchBackend` 抽象，默认 JS 余弦搜索；`VECTOR_BACKEND=sqlite-vec` 时提供显式 fallback，保留 native 扩展替换边界；新增 `vector-backend.test.ts` | ~~P3~~ |
+| 向量搜索后端固定 JS 实现 | Phase 3 规划升级原生向量索引 | 已修复：`VectorSearchBackend` 默认使用 USearch HNSW ANN；SQLite 版本触发器检测索引失配并自动重建，按 embedding 维度分图持久化；JS 精确搜索仅作 `VECTOR_BACKEND=js` 或初始化失败 fallback；测试覆盖增删改、持久化重载和自动重建 | ~~P3~~ |
 | 画像回写无阈值 | 《架构检查文档》6.3 "回写震荡风险：自动更新 loop 如果太激进，会导致提示词频繁变化、标签漂移" | 已修复：`ProfileUpdater` 新增 `UPDATE_SIMILARITY_THRESHOLD=0.85`，新旧画像行级 Jaccard 相似度 ≥ 阈值时跳过回写，避免 `profile.md` 反复刷新导致 `PromptCache` 震荡 | ~~P2~~ |
 | API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 请求体 Zod 覆盖已完成；响应体 schema、错误码表和 handler 导出仍未覆盖所有路由，继续按目标规范推进 | P2 |
 | 配置 API 请求体验证 | 当前阶段至少保证 Zod 请求体校验覆盖 | 已修复：`config/storage` POST/PATCH 与 `config/tool-sources` POST/PUT 统一使用 `validation.ts` 中的 Zod schema；工具源 PUT 字段与 `ToolWatchSource` 契约对齐，并补充错误类型、默认值、路径遍历和旧字段名测试 | ~~P1~~ |
@@ -869,7 +869,7 @@ Phase 2 — 会话升级
 Phase 3 — 智能增强
   [ ] 会话上下文压缩（旧消息 AI 摘要替换）
   [ ] 会话树形分支（从任意节点分支对话）
-  [ ] 向量检索升级为 sqlite-vec（替代 JS 内存余弦相似度）
+  [x] 向量检索升级为 USearch HNSW ANN（SQLite 版本触发器 + sidecar 持久化 + 自动重建 + JS fallback）
 
 Phase 4 — 测试与质量
   [x] 快轨层测试（ChatHandler Agent 循环、降级路径、候选记忆生成）

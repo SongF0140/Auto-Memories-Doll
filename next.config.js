@@ -2,6 +2,8 @@
 const nextConfig = {
   experimental: {
     instrumentationHook: true,
+    // USearch 包含 Node-API 原生模块，必须由 Node 直接加载而非打入 webpack bundle。
+    serverComponentsExternalPackages: ["usearch"],
   },
 };
 

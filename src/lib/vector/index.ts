@@ -1,7 +1,27 @@
+import Database from "better-sqlite3";
 import { VectorRecord } from "../../types/memory";
 import { getDatabase } from "../storage/database";
-import { createVectorSearchBackend, VectorSearchBackend } from "./backend";
-import Database from "better-sqlite3";
+import { logger } from "../logger";
+import {
+  createVectorSearchBackend,
+  VectorSearchBackend,
+  VectorSearchRow,
+} from "./backend";
+
+type CachedBackend = {
+  kind: string;
+  backend: VectorSearchBackend;
+};
+
+const sharedBackends = new WeakMap<Database.Database, CachedBackend>();
+
+function rowFromRecord(record: VectorRecord): VectorSearchRow {
+  return {
+    memoryId: record.memoryId,
+    embedding: record.embedding,
+    dimensions: record.dimensions,
+  };
+}
 
 export class VectorIndex {
   private db: Database.Database;
@@ -9,8 +29,8 @@ export class VectorIndex {
 
   constructor() {
     this.db = getDatabase();
-    this.searchBackend = createVectorSearchBackend();
     this.init();
+    this.searchBackend = this.getBackend();
   }
 
   private init(): void {
@@ -26,9 +46,15 @@ export class VectorIndex {
   }
 
   create(record: VectorRecord): void {
+    const previous = this.read(record.memoryId);
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO vector_records (memoryId, embedding, model, dimensions, updatedAt)
+      INSERT INTO vector_records (memoryId, embedding, model, dimensions, updatedAt)
       VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(memoryId) DO UPDATE SET
+        embedding = excluded.embedding,
+        model = excluded.model,
+        dimensions = excluded.dimensions,
+        updatedAt = excluded.updatedAt
     `);
     stmt.run(
       record.memoryId,
@@ -37,6 +63,7 @@ export class VectorIndex {
       record.dimensions,
       record.updatedAt,
     );
+    this.searchBackend.upsert(rowFromRecord(record), previous ? rowFromRecord(previous) : null);
   }
 
   read(memoryId: string): VectorRecord | null {
@@ -58,22 +85,31 @@ export class VectorIndex {
   }
 
   delete(memoryId: string): void {
+    const previous = this.read(memoryId);
     const stmt = this.db.prepare("DELETE FROM vector_records WHERE memoryId = ?");
     stmt.run(memoryId);
+    this.searchBackend.delete(memoryId, previous ? rowFromRecord(previous) : null);
   }
 
   search(embedding: number[], limit: number): { memoryId: string; similarity: number }[] {
-    const stmt = this.db.prepare("SELECT * FROM vector_records");
-    const rows = stmt.all() as any[];
+    try {
+      return this.searchBackend.search(embedding, limit);
+    } catch (error) {
+      if (this.searchBackend.name === "js-exact") throw error;
 
-    return this.searchBackend.search(
-      embedding,
-      rows.map((row) => ({
-        memoryId: row.memoryId,
-        embedding: JSON.parse(row.embedding as string),
-      })),
-      limit,
-    );
+      logger.vector.warn("HNSW 查询失败，本次请求降级为 JS 精确检索", {
+        error: (error as Error).message,
+      });
+      return createVectorSearchBackend(this.db, "js").search(embedding, limit);
+    }
+  }
+
+  rebuild(dimensions?: number): void {
+    this.searchBackend.rebuild(dimensions);
+  }
+
+  getBackendName(): string {
+    return this.searchBackend.name;
   }
 
   list(): VectorRecord[] {
@@ -89,6 +125,20 @@ export class VectorIndex {
   }
 
   close(): void {
-    // shared connection — no-op
+    // shared connection and ANN backend — no-op
+  }
+
+  private getBackend(): VectorSearchBackend {
+    const kind = process.env.VECTOR_BACKEND || "hnsw";
+
+    // 内存数据库只用于测试；不共享可避免测试直接清表后残留进程内索引。
+    if (this.db.name === ":memory:") return createVectorSearchBackend(this.db, kind);
+
+    const cached = sharedBackends.get(this.db);
+    if (cached?.kind === kind) return cached.backend;
+
+    const backend = createVectorSearchBackend(this.db, kind);
+    sharedBackends.set(this.db, { kind, backend });
+    return backend;
   }
 }
