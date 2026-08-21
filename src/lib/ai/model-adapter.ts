@@ -46,7 +46,8 @@ export class ModelAdapter {
   private static pool = new ModelPool(apiConfig.concurrency);
 
   static get isDegradedMode(): boolean {
-    return this.isDegraded;
+    const config = getConfig();
+    return this.isDegraded || !config.apiKey || config.apiKey.trim() === "";
   }
 
   /** 获取并发池统计信息 */
@@ -93,7 +94,9 @@ export class ModelAdapter {
     const slot: ModelSlot = options.modelType || "standard";
 
     if (!config.apiKey || config.apiKey.trim() === "") {
-      return this.createFallbackStream("当前处于离线模式，请前往设置页面配置 AI API Key 和 baseURL。");
+      return this.createFallbackStream(
+        "当前处于离线模式，请前往设置页面配置 AI API Key 和 baseURL。",
+      );
     }
 
     // 通过池化调度：流创建本身受并发限制，流消费不受限

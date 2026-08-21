@@ -1,6 +1,7 @@
 import { VectorIndex } from "./index";
-import { generateEmbedding } from "./generator";
+import { generateEmbedding, isEmbeddingEmpty } from "./generator";
 import { MemoryRecord } from "../../types/memory";
+import { KeywordIndex, rankByKeywords } from "./keyword-index";
 
 /**
  * 默认相似度阈值：cosine similarity 低于此值的记忆视为噪声，不返回。
@@ -9,11 +10,20 @@ import { MemoryRecord } from "../../types/memory";
  */
 const DEFAULT_MIN_SIMILARITY = 0.3;
 
+export type RetrievalMode = "vector" | "keyword";
+
+export type RetrievalSearchResponse = {
+  results: { memoryId: string; similarity: number }[];
+  mode: RetrievalMode;
+};
+
 export class VectorRetriever {
   private index: VectorIndex;
+  private keywordIndex: KeywordIndex;
 
   constructor() {
     this.index = new VectorIndex();
+    this.keywordIndex = new KeywordIndex();
   }
 
   /**
@@ -25,11 +35,32 @@ export class VectorRetriever {
     limit: number = 10,
     minSimilarity: number = DEFAULT_MIN_SIMILARITY,
   ): Promise<{ memoryId: string; similarity: number }[]> {
+    const response = await this.searchDetailed(query, limit, minSimilarity);
+    return response.results;
+  }
+
+  /**
+   * 返回召回结果及实际使用的模式。Embedding 为空（未配置 Key、API 失败或并发超时）时，
+   * 自动切换到标题、正文、摘要、标签和主题的关键词检索。
+   */
+  async searchDetailed(
+    query: string,
+    limit: number = 10,
+    minSimilarity: number = DEFAULT_MIN_SIMILARITY,
+  ): Promise<RetrievalSearchResponse> {
     const embedding = await generateEmbedding(query);
+    if (isEmbeddingEmpty(embedding)) {
+      return {
+        results: this.keywordIndex.search(query, limit),
+        mode: "keyword",
+      };
+    }
+
     const results = this.index.search(embedding, limit);
-    return minSimilarity > 0
-      ? results.filter((r) => r.similarity >= minSimilarity)
-      : results;
+    return {
+      results: minSimilarity > 0 ? results.filter((r) => r.similarity >= minSimilarity) : results,
+      mode: "vector",
+    };
   }
 
   /**
@@ -43,6 +74,15 @@ export class VectorRetriever {
     minSimilarity: number = DEFAULT_MIN_SIMILARITY,
   ): Promise<{ memory: MemoryRecord; similarity: number }[]> {
     const embedding = await generateEmbedding(query);
+    if (isEmbeddingEmpty(embedding)) {
+      const keywordResults = rankByKeywords(query, memories, limit);
+      const memoryMap = new Map(memories.map((memory) => [memory.id, memory]));
+      return keywordResults.map((result) => ({
+        memory: memoryMap.get(result.memoryId)!,
+        similarity: result.similarity,
+      }));
+    }
+
     const results = this.index.search(embedding, memories.length);
 
     const memoryMap = new Map(memories.map((m) => [m.id, m]));
@@ -56,5 +96,6 @@ export class VectorRetriever {
 
   close(): void {
     this.index.close();
+    this.keywordIndex.close();
   }
 }

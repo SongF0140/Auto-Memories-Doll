@@ -8,9 +8,26 @@ const configMock = vi.hoisted(() => ({
     baseURL: "https://api.openai.com/v1",
     apiKey: "",
     flagship: { model: "gpt-4o", maxTokens: 8192, temperature: 0.3, timeout: 60000, maxRetries: 3 },
-    standard: { model: "gpt-4o-mini", maxTokens: 4096, temperature: 0.7, timeout: 30000, maxRetries: 2 },
-    budget: { model: "gpt-4o-mini", maxTokens: 2048, temperature: 0.6, timeout: 15000, maxRetries: 1 },
-    embedding: { model: "text-embedding-3-small", dimensions: 1536, maxConcurrency: 8, queueTimeoutMs: 60000 },
+    standard: {
+      model: "gpt-4o-mini",
+      maxTokens: 4096,
+      temperature: 0.7,
+      timeout: 30000,
+      maxRetries: 2,
+    },
+    budget: {
+      model: "gpt-4o-mini",
+      maxTokens: 2048,
+      temperature: 0.6,
+      timeout: 15000,
+      maxRetries: 1,
+    },
+    embedding: {
+      model: "text-embedding-3-small",
+      dimensions: 1536,
+      maxConcurrency: 8,
+      queueTimeoutMs: 60000,
+    },
   },
 }));
 
@@ -35,6 +52,8 @@ async function drain(stream: ReadableStream<AiEvent>): Promise<AiEvent[]> {
 
 describe("ModelAdapter degradation", () => {
   it("returns a fallback AiEvent stream when API key is missing", async () => {
+    expect(ModelAdapter.isDegradedMode).toBe(true);
+
     const stream = ModelAdapter.generateStream({
       messages: [{ role: "user", content: "hello" }],
       modelType: "standard",

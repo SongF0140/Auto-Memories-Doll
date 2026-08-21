@@ -54,6 +54,8 @@ export type MemoryListResponse = {
 export type MemorySearchResponse = {
   results: MemoryRecord[];
   total: number;
+  retrievalMode: "vector" | "keyword" | null;
+  degradedMode: boolean;
 };
 
 export type MemoryWriteRequest = {

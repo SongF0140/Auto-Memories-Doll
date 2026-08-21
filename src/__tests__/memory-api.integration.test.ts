@@ -11,6 +11,7 @@ const memoryServiceMock = vi.hoisted(() => ({
 
 const vectorRetrieverMock = vi.hoisted(() => ({
   search: vi.fn(),
+  searchDetailed: vi.fn(),
   close: vi.fn(),
 }));
 
@@ -73,6 +74,10 @@ describe("memory list/search/ingest HTTP contracts", () => {
     memoryServiceMock.getMemory.mockReturnValue(memory);
     memoryServiceMock.listClassifications.mockReturnValue([]);
     vectorRetrieverMock.search.mockResolvedValue([{ memoryId: memory.id, similarity: 0.92 }]);
+    vectorRetrieverMock.searchDetailed.mockResolvedValue({
+      results: [{ memoryId: memory.id, similarity: 0.92 }],
+      mode: "vector",
+    });
     orchestratorMock.processIngest.mockResolvedValue("event-1");
   });
 
@@ -103,6 +108,24 @@ describe("memory list/search/ingest HTTP contracts", () => {
     expect(body.success).toBe(true);
     expect(body.data.results).toEqual([expect.objectContaining(memory)]);
     expect(body.data.total).toBe(1);
+    expect(body.data.retrievalMode).toBe("vector");
+    expect(body.data.degradedMode).toBe(false);
+  });
+
+  it("GET /api/memory/search exposes keyword degradation mode", async () => {
+    vectorRetrieverMock.searchDetailed.mockResolvedValue({
+      results: [{ memoryId: memory.id, similarity: 0.6 }],
+      mode: "keyword",
+    });
+
+    const response = await searchMemories(
+      jsonRequest("http://localhost/api/memory/search?q=test", "GET"),
+    );
+    const body = await responseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body.data.retrievalMode).toBe("keyword");
+    expect(body.data.degradedMode).toBe(true);
   });
 
   it("POST /api/ingest returns the queued event inside data", async () => {

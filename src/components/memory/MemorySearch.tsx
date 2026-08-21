@@ -14,6 +14,7 @@ export default function MemorySearch() {
   const [results, setResults] = useState<MemoryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [retrievalMode, setRetrievalMode] = useState<MemorySearchResponse["retrievalMode"]>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -25,9 +26,10 @@ export default function MemorySearch() {
         `/api/memory/search?q=${encodeURIComponent(query)}`,
       );
       setResults(response.data.results);
-    } catch (error) {
-      console.error("Search failed:", error);
+      setRetrievalMode(response.data.retrievalMode);
+    } catch {
       setResults([]);
+      setRetrievalMode(null);
     } finally {
       setLoading(false);
     }
@@ -73,6 +75,14 @@ export default function MemorySearch() {
 
         {!loading && searched && (
           <>
+            {retrievalMode === "keyword" ? (
+              <div
+                role="status"
+                className="mb-6 rounded-xl border border-warning-bg bg-warning-bg/70 px-4 py-3 text-sm text-warning"
+              >
+                当前处于降级模式：Embedding 不可用，搜索已自动切换为标题、正文和标签关键词匹配。
+              </div>
+            ) : null}
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-text-primary">
                 {results.length > 0 ? "搜索结果" : "无匹配"}

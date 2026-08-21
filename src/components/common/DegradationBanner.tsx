@@ -51,7 +51,8 @@ export default function DegradationBanner() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-warning">AI API 降级模式</p>
           <p className="text-xs text-warning/80 leading-relaxed">
-            当前 AI 服务连接异常，系统已切换到有限功能模式。向量召回降级为关键词匹配，新记忆标记为&quot;向量待生成&quot;。恢复后将自动解除。
+            当前未配置 AI API Key
+            或服务连接异常。记忆搜索已自动切换为标题、正文和标签关键词匹配；依赖模型的功能暂不可用，恢复后将自动解除。
           </p>
         </div>
       </div>
