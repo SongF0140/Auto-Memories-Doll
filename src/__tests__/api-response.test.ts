@@ -7,7 +7,7 @@ describe("api-response", () => {
     const resp = apiResponse({ id: "abc" });
     expect(resp.success).toBe(true);
     expect(resp.data).toEqual({ id: "abc" });
-    expect(resp.error).toBeUndefined();
+    expect("error" in resp).toBe(false);
   });
 
   it("constructs error response", () => {

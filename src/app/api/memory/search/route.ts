@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       .slice(0, limit)
       .map((memoryId) => {
         const mem = memoryService.getMemory(memoryId);
-        return mem ? { ...mem, category } : null;
+        return mem ? { ...mem, ...(category ? { category } : {}) } : null;
       })
       .filter((m): m is NonNullable<typeof m> => m !== null);
 

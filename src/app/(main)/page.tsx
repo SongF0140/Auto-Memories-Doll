@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { MemoryListResponse } from "@/types/api";
 import { MemoryRecord } from "@/types/memory";
+import { requestApi } from "@/lib/api-client";
 
 async function fetchJson(url: string) {
   const res = await fetch(url);
@@ -20,10 +22,10 @@ export default function DashboardPage() {
     async function load() {
       try {
         const [mem, pro] = await Promise.all([
-          fetchJson("/api/memory?sortBy=updatedAt&sortOrder=desc&pageSize=6"),
+          requestApi<MemoryListResponse>("/api/memory?sortBy=updatedAt&sortOrder=desc&pageSize=6"),
           fetchJson("/api/profile"),
         ]);
-        setMemoryData({ items: mem.data?.items || [], total: mem.data?.total ?? 0 });
+        setMemoryData({ items: mem.data.items, total: mem.data.total });
         setProfileText(pro.content || null);
         setDegraded(pro.degradedMode ?? false);
       } catch { /* ignore */ }

@@ -7,7 +7,8 @@ import EmptyState from "../common/EmptyState";
 import { MagicCard } from "../ui/magic-card";
 import { ShimmerButton } from "../ui/shimmer-button";
 import MemoryViewer from "./MemoryViewer";
-import { AppError } from "../../lib/errors";
+import { requestApi } from "../../lib/api-client";
+import { IngestResponse, MemoryListResponse } from "../../types/api";
 
 // Photo by Léonard Cotte on Unsplash (free to use, no attribution required)
 const memoryGardenImage =
@@ -28,9 +29,8 @@ export default function MemoryList() {
   const fetchMemoryList = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/memory");
-      const result = await response.json();
-      setMemories(result.items || []);
+      const response = await requestApi<MemoryListResponse>("/api/memory");
+      setMemories(response.data.items);
     } catch (error) {
       console.error("Failed to fetch memories:", error);
     } finally {
@@ -46,22 +46,16 @@ export default function MemoryList() {
     setImportMessage("正在导入...");
 
     try {
-      const response = await fetch("/api/ingest", {
+      const response = await requestApi<IngestResponse>("/api/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, format: "text" }),
       });
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new AppError("IMPORT_FAILED", result.error || "导入失败");
-      }
 
       setImportContent("");
-      const count = result.memories?.length || 0;
-      const noAiMsg =
-        "（未配置 AI，跳过向量生成。可在设置中配置 AI 后重新导入以启用语义搜索）";
-      setImportMessage(`已导入 ${count} 条记忆 ${noAiMsg}`);
+      setImportMessage(
+        `导入任务已提交（${response.data.status}），处理完成后会出现在记忆列表中。`,
+      );
       await fetchMemoryList();
     } catch (error) {
       const errMsg = (error as Error).message;

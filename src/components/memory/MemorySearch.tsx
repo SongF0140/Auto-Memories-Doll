@@ -6,6 +6,8 @@ import MemoryCard from "./MemoryCard";
 import EmptyState from "../common/EmptyState";
 import { SpotlightCard } from "../ui/spotlight-card";
 import { MagneticButton } from "../ui/magnetic-button";
+import { requestApi } from "../../lib/api-client";
+import { MemorySearchResponse } from "../../types/api";
 
 export default function MemorySearch() {
   const [query, setQuery] = useState("");
@@ -19,9 +21,10 @@ export default function MemorySearch() {
     setLoading(true);
     setSearched(true);
     try {
-      const response = await fetch(`/api/memory/search?q=${encodeURIComponent(query)}`);
-      const data = await response.json();
-      setResults(data.results || []);
+      const response = await requestApi<MemorySearchResponse>(
+        `/api/memory/search?q=${encodeURIComponent(query)}`,
+      );
+      setResults(response.data.results);
     } catch (error) {
       console.error("Search failed:", error);
       setResults([]);

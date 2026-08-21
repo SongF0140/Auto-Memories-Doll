@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { ChatMessage, ChatMode } from "../../types/api";
+import { ChatMessage, ChatMode, MemoryListResponse } from "../../types/api";
 import { MemoryRecord } from "../../types/memory";
 import ChatMessageItem from "./ChatMessageItem";
 import ChatInput from "./ChatInput";
@@ -12,6 +12,7 @@ import { MagicCard } from "../ui/magic-card";
 import { SpotlightCard } from "../ui/spotlight-card";
 import { MagneticButton } from "../ui/magnetic-button";
 import { AppError } from "../../lib/errors";
+import { requestApi } from "../../lib/api-client";
 import { AiEvent } from "../../lib/ai/ai-events";
 import { useChatSession } from "./useChatSession";
 
@@ -64,11 +65,8 @@ export default function ChatInterface() {
 
   const fetchAvailableMemories = async () => {
     try {
-      const res = await fetch("/api/memory?pageSize=100");
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableMemories(data.items || []);
-      }
+      const response = await requestApi<MemoryListResponse>("/api/memory?pageSize=100");
+      setAvailableMemories(response.data.items);
     } catch (e) {
       console.error("Failed to fetch available memories:", e);
     }

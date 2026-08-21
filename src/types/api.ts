@@ -44,6 +44,18 @@ export type MemoryQueryResponse = {
   queryTime: number;
 };
 
+export type MemoryListResponse = {
+  items: MemoryRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type MemorySearchResponse = {
+  results: MemoryRecord[];
+  total: number;
+};
+
 export type MemoryWriteRequest = {
   memory: Partial<MemoryRecord>;
   mode: "merge" | "replace";
@@ -81,7 +93,6 @@ export type IngestRequest = {
 };
 
 export type IngestResponse = {
-  success: boolean;
   eventId: string;
   status: "queued" | "processing";
 };
