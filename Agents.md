@@ -163,7 +163,7 @@ next.config.js                  # Next.js 配置，启用 instrumentationHook
 
 文件监听链路 -> `instrumentation.ts` -> `src/server/listener/listener-service.ts` -> `src/server/watchers/file-watcher.ts` -> `src/features/ingest/*` -> `src/server/services/memory-service.ts` -> 记忆写入 + 向量生成
 
-外部工具监听链路 -> 外部工具 POST -> `/api/listen` -> `src/features/ingest/conversation-processor.ts` -> 对话格式化 + 话题提取 + 目录创建 + `MemoryService.createMemory()` -> 返回知识卡片 + memoryId
+外部工具监听链路 -> 外部工具 POST -> `/api/listen` -> `src/features/ingest/conversation-processor.ts` -> 对话格式化 + 话题提取 -> `MemoryService.stageCreateMemory()` -> 待审计队列 -> `Orchestrator` 以同一 memoryId 写入 SQLite 与 Markdown -> 返回知识卡片 + memoryId
 
 ### 4.3 术语定义
 - 中转站适配层：用于封装模型供应商差异的本地适配模块，统一请求格式、响应格式和错误处理。
@@ -277,8 +277,9 @@ Agent 循环不知道 Next.js 路由细节、React 组件、会话文件落盘�
 - 排除：`memory.db*`、`archive/**`、`index-map.md`、`profile.md`
 
 **触发行为**：
-- `add` 事件（新文件）：读取内容，经 `InputParser -> InputNormalizer -> IngestAdapter` 管线处理后，通过 `MemoryService.createMemory()` 写入记忆库并生成向量
-- `change` 事件（文件更新）：同上流程，重新解析并更新已有记忆
+- `add` 事件（新文件）：读取内容，经 `InputParser -> InputNormalizer -> IngestAdapter` 管线处理后，以 Markdown frontmatter 中的稳定 `id`（无 frontmatter 时按规范化文件路径生成稳定 ID）创建 `PendingEvent`
+- `change` 事件（文件更新）：解析同一稳定 `id`；记忆已存在时调用 `stageUpdateMemory()`，尚未落库时按同一 ID 执行 upsert-create，不得生成新的记忆 ID
+- 系统自身通过审计持久化层写出的 Markdown 由 `write-tracker` 标记，文件监听器跳过该次事件，避免写回循环
 
 **启动方式**：
 - `next.config.js` 启用 `experimental.instrumentationHook`
@@ -318,10 +319,11 @@ Agent 循环不知道 Next.js 路由细节、React 组件、会话文件落盘�
 
 **处理流程**：
 1. Zod 校验请求体 → 消息列表、来源必填
-2. `ConversationProcessor.formatConversation()` → 格式化对话为 Markdown，自动提取话题分类
-3. `ConversationProcessor.saveConversationFile()` → 保存到 `memory-root/notes/{topic}/note-{timestamp}.md`
-4. `MemoryService.createMemory()` → 创建记忆记录 + 生成向量 + 构建图谱关系
-5. 返回 `{ success, memoryId, topic, filePath, knowledgeCard }`
+2. `ConversationProcessor.formatConversation()` → 格式化对话内容，自动提取话题分类
+3. `ConversationProcessor.generateKnowledgeCard()` → 生成摘要、标签和话题元数据
+4. `MemoryService.stageCreateMemory()` → 只生成一条带稳定 `memoryId` 的 `PendingEvent`，不提前写 Markdown
+5. `Orchestrator` 审计通过后沿用该 `memoryId` 写入 SQLite、向量索引和 `notes/{topic}/{memoryId}.md`；Markdown frontmatter 必须包含同一 `id`
+6. 返回 `{ success, memoryId, topic, filePath, knowledgeCard }`，其中 `filePath` 是审计通过后的规范目标路径
 
 **自动话题分类**：
 `MemoryExtractor.extractTopic()` 基于关键词匹配自动分类：
@@ -821,6 +823,7 @@ export type ConflictRecord = {
 | 本地工具对话无法采集 | 第 4.6.2 节仅描述 API 监听和书签抓取，无本地工具工作目录采集 | 已修复：新增 `ToolWatchSource` 类型 + `ConfigService` CRUD + `session-parser.ts`（Codex/Claude Code/Cursor/Markdown/Text 五种解析器，递归提取 content）+ `ToolDirWatcher`（多源 chokidar + mtime+size 去重）+ `/api/config/tool-sources` API + `ToolSourceList` 前端组件（预设快速添加） | ~~P1~~ |
 | 用户画像无演化可视化 | 第 4.8 节"profile.md 由审计持久化层更新"但用户无法感知画像变化 | 已修复：`ProfileUpdater` 新增"学习中的领域"区块 + `profile-changelog.jsonl` 变更历史记录 + `getChangelog` 方法 + `/api/profile` API（GET 画像+历史 / POST 手动分析）+ `ProfilePanel` 前端组件（分区块展示 + 演化时间线）+ Navbar 加画像 tab | ~~P2~~ |
 | 浏览器历史未采集 | 第 4.6 节外部能力接入未覆盖浏览器历史 | 已修复：新增 `history-collector.ts`（Chrome/Edge History SQLite copy+读取+Chrome 时间戳转换+域名分组 / Bookmarks JSON 解析+文件夹分组）+ `BrowserCollectScheduler`（历史 30min / 书签 6h，默认 `BROWSER_COLLECT_ENABLED=false` 关闭）+ instrumentation 启动 | ~~P3~~ |
+| 文件监听与 `/api/listen` 重复写入 | 第 4.8 节要求候选先入待审计队列、最终文件只由审计持久化层写入 | 已修复：`/api/listen` 移除提前 Markdown 落盘，仅调用 `stageCreateMemory()`；审计新建沿用队列 `memoryId`；FileWatcher 按稳定 ID 区分 add/create 与 change/update，并增加外部文件修改集成测试 | ~~P0~~ |
 
 ### 11.2 渐进式路线图
 
@@ -856,6 +859,7 @@ Phase 1 — 核心稳定 [IN PROGRESS]
   [x] 本地工具采集（session-parser 五种解析器 + ToolDirWatcher + ToolSourceList + /api/config/tool-sources）
   [x] 用户画像演化可视化（画像加"学习中的领域"区块 + profile-changelog.jsonl + ProfilePanel + /api/profile）
   [x] 浏览器历史/书签采集（history-collector + BrowserCollectScheduler，默认关闭）
+  [x] 文件监听幂等化（`/api/listen` 单一入队、稳定 memoryId、add/create + change/update、外部修改集成测试）
 
 Phase 2 — 会话升级
   [x] localStorage → JSONL 文件持久化（服务端列表/恢复/删除 API + 最终 assistant 回复落盘 + 一次性旧数据迁移）

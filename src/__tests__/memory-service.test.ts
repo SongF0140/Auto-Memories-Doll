@@ -71,7 +71,11 @@ beforeEach(() => {
   vectorMock.shouldFail = false;
 });
 
-function makeEvent(memoryId: string, createdAt: string, candidateOverride: object = {}): PendingEvent {
+function makeEvent(
+  memoryId: string,
+  createdAt: string,
+  candidateOverride: object = {},
+): PendingEvent {
   const candidate = {
     id: memoryId,
     version: 1,
@@ -211,13 +215,35 @@ describe("MemoryService — updateEvent 状态流转", () => {
     svc.updateEvent(dequeued);
 
     // 直接查 db 验证 retryCount
-    const row = dbRef.current!.prepare("SELECT retryCount, status FROM pending_events WHERE eventId = ?").get(event.eventId) as any;
+    const row = dbRef
+      .current!.prepare("SELECT retryCount, status FROM pending_events WHERE eventId = ?")
+      .get(event.eventId) as any;
     expect(row.retryCount).toBe(1);
     expect(row.status).toBe("failed");
   });
 });
 
 describe("MemoryService — createMemory 完整流程", () => {
+  it("persists a queued record without replacing its stable memoryId", async () => {
+    const svc = new MemoryService();
+    const stagedId = svc.stageCreateMemory(
+      "external",
+      "listen",
+      "稳定 ID",
+      "候选正文",
+      "候选摘要",
+      [],
+      "integration",
+    );
+    const event = svc.getPendingEvents()[0];
+    const candidate = JSON.parse(event.candidate);
+
+    const persistedId = await svc.createMemoryRecord(candidate);
+
+    expect(persistedId).toBe(stagedId);
+    expect(svc.getMemory(stagedId)?.id).toBe(stagedId);
+  });
+
   it("creates memory, generates vector, and writes vectorId", async () => {
     const svc = new MemoryService();
     const id = await svc.createMemory("test", "manual", "标题", "内容", "摘要", ["a"], "topic-x");
@@ -296,7 +322,12 @@ describe("MemoryService — listMemories 排序与过滤", () => {
     await svc.createMemory("test", "manual", "T2", "C", "S");
     svc.incrementAccess(svc.listMemories({ sortBy: "title", sortOrder: "asc" })[0].id);
 
-    const result = svc.listMemories({ sortBy: "accessCount", sortOrder: "asc", limit: 2, offset: 0 });
+    const result = svc.listMemories({
+      sortBy: "accessCount",
+      sortOrder: "asc",
+      limit: 2,
+      offset: 0,
+    });
     expect(result[0].accessCount).toBe(0);
     expect(result[1].accessCount).toBe(1);
   });

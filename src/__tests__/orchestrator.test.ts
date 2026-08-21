@@ -5,9 +5,7 @@ const pipelineMock = vi.hoisted(() => ({
   pipelineResult: {
     isDuplicate: false,
     similarity: 0,
-    chunks: [
-      { content: "cleaned content", summary: "pipe-summary", tags: ["pipe-tag"] },
-    ],
+    chunks: [{ content: "cleaned content", summary: "pipe-summary", tags: ["pipe-tag"] }],
   },
 }));
 
@@ -17,17 +15,45 @@ vi.mock("../server/pipelines/json-pipeline", () => ({
 
 // ── mock: memory builder/validator ──
 const builderMock = vi.hoisted(() => {
-  const record = { id: "test-id", source: "test", sourceType: "ingest", title: "test title", content: "test content", summary: "test summary", tags: ["a"], topic: "uncategorized", graphLinks: [], createdAt: "2026-01-01", updatedAt: "2026-01-01", version: 2 };
+  const record = {
+    id: "test-id",
+    source: "test",
+    sourceType: "ingest",
+    title: "test title",
+    content: "test content",
+    summary: "test summary",
+    tags: ["a"],
+    topic: "uncategorized",
+    graphLinks: [],
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
+    version: 2,
+  };
   return {
     memoryRecord: record,
-    pendingEvent: { eventId: "evt-1", memoryId: "test-id", eventType: "ingest", candidate: JSON.stringify(record), changedFields: [], status: "pending", createdAt: "2026-01-01" },
+    pendingEvent: {
+      eventId: "evt-1",
+      memoryId: "test-id",
+      eventType: "ingest",
+      candidate: JSON.stringify(record),
+      changedFields: [],
+      status: "pending",
+      createdAt: "2026-01-01",
+    },
     validatorResult: true,
   };
 });
 
 vi.mock("../lib/memory/builder", () => ({
   buildMemoryRecord: vi.fn(
-    (source: string, sourceType: string, title: string, content: string, summary: string, tags: string[]) => ({
+    (
+      source: string,
+      sourceType: string,
+      title: string,
+      content: string,
+      summary: string,
+      tags: string[],
+    ) => ({
       id: "test-id",
       source,
       sourceType,
@@ -42,17 +68,15 @@ vi.mock("../lib/memory/builder", () => ({
       version: 2,
     }),
   ),
-  buildPendingEvent: vi.fn(
-    (id: string, sourceType: string, memory: any) => ({
-      eventId: "evt-1",
-      memoryId: id,
-      eventType: sourceType,
-      candidate: JSON.stringify(memory),
-      changedFields: Object.keys(memory),
-      status: "pending" as const,
-      createdAt: "2026-01-01",
-    }),
-  ),
+  buildPendingEvent: vi.fn((id: string, sourceType: string, memory: any) => ({
+    eventId: "evt-1",
+    memoryId: id,
+    eventType: sourceType,
+    candidate: JSON.stringify(memory),
+    changedFields: Object.keys(memory),
+    status: "pending" as const,
+    createdAt: "2026-01-01",
+  })),
 }));
 
 vi.mock("../lib/memory/validator", () => ({
@@ -95,9 +119,15 @@ vi.mock("../lib/storage/file-manager", () => ({
 
 // ── mock: vector/generator ──
 vi.mock("../lib/vector/generator", () => ({
-  buildVectorRecord: vi.fn((id: string) => Promise.resolve({
-    memoryId: id, embedding: [0.1], model: "test", dimensions: 1, updatedAt: "2026-01-01",
-  })),
+  buildVectorRecord: vi.fn((id: string) =>
+    Promise.resolve({
+      memoryId: id,
+      embedding: [0.1],
+      model: "test",
+      dimensions: 1,
+      updatedAt: "2026-01-01",
+    }),
+  ),
 }));
 
 // ── mock: VectorIndex ──
@@ -114,6 +144,7 @@ function createMemoryServiceStub() {
   return {
     getMemory: vi.fn(),
     createMemory: vi.fn(),
+    createMemoryRecord: vi.fn(),
     updateMemory: vi.fn(),
     setVectorId: vi.fn(),
     deleteMemory: vi.fn(),
@@ -232,7 +263,10 @@ describe("Orchestrator", () => {
 
       expect(result.content).toBe("候选正文");
       expect(stored.content).toBe("候选正文");
-      expect(createSnapshotMock).toHaveBeenCalledWith(expect.objectContaining({ content: "旧正文" }), 2);
+      expect(createSnapshotMock).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "旧正文" }),
+        2,
+      );
       expect(memoryServiceStub.setVectorId).toHaveBeenCalledWith(stored.id, stored.id);
       expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith(stored.id, "候选正文");
       expect(auditServiceStub.markConflictResolved).toHaveBeenCalledWith(
@@ -308,11 +342,7 @@ describe("Orchestrator", () => {
       });
       memoryServiceStub.listMemories.mockImplementation(() => [stored]);
 
-      const result = await orchestrator.resolveConflict(
-        "conflict-manual",
-        "manual",
-        "人工标题",
-      );
+      const result = await orchestrator.resolveConflict("conflict-manual", "manual", "人工标题");
 
       expect(result.title).toBe("人工标题");
       expect(auditServiceStub.markConflictResolved).toHaveBeenCalledWith(
@@ -332,7 +362,12 @@ describe("Orchestrator", () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
 
       const eventId = await orchestrator.processIngest(
-        "test-source", "ingest", "raw content", "My Title", "My Summary", ["tag1"],
+        "test-source",
+        "ingest",
+        "raw content",
+        "My Title",
+        "My Summary",
+        ["tag1"],
       );
 
       expect(eventId).toBe("evt-1");
@@ -344,9 +379,7 @@ describe("Orchestrator", () => {
     it("复用调用方传入的 summary（优先于 pipeline 自动生成的)", async () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
 
-      await orchestrator.processIngest(
-        "src", "ingest", "content", "Title", "User Summary", [],
-      );
+      await orchestrator.processIngest("src", "ingest", "content", "Title", "User Summary", []);
 
       const enqueuedEvent = memoryServiceStub.enqueueEvent.mock.calls[0][0];
       const candidate = JSON.parse(enqueuedEvent.candidate);
@@ -356,9 +389,9 @@ describe("Orchestrator", () => {
     it("合并调用方 tags 与 pipeline 自动提取的 tags", async () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
 
-      await orchestrator.processIngest(
-        "src", "ingest", "content", "Title", "Summary", ["user-tag"],
-      );
+      await orchestrator.processIngest("src", "ingest", "content", "Title", "Summary", [
+        "user-tag",
+      ]);
 
       const enqueuedEvent = memoryServiceStub.enqueueEvent.mock.calls[0][0];
       const candidate = JSON.parse(enqueuedEvent.candidate);
@@ -377,9 +410,7 @@ describe("Orchestrator", () => {
         ],
       };
 
-      await orchestrator.processIngest(
-        "src", "ingest", "content", "Title", "Summary", [],
-      );
+      await orchestrator.processIngest("src", "ingest", "content", "Title", "Summary", []);
 
       const enqueuedEvent = memoryServiceStub.enqueueEvent.mock.calls[0][0];
       const candidate = JSON.parse(enqueuedEvent.candidate);
@@ -390,9 +421,7 @@ describe("Orchestrator", () => {
     it("单 chunk 直接使用原始内容，不加 markdown 标题", async () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
 
-      await orchestrator.processIngest(
-        "src", "ingest", "content", "Title", "Summary", [],
-      );
+      await orchestrator.processIngest("src", "ingest", "content", "Title", "Summary", []);
 
       const enqueuedEvent = memoryServiceStub.enqueueEvent.mock.calls[0][0];
       const candidate = JSON.parse(enqueuedEvent.candidate);
@@ -420,9 +449,9 @@ describe("Orchestrator", () => {
         chunks: [],
       };
 
-      await expect(
-        orchestrator.processIngest("src", "ingest", "", "T", "S"),
-      ).rejects.toThrow(MemoryValidationError);
+      await expect(orchestrator.processIngest("src", "ingest", "", "T", "S")).rejects.toThrow(
+        MemoryValidationError,
+      );
     });
 
     it("validateMemoryRecord 返回 false 时抛出 MemoryValidationError", async () => {
@@ -440,19 +469,24 @@ describe("Orchestrator", () => {
   // ═══════════════════════════════════════════════════════════════
 
   describe("processEvent — 新建记忆", () => {
-    it("新记忆不存在 → 质量过滤通过 → createMemory → 写 Markdown → 分类 → 索引", async () => {
+    it("新记忆不存在 → 使用队列中的稳定 ID 持久化 → 写 Markdown → 分类 → 索引", async () => {
       const event = { ...builderMock.pendingEvent, eventType: "ingest" };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null); // 不存在
       qualityFilterMock.mockResolvedValue({ ok: true });
-      memoryServiceStub.createMemory.mockResolvedValue("new-id");
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
       memoryServiceStub.listMemories.mockReturnValue([]);
 
       await orchestrator.processQueue();
 
       expect(event.status).toBe("done");
-      expect(memoryServiceStub.createMemory).toHaveBeenCalled();
-      expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith("new-id", expect.any(String));
+      expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ id: event.memoryId }),
+      );
+      expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith(
+        event.memoryId,
+        expect.any(String),
+      );
     });
 
     it("质量过滤不通过 → status=failed → retryCount++ → 记录失败", async () => {
@@ -484,7 +518,9 @@ describe("Orchestrator", () => {
 
       await orchestrator.processQueue();
 
-      expect(memoryServiceStub.deleteMemory).toHaveBeenCalledWith(builderMock.pendingEvent.memoryId);
+      expect(memoryServiceStub.deleteMemory).toHaveBeenCalledWith(
+        builderMock.pendingEvent.memoryId,
+      );
       expect(event.status).toBe("done");
     });
   });
@@ -605,7 +641,7 @@ describe("Orchestrator", () => {
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null); // 新建
       qualityFilterMock.mockResolvedValue({ ok: true });
-      memoryServiceStub.createMemory.mockResolvedValue("new-id");
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
       memoryServiceStub.listMemories.mockReturnValue([]);
 
       await orchestrator.processQueue();
@@ -622,8 +658,8 @@ describe("Orchestrator", () => {
       };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null);
-      // 强制 createMemory 抛异常
-      memoryServiceStub.createMemory.mockRejectedValue(new Error("DB error"));
+      // 强制稳定 ID 持久化入口抛异常
+      memoryServiceStub.createMemoryRecord.mockRejectedValue(new Error("DB error"));
 
       await orchestrator.processQueue();
 

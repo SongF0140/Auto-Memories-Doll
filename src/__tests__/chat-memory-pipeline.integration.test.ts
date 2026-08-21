@@ -74,6 +74,7 @@ vi.mock("../server/services/memory-service", () => ({
         eventId: "evt-1",
         memoryId: pipelineState.record.id,
         sourceType: "chat",
+        eventType: "create",
         candidate: JSON.stringify(pipelineState.record),
         changedFields: Object.keys(pipelineState.record),
         createdAt: pipelineState.now,
@@ -84,9 +85,9 @@ vi.mock("../server/services/memory-service", () => ({
     }),
     getPendingEvents: vi.fn(() => pipelineState.pending),
     getMemory: vi.fn((id: string) => pipelineState.stored.get(id) ?? null),
-    createMemory: vi.fn(async () => {
-      pipelineState.stored.set(pipelineState.record.id, pipelineState.record);
-      return pipelineState.record.id;
+    createMemoryRecord: vi.fn(async (record: MemoryRecord) => {
+      pipelineState.stored.set(record.id, record);
+      return record.id;
     }),
     listMemories: vi.fn(() => Array.from(pipelineState.stored.values())),
     classifyMemory: vi.fn(),
@@ -175,10 +176,9 @@ describe("chat to memory writeback pipeline", () => {
     expect(pipelineState.writeMemoryMarkdown).toHaveBeenCalledWith(
       expect.objectContaining({ id: "mem-1", title: "Pipeline memory" }),
     );
-    expect(pipelineState.updateAgentMarkdown).toHaveBeenCalledWith(
-      "uncategorized",
-      [expect.objectContaining({ id: "mem-1" })],
-    );
+    expect(pipelineState.updateAgentMarkdown).toHaveBeenCalledWith("uncategorized", [
+      expect.objectContaining({ id: "mem-1" }),
+    ]);
     expect(pipelineState.updateIndexMap).toHaveBeenCalled();
     expect(pipelineState.pending[0].status).toBe("done");
   });

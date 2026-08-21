@@ -89,7 +89,7 @@ export class Orchestrator {
     if (totalCount > DEDUP_SAMPLE_SIZE) {
       logger.ingest.warn(
         `资料库已有 ${totalCount} 条记忆，去重仅检查最近 ${DEDUP_SAMPLE_SIZE} 条。` +
-        `建议启用环境变量配置更大的 DEDUP_SAMPLE_SIZE 或升级为向量语义去重。`,
+          `建议启用环境变量配置更大的 DEDUP_SAMPLE_SIZE 或升级为向量语义去重。`,
       );
     }
     const existingContents = allMemories.map((m) => m.content);
@@ -110,9 +110,7 @@ export class Orchestrator {
     // 多 chunk 合并为 markdown 分段正文（保留全部内容，避免长文截断丢失）
     const finalContent =
       pipelineResult.chunks.length > 1
-        ? pipelineResult.chunks
-            .map((c, i) => `## 部分 ${i + 1}\n\n${c.content}`)
-            .join("\n\n")
+        ? pipelineResult.chunks.map((c, i) => `## 部分 ${i + 1}\n\n${c.content}`).join("\n\n")
         : pipelineResult.chunks[0].content;
 
     // pipeline 自动生成的 summary 优先级低于调用方传入的 summary
@@ -138,12 +136,7 @@ export class Orchestrator {
     }
 
     // 3. 入待审计队列（实际落盘由 processQueue 消费时完成）
-    const pendingEvent = buildPendingEvent(
-      id,
-      sourceType,
-      memory,
-      Object.keys(memory) as string[],
-    );
+    const pendingEvent = buildPendingEvent(id, sourceType, memory, Object.keys(memory) as string[]);
 
     this.memoryService.enqueueEvent(pendingEvent);
     return pendingEvent.eventId;
@@ -163,9 +156,13 @@ export class Orchestrator {
       );
 
       // 队列处理完成后生成可读 Markdown 审计报告，对应《架构检查文档.md》4.7
-      await this.auditReportWriter.write().catch((err) =>
-        logger.audit.error("Markdown audit report generation failed", { error: (err as Error).message }),
-      );
+      await this.auditReportWriter
+        .write()
+        .catch((err) =>
+          logger.audit.error("Markdown audit report generation failed", {
+            error: (err as Error).message,
+          }),
+        );
     }
   }
 
@@ -197,27 +194,24 @@ export class Orchestrator {
           event.status = "failed";
           event.retryCount++;
           this.memoryService.updateEvent(event);
-          await createFailureRecord(event.memoryId, "quality-filter", new Error(filterResult.reason || "质量未达标")).catch(
-            (err) => logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
+          await createFailureRecord(
+            event.memoryId,
+            "quality-filter",
+            new Error(filterResult.reason || "质量未达标"),
+          ).catch((err) =>
+            logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
           );
           return;
         }
 
-        const newId = await this.memoryService.createMemory(
-          candidate.source,
-          candidate.sourceType,
-          candidate.title,
-          candidate.content,
-          candidate.summary,
-          candidate.tags,
-          candidate.topic,
-          {
-            titleZh: candidate.titleZh,
-            summaryZh: candidate.summaryZh,
-            tagsZh: candidate.tagsZh,
-            topicZh: candidate.topicZh,
-          },
-        );
+        if (candidate.id !== event.memoryId) {
+          throw new MemoryValidationError(
+            "id",
+            `候选记忆 ID (${candidate.id}) 与队列 memoryId (${event.memoryId}) 不一致`,
+          );
+        }
+
+        const newId = await this.memoryService.createMemoryRecord(candidate);
 
         const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
 
@@ -227,7 +221,9 @@ export class Orchestrator {
           writeMemoryMarkdown(this.memoryService.getMemory(newId)!),
           updateAgentMarkdown(candidate.topic, all),
           updateIndexMap(all).catch((err) =>
-            logger.audit.error("Index map update failed (new memory)", { error: (err as Error).message }),
+            logger.audit.error("Index map update failed (new memory)", {
+              error: (err as Error).message,
+            }),
           ),
         ]);
 
@@ -299,7 +295,8 @@ export class Orchestrator {
       event.retryCount++;
       this.memoryService.updateEvent(event);
       await createFailureRecord(event.memoryId, "orchestrator-process", error as Error).catch(
-        (err) => logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
+        (err) =>
+          logger.audit.error("Failure record creation failed", { error: (err as Error).message }),
       );
     }
   }
@@ -311,7 +308,9 @@ export class Orchestrator {
       vectorIndex.create(vectorRecord);
       this.memoryService.setVectorId(memoryId, memoryId);
     } catch (vectorError) {
-      logger.vector.warn("更新向量失败，记忆仍会继续保存:", { error: (vectorError as Error).message });
+      logger.vector.warn("更新向量失败，记忆仍会继续保存:", {
+        error: (vectorError as Error).message,
+      });
     } finally {
       vectorIndex.close();
     }

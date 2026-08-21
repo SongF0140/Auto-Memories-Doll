@@ -118,19 +118,27 @@ export class MemoryService {
     topic: string = "uncategorized",
     zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
   ): Promise<string> {
-    return withLock(async () => {
-      const memory = buildMemoryRecord(
-        source,
-        sourceType,
-        title,
-        content,
-        summary,
-        tags,
-        topic,
-        undefined,
-        zhFields,
-      );
+    const memory = buildMemoryRecord(
+      source,
+      sourceType,
+      title,
+      content,
+      summary,
+      tags,
+      topic,
+      undefined,
+      zhFields,
+    );
+    return this.createMemoryRecord(memory);
+  }
 
+  /**
+   * 持久化已经分配稳定 ID 的候选记忆。
+   * 审计队列消费时必须使用此入口，确保 PendingEvent.memoryId、
+   * SQLite 主键和 Markdown frontmatter 中的 id 始终一致。
+   */
+  async createMemoryRecord(memory: MemoryRecord): Promise<string> {
+    return withLock(async () => {
       if (!validateMemoryRecord(memory)) {
         throw new MemoryValidationError("record", "记忆数据不完整");
       }
@@ -166,11 +174,13 @@ export class MemoryService {
 
       const vectorIndex = new VectorIndex();
       try {
-        const vectorRecord = await buildVectorRecord(memory.id, content);
+        const vectorRecord = await buildVectorRecord(memory.id, memory.content);
         vectorIndex.create(vectorRecord);
         this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
       } catch (vectorError) {
-        logger.memory.warn("向量生成失败，记忆仍会保存:", { error: (vectorError as Error).message });
+        logger.memory.warn("向量生成失败，记忆仍会保存:", {
+          error: (vectorError as Error).message,
+        });
       }
       vectorIndex.close();
 
@@ -191,6 +201,7 @@ export class MemoryService {
     tags: string[] = [],
     topic: string = "uncategorized",
     zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
+    memoryId?: string,
   ): string {
     const memory = buildMemoryRecord(
       source,
@@ -200,19 +211,25 @@ export class MemoryService {
       summary,
       tags,
       topic,
-      undefined,
+      memoryId,
       zhFields,
     );
 
+    return this.stageCreateMemoryRecord(memory);
+  }
+
+  /** 将带稳定 ID 的完整候选记录作为 create 事件入队。 */
+  stageCreateMemoryRecord(memory: MemoryRecord): string {
     if (!validateMemoryRecord(memory)) {
       throw new MemoryValidationError("record", "记忆数据不完整");
     }
 
     const event = buildPendingEvent(
       memory.id,
-      sourceType,
+      memory.sourceType,
       memory,
       Object.keys(memory) as string[],
+      "create",
     );
     this.enqueueEvent(event);
     return memory.id;
@@ -235,7 +252,7 @@ export class MemoryService {
       changedFields.push("updatedAt");
     }
 
-    const event = buildPendingEvent(id, candidate.sourceType, candidate, changedFields);
+    const event = buildPendingEvent(id, candidate.sourceType, candidate, changedFields, "update");
     this.enqueueEvent(event);
     return event.eventId;
   }
@@ -269,7 +286,9 @@ export class MemoryService {
       summary: row.summary,
       summaryZh: row.summaryZh || undefined,
       tags: safeJsonParse(row.tags, [] as string[], `memory ${row.id} tags`),
-      tagsZh: row.tagsZh ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`) : undefined,
+      tagsZh: row.tagsZh
+        ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`)
+        : undefined,
       topic: row.topic || "uncategorized",
       topicZh: row.topicZh || undefined,
       createdAt: row.createdAt,
@@ -284,8 +303,14 @@ export class MemoryService {
 
   /** sortBy 字段白名单 —— 防御 SQL 注入，仅允许按这些字段排序 */
   private static SORTABLE_FIELDS = new Set([
-    "createdAt", "updatedAt", "accessedAt", "accessCount",
-    "heatScore", "title", "sourceType", "topic",
+    "createdAt",
+    "updatedAt",
+    "accessedAt",
+    "accessCount",
+    "heatScore",
+    "title",
+    "sourceType",
+    "topic",
   ]);
 
   listMemories(opts?: {
@@ -297,9 +322,8 @@ export class MemoryService {
   }): MemoryRecord[] {
     const limit = opts?.limit ?? -1;
     const offset = opts?.offset ?? 0;
-    const sortBy = opts?.sortBy && MemoryService.SORTABLE_FIELDS.has(opts.sortBy)
-      ? opts.sortBy
-      : "updatedAt";
+    const sortBy =
+      opts?.sortBy && MemoryService.SORTABLE_FIELDS.has(opts.sortBy) ? opts.sortBy : "updatedAt";
     const sortOrder = opts?.sortOrder === "asc" ? "ASC" : "DESC";
     const tag = opts?.tag?.trim() || undefined;
 
@@ -330,7 +354,9 @@ export class MemoryService {
       summary: row.summary,
       summaryZh: row.summaryZh || undefined,
       tags: safeJsonParse(row.tags, [] as string[], `memory ${row.id} tags`),
-      tagsZh: row.tagsZh ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`) : undefined,
+      tagsZh: row.tagsZh
+        ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`)
+        : undefined,
       topic: row.topic || "uncategorized",
       topicZh: row.topicZh || undefined,
       createdAt: row.createdAt,
@@ -460,7 +486,11 @@ export class MemoryService {
         sourceType: row.sourceType as PendingEvent["sourceType"],
         eventType: (row.eventType || undefined) as PendingEvent["eventType"],
         candidate: row.candidate,
-        changedFields: safeJsonParse(row.changedFields, [] as string[], `event ${row.eventId} changedFields`),
+        changedFields: safeJsonParse(
+          row.changedFields,
+          [] as string[],
+          `event ${row.eventId} changedFields`,
+        ),
         createdAt: row.createdAt,
         status: "processing" as PendingEvent["status"],
         retryCount: row.retryCount,
@@ -487,7 +517,11 @@ export class MemoryService {
       sourceType: row.sourceType as PendingEvent["sourceType"],
       eventType: (row.eventType || undefined) as PendingEvent["eventType"],
       candidate: row.candidate,
-      changedFields: safeJsonParse(row.changedFields, [] as string[], `event ${row.eventId} changedFields`),
+      changedFields: safeJsonParse(
+        row.changedFields,
+        [] as string[],
+        `event ${row.eventId} changedFields`,
+      ),
       createdAt: row.createdAt,
       status: row.status as PendingEvent["status"],
       retryCount: row.retryCount,
@@ -534,7 +568,11 @@ export class MemoryService {
       memoryId: row.memoryId,
       category: row.category,
       confidence: row.confidence,
-      subcategories: safeJsonParse(row.subcategories || "[]", [] as string[], `classification ${row.memoryId} subcategories`),
+      subcategories: safeJsonParse(
+        row.subcategories || "[]",
+        [] as string[],
+        `classification ${row.memoryId} subcategories`,
+      ),
       updatedAt: row.updatedAt,
     };
   }
@@ -556,7 +594,11 @@ export class MemoryService {
       memoryId: row.memoryId,
       category: row.category,
       confidence: row.confidence,
-      subcategories: safeJsonParse(row.subcategories || "[]", [] as string[], `classification ${row.memoryId} subcategories`),
+      subcategories: safeJsonParse(
+        row.subcategories || "[]",
+        [] as string[],
+        `classification ${row.memoryId} subcategories`,
+      ),
       updatedAt: row.updatedAt,
     }));
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ConversationProcessor } from "../../../features/ingest/conversation-processor";
 import { MemoryService } from "../../../server/services/memory-service";
+import { getNotePath } from "../../../lib/storage/path-resolver";
 
 const listenRequestSchema = z.object({
   source: z.string().min(1, "source 不能为空"),
@@ -50,10 +51,10 @@ function updateStats(source: string, topic: string): void {
  * 外部工具（Trae IDE、浏览器 AI 会话等）通过此端点将对话数据发送到
  * Auto-Memories-Doll。系统自动完成：
  * 1. 格式化对话为 Markdown
- * 2. 自动提取话题并创建目录结构
- * 3. 保存对话文件到 memory-root/notes/{topic}/
- * 4. 生成记忆记录和向量索引
- * 5. 生成知识卡片摘要
+ * 2. 自动提取话题
+ * 3. 生成知识卡片摘要
+ * 4. 将唯一候选记录写入待审计队列
+ * 5. 审计通过后由 Orchestrator 写入带稳定 memoryId 的 Markdown
  */
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -74,13 +75,10 @@ export async function POST(request: NextRequest) {
     // 1. 格式化对话并提取话题
     const { title, content, topic } = processor.formatConversation(data);
 
-    // 2. 保存对话文件到话题目录
-    const filePath = await processor.saveConversationFile(data, topic);
-
-    // 3. 生成知识卡片
+    // 2. 生成知识卡片
     const knowledgeCard = processor.generateKnowledgeCard(data);
 
-    // 4. 将记忆写入待审计队列（实际落盘由 Orchestrator 消费时完成）
+    // 3. 唯一写入入口：先进入待审计队列，禁止在这里提前写 Markdown
     const memoryId = memoryService.stageCreateMemory(
       data.source,
       data.sourceType,
@@ -96,8 +94,9 @@ export async function POST(request: NextRequest) {
         topicZh: knowledgeCard.topicZh,
       },
     );
+    const filePath = getNotePath(topic, memoryId);
 
-    // 5. 更新统计
+    // 4. 更新统计
     updateStats(data.source, topic);
     listenStats.totalProcessed++;
 

@@ -93,8 +93,9 @@ export function formatMemoryAsMarkdown(record: MemoryRecord): string {
   return frontmatter + body.join("\n");
 }
 
-/** 从对话消息生成 LLMWiki Markdown（用于 /api/listen 新记忆） */
+/** 从对话消息生成带稳定 ID 的 LLMWiki Markdown */
 export function formatConversationAsMarkdown(
+  memoryId: string,
   content: string,
   title: string,
   tags: string[],
@@ -103,6 +104,7 @@ export function formatConversationAsMarkdown(
 ): string {
   const lines = [
     FRONTMATTER_DELIMITER,
+    `id: "${escapeYaml(memoryId)}"`,
     `title: "${escapeYaml(title)}"`,
     `topic: "${topic}"`,
     tags.length > 0 ? `tags: [${tags.map((t) => `"${escapeYaml(t)}"`).join(", ")}]` : `tags: []`,
