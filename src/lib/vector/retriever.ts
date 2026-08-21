@@ -18,13 +18,8 @@ export type RetrievalSearchResponse = {
 };
 
 export class VectorRetriever {
-  private index: VectorIndex;
-  private keywordIndex: KeywordIndex;
-
-  constructor() {
-    this.index = new VectorIndex();
-    this.keywordIndex = new KeywordIndex();
-  }
+  private index: VectorIndex | null = null;
+  private keywordIndex: KeywordIndex | null = null;
 
   /**
    * 向量语义检索：生成 query embedding → 余弦相似度排序 → 阈值过滤 → top-N
@@ -51,12 +46,12 @@ export class VectorRetriever {
     const embedding = await generateEmbedding(query);
     if (isEmbeddingEmpty(embedding)) {
       return {
-        results: this.keywordIndex.search(query, limit),
+        results: this.getKeywordIndex().search(query, limit),
         mode: "keyword",
       };
     }
 
-    const results = this.index.search(embedding, limit);
+    const results = this.getIndex().search(embedding, limit);
     return {
       results: minSimilarity > 0 ? results.filter((r) => r.similarity >= minSimilarity) : results,
       mode: "vector",
@@ -83,10 +78,14 @@ export class VectorRetriever {
       }));
     }
 
+    const index = this.getIndex();
     // ANN 不需要扫描整个记忆集合；扩大候选池后再按允许的 memoryId 过滤。
-    // 4x/至少 50 条能兼顾选定子集过滤与查询延迟。
-    const candidateLimit = Math.min(memories.length, Math.max(limit * 4, 50));
-    const results = this.index.search(embedding, candidateLimit);
+    // JS 精确后端本身是全量扫描，直接使用当前记忆集合大小避免套用 ANN 候选池规则。
+    const candidateLimit =
+      index.getBackendName() === "js-exact"
+        ? memories.length
+        : Math.min(memories.length, Math.max(limit * 4, 50));
+    const results = index.search(embedding, candidateLimit);
 
     const memoryMap = new Map(memories.map((m) => [m.id, m]));
 
@@ -98,7 +97,19 @@ export class VectorRetriever {
   }
 
   close(): void {
-    this.index.close();
-    this.keywordIndex.close();
+    this.index?.close();
+    this.keywordIndex?.close();
+    this.index = null;
+    this.keywordIndex = null;
+  }
+
+  private getIndex(): VectorIndex {
+    this.index ??= new VectorIndex();
+    return this.index;
+  }
+
+  private getKeywordIndex(): KeywordIndex {
+    this.keywordIndex ??= new KeywordIndex();
+    return this.keywordIndex;
   }
 }

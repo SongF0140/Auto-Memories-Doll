@@ -35,6 +35,11 @@ export class ContradictionDetector {
       return { contradictions: [], totalCompared: 0 };
     }
 
+    if (ModelAdapter.isDegradedMode) {
+      logger.nightly.info("模型降级中，跳过矛盾精判");
+      return { contradictions: [], totalCompared: 0 };
+    }
+
     // 已有记忆（排除今天的）
     const oldMemories = allMemories.filter((m) => !todaysMemories.some((t) => t.id === m.id));
 

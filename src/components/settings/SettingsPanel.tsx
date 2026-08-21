@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AiConfig, McpServerConfig, SkillConfig } from "../../types/config";
+import type { ProviderCatalog } from "../../config/provider-loader";
 import AiConfigForm from "./AiConfigForm";
 import McpServerList from "./McpServerList";
 import SkillList from "./SkillList";
@@ -19,10 +20,12 @@ type StorageConfig = {
 };
 
 type ToolPresets = Record<string, { name: string; toolType: ToolType; path: string; filePattern: string }>;
+type AiConfigResponse = AiConfig & { providerCatalog?: ProviderCatalog };
 
 export default function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<Tab>("ai");
   const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | undefined>();
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [skills, setSkills] = useState<SkillConfig[]>([]);
   const [storageConfig, setStorageConfig] = useState<StorageConfig | null>(null);
@@ -45,7 +48,10 @@ export default function SettingsPanel() {
         fetch("/api/config/storage"),
         fetch("/api/config/tool-sources"),
       ]);
-      setAiConfig(await aiRes.json());
+      const aiData = (await aiRes.json()) as AiConfigResponse;
+      setProviderCatalog(aiData.providerCatalog);
+      const { providerCatalog: _providerCatalog, ...safeAiConfig } = aiData;
+      setAiConfig(safeAiConfig);
       setMcpServers(await mcpRes.json());
       setSkills(await skillRes.json());
       setStorageConfig(await storageRes.json());
@@ -141,7 +147,12 @@ export default function SettingsPanel() {
               <p className="text-sm text-text-tertiary mb-6">
                 连接到你的首选 AI 提供商。支持 OpenAI、OpenAI 兼容接口和自定义提供商。
               </p>
-              <AiConfigForm config={aiConfig} onSave={saveAiConfig} saving={saving} />
+              <AiConfigForm
+                config={aiConfig}
+                providerCatalog={providerCatalog}
+                onSave={saveAiConfig}
+                saving={saving}
+              />
             </MagicCard>
           )}
 

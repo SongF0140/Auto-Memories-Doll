@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ProfileUpdater } from "../../../server/services/profile-updater";
 import { ModelAdapter } from "../../../lib/ai/model-adapter";
 
+
 const analyzeRequestSchema = z.object({
   memoryIds: z.array(z.string().min(1).max(128)).max(50).optional(),
 });

@@ -63,6 +63,7 @@ export function rankByKeywords(
         summary: normalize([row.summary, row.summaryZh].filter(Boolean).join(" ")),
         content: normalize(row.content),
       };
+      const tagValues = [...(row.tags || []), ...(row.tagsZh || [])].map((tag) => normalize(tag));
 
       let score = 0;
       for (const term of terms) {
@@ -72,10 +73,15 @@ export function rankByKeywords(
       }
 
       // 完整标题或标签命中优先于正文中的偶然片段。
-      if (fields.title === normalizedQuery) score += FIELD_WEIGHTS.title;
-      if (fields.tags.split(/\s+/).includes(normalizedQuery)) score += FIELD_WEIGHTS.tags;
+      const titleExactMatch = fields.title === normalizedQuery;
+      const tagExactMatch = tagValues.includes(normalizedQuery);
+      if (titleExactMatch) score += FIELD_WEIGHTS.title;
+      if (tagExactMatch) score += FIELD_WEIGHTS.tags;
 
-      const denominator = terms.length * maxScorePerTerm + FIELD_WEIGHTS.title + FIELD_WEIGHTS.tags;
+      const denominator =
+        terms.length * maxScorePerTerm +
+        (titleExactMatch ? FIELD_WEIGHTS.title : 0) +
+        (tagExactMatch ? FIELD_WEIGHTS.tags : 0);
       const similarity = Math.min(1, 0.3 + (score / denominator) * 0.7);
 
       return {
@@ -100,10 +106,30 @@ export class KeywordIndex {
   }
 
   search(query: string, limit: number): VectorSearchResult[] {
+    const terms = queryTerms(query);
+    if (terms.length === 0 || limit <= 0) return [];
+
     const memoriesTable = this.db
       .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memories'")
       .get();
     if (!memoriesTable) return [];
+
+    const fields = [
+      "title",
+      "titleZh",
+      "content",
+      "summary",
+      "summaryZh",
+      "tags",
+      "tagsZh",
+      "topic",
+      "topicZh",
+    ];
+    const whereClause = terms
+      .map(() => `(${fields.map((field) => `${field} LIKE ? ESCAPE '\\'`).join(" OR ")})`)
+      .join(" OR ");
+    const params = terms.flatMap((term) => fields.map(() => `%${escapeLike(term)}%`));
+    const candidateLimit = Math.max(limit * 8, 50);
 
     const rows = this.db
       .prepare(
@@ -111,9 +137,12 @@ export class KeywordIndex {
         SELECT id, title, titleZh, content, summary, summaryZh,
                tags, tagsZh, topic, topicZh, updatedAt
         FROM memories
+        WHERE ${whereClause}
+        ORDER BY updatedAt DESC
+        LIMIT ?
       `,
       )
-      .all() as Array<
+      .all(...params, candidateLimit) as Array<
       Omit<KeywordSearchRow, "tags" | "tagsZh"> & { tags: string; tagsZh?: string }
     >;
 
@@ -131,6 +160,10 @@ export class KeywordIndex {
   close(): void {
     // shared connection — no-op
   }
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
 function parseTags(raw: string | undefined): string[] {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConfigService } from "../../../../server/services/config-service";
 import { aiConfigSchema } from "../../../../lib/validation";
+import { loadProviderCatalog } from "../../../../config/provider-loader";
+
 
 export async function GET() {
   const service = new ConfigService();
@@ -8,7 +10,7 @@ export async function GET() {
     const config = service.getAiConfig() || service.getDefaultAiConfig();
     // 脱敏：前端永远不返回真实 apiKey
     const safe = { ...config, apiKey: config.apiKey ? `****${config.apiKey.slice(-4)}` : "" };
-    return NextResponse.json(safe);
+    return NextResponse.json({ ...safe, providerCatalog: loadProviderCatalog() });
   } finally {
     service.close();
   }

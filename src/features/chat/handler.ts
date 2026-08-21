@@ -17,6 +17,7 @@ import { WikiGraph } from "../../lib/graph/wiki-graph";
 import { ChatClassifier, IntentResult, ExtractedMemoryEntity } from "./classifier";
 import { logger } from "../../lib/logger";
 import { assembleSystemMessage, SystemBlocks } from "./system-prompt";
+import { compressConversation } from "../../lib/chat/conversation-compressor";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
@@ -55,7 +56,7 @@ export class ChatHandler {
     content: string;
     memoryReferences: { memoryId: string; title: string; relevance: number }[];
   }> {
-    const processedMessages = await this.applySkills(messages);
+    const processedMessages = compressConversation(await this.applySkills(messages));
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
@@ -113,7 +114,7 @@ export class ChatHandler {
     _sessionId: string,
     memoryIds?: string[],
   ): Promise<ReadableStream<AiEvent>> {
-    const processedMessages = await this.applySkills(messages);
+    const processedMessages = compressConversation(await this.applySkills(messages));
 
     // 意图分类：Layer 1 关键词（<1ms）→ Layer 2 embedding 语义回退（~100ms）
     // 结果注入 system prompt 引导模型选择工具与回复风格

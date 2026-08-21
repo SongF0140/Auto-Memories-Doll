@@ -67,6 +67,7 @@ import { ContradictionDetector } from "../server/orchestrators/contradiction-det
 import { LinkSupplementer } from "../server/orchestrators/link-supplementer";
 import { RouteOptimizer } from "../server/orchestrators/route-optimizer";
 import { DailyReporter } from "../server/orchestrators/daily-reporter";
+import { ProfileUpdater } from "../server/services/profile-updater";
 import { MemoryRecord } from "../types/memory";
 
 function makeMemory(id: string, title: string, topic: string, summary: string, tags: string[], date?: string): MemoryRecord {
@@ -135,7 +136,20 @@ describe("NightlyOrchestrator", () => {
     expect(report.routing?.suggestions).toEqual([]);
   });
 
+  it("should skip flagship profile analysis when model adapter is degraded", async () => {
+    (ModelAdapter as any).isDegradedMode = true;
+    const profileUpdater = (ProfileUpdater.getInstance as any)();
+    profileUpdater.runAnalysisWithFlagship.mockClear();
+
+    const report = await orchestrator.run();
+
+    expect(profileUpdater.runAnalysisWithFlagship).not.toHaveBeenCalled();
+    expect(report.allSucceeded).toBe(true);
+    expect(report.errors).toEqual([]);
+  });
+
   afterEach(() => {
+    (ModelAdapter as any).isDegradedMode = false;
     orchestrator.close();
   });
 });
@@ -229,7 +243,22 @@ describe("ContradictionDetector", () => {
     expect(result.contradictions).toEqual([]);
   });
 
+  it("should skip LLM contradiction analysis when model adapter is degraded", async () => {
+    (ModelAdapter as any).isDegradedMode = true;
+    (ModelAdapter.generate as any).mockRejectedValue(new Error("should not call LLM"));
+    (ModelAdapter.generate as any).mockClear();
+
+    const detector = new ContradictionDetector();
+    const newMem = makeMemory("1", "React 19", "frontend", "new summary", ["react"]);
+    const oldMem = makeMemory("2", "React 18", "frontend", "old summary", ["react"]);
+    const result = await detector.detect([newMem], [oldMem]);
+
+    expect(result).toEqual({ contradictions: [], totalCompared: 0 });
+    expect(ModelAdapter.generate).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
+    (ModelAdapter as any).isDegradedMode = false;
     const d = new ContradictionDetector();
     d.close();
   });
@@ -280,7 +309,23 @@ describe("LinkSupplementer", () => {
     supplementer.close();
   });
 
+  it("should skip LLM link suggestions when model adapter is degraded", async () => {
+    (ModelAdapter as any).isDegradedMode = true;
+    (ModelAdapter.generate as any).mockRejectedValue(new Error("should not call LLM"));
+    (ModelAdapter.generate as any).mockClear();
+
+    const supplementer = new LinkSupplementer();
+    const oldMem = makeMemory("1", "Vue basics", "frontend", "Vue reactivity", ["vue"]);
+    const newMem = makeMemory("2", "React vs Vue", "frontend", "Comparing reactivity", ["react", "vue"]);
+    const result = await supplementer.supplement([newMem], [newMem, oldMem]);
+
+    expect(result).toEqual({ suggestions: [], addedCount: 0, failedCount: 0 });
+    expect(ModelAdapter.generate).not.toHaveBeenCalled();
+    supplementer.close();
+  });
+
   afterEach(() => {
+    (ModelAdapter as any).isDegradedMode = false;
     const s = new LinkSupplementer();
     s.close();
   });
@@ -362,7 +407,22 @@ describe("RouteOptimizer", () => {
     optimizer.close();
   });
 
+  it("should skip LLM route optimization when model adapter is degraded", async () => {
+    (ModelAdapter as any).isDegradedMode = true;
+    (ModelAdapter.generate as any).mockRejectedValue(new Error("should not call LLM"));
+    (ModelAdapter.generate as any).mockClear();
+
+    const optimizer = new RouteOptimizer();
+    const mem = makeMemory("1", "Test", "coding", "Writing code", ["code"]);
+    const result = await optimizer.optimize([mem], [mem]);
+
+    expect(result).toEqual({ suggestions: [], appliedCount: 0 });
+    expect(ModelAdapter.generate).not.toHaveBeenCalled();
+    optimizer.close();
+  });
+
   afterEach(() => {
+    (ModelAdapter as any).isDegradedMode = false;
     const o = new RouteOptimizer();
     o.close();
   });

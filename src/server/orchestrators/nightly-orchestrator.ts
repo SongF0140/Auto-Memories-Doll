@@ -6,6 +6,7 @@ import { LinkSupplementer, LinkSupplementReport } from "./link-supplementer";
 import { RouteOptimizer, RouteOptimizationReport } from "./route-optimizer";
 import { DailyReporter } from "./daily-reporter";
 import { logger } from "../../lib/logger";
+import { ModelAdapter } from "../../lib/ai/model-adapter";
 
 /** 一次深夜督查运行的所有结果 */
 export interface NightlyReport {
@@ -98,14 +99,18 @@ export class NightlyOrchestrator {
     }
 
     // ── 4. 用户画像更新（旗舰模型） ──
-    try {
+    if (ModelAdapter.isDegradedMode) {
+      logger.nightly.info("模型降级中，跳过旗舰模型画像更新");
+    } else {
+      try {
       logger.nightly.info("开始旗舰模型画像更新");
       await ProfileUpdater.getInstance().runAnalysisWithFlagship();
       logger.nightly.info("画像更新完成");
-    } catch (e) {
-      const msg = `画像更新失败: ${(e as Error).message}`;
-      logger.nightly.error(msg);
-      errors.push(msg);
+      } catch (e) {
+        const msg = `画像更新失败: ${(e as Error).message}`;
+        logger.nightly.error(msg);
+        errors.push(msg);
+      }
     }
 
     // ── 5. 生成日报 ──

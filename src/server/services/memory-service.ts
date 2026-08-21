@@ -22,6 +22,7 @@ function safeJsonParse<T>(raw: string, fallback: T, context: string): T {
 
 export class MemoryService {
   private db: Database.Database;
+  private vectorIndex: VectorIndex | null = null;
 
   constructor() {
     this.db = getDatabase();
@@ -172,17 +173,15 @@ export class MemoryService {
         JSON.stringify(memory.graphLinks),
       );
 
-      const vectorIndex = new VectorIndex();
       try {
         const vectorRecord = await buildVectorRecord(memory.id, memory.content);
-        vectorIndex.create(vectorRecord);
+        this.getVectorIndex().create(vectorRecord);
         this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
       } catch (vectorError) {
         logger.memory.warn("向量生成失败，记忆仍会保存:", {
           error: (vectorError as Error).message,
         });
       }
-      vectorIndex.close();
 
       return memory.id;
     });
@@ -275,6 +274,21 @@ export class MemoryService {
     const row = stmt.get(id) as any;
     if (!row) return null;
 
+    return this.mapMemoryRow(row);
+  }
+
+  getMemoriesByIds(ids: string[]): MemoryRecord[] {
+    if (ids.length === 0) return [];
+
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`SELECT * FROM memories WHERE id IN (${placeholders})`)
+      .all(...ids) as any[];
+    const byId = new Map(rows.map((row) => [row.id, this.mapMemoryRow(row)]));
+    return ids.map((id) => byId.get(id)).filter((memory): memory is MemoryRecord => Boolean(memory));
+  }
+
+  private mapMemoryRow(row: any): MemoryRecord {
     return {
       id: row.id,
       version: row.version,
@@ -330,8 +344,8 @@ export class MemoryService {
     const params: unknown[] = [];
     let whereClause = "";
     if (tag) {
-      whereClause = "WHERE tags LIKE ?";
-      params.push(`%"${tag}"%`);
+      whereClause = "WHERE EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)";
+      params.push(tag);
     }
 
     let sql = `SELECT * FROM memories ${whereClause} ORDER BY ${sortBy} ${sortOrder}`;
@@ -343,30 +357,23 @@ export class MemoryService {
     const stmt = this.db.prepare(sql);
     const rows = (params.length > 0 ? stmt.all(...params) : stmt.all()) as any[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      version: row.version,
-      source: row.source,
-      sourceType: row.sourceType as MemoryRecord["sourceType"],
-      title: row.title,
-      titleZh: row.titleZh || undefined,
-      content: row.content,
-      summary: row.summary,
-      summaryZh: row.summaryZh || undefined,
-      tags: safeJsonParse(row.tags, [] as string[], `memory ${row.id} tags`),
-      tagsZh: row.tagsZh
-        ? safeJsonParse(row.tagsZh, undefined as string[] | undefined, `memory ${row.id} tagsZh`)
-        : undefined,
-      topic: row.topic || "uncategorized",
-      topicZh: row.topicZh || undefined,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      accessedAt: row.accessedAt,
-      accessCount: row.accessCount,
-      heatScore: row.heatScore,
-      vectorId: row.vectorId,
-      graphLinks: safeJsonParse(row.graphLinks, [] as string[], `memory ${row.id} graphLinks`),
-    }));
+    return rows.map((row) => this.mapMemoryRow(row));
+  }
+
+  listMemoryContents(opts?: { limit?: number; offset?: number }): string[] {
+    const limit = opts?.limit ?? -1;
+    const offset = opts?.offset ?? 0;
+    const params: unknown[] = [];
+    let sql = "SELECT content FROM memories ORDER BY updatedAt DESC";
+    if (limit > 0) {
+      sql += " LIMIT ? OFFSET ?";
+      params.push(limit, offset);
+    }
+
+    const rows = (params.length > 0
+      ? this.db.prepare(sql).all(...params)
+      : this.db.prepare(sql).all()) as Array<{ content: string }>;
+    return rows.map((row) => row.content);
   }
 
   /** 资料库记忆总量（用于去重样本不足时发出警告），可选 tag 过滤 */
@@ -374,8 +381,8 @@ export class MemoryService {
     let sql = "SELECT COUNT(*) as cnt FROM memories";
     const tagFilter = tag?.trim();
     if (tagFilter) {
-      sql += " WHERE tags LIKE ?";
-      const row = this.db.prepare(sql).get(`%"${tagFilter}"%`) as any;
+      sql += " WHERE EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)";
+      const row = this.db.prepare(sql).get(tagFilter) as any;
       return row?.cnt ?? 0;
     }
     const row = this.db.prepare(sql).get() as any;
@@ -431,9 +438,7 @@ export class MemoryService {
     const stmt = this.db.prepare("DELETE FROM memories WHERE id = ?");
     stmt.run(id);
 
-    const vectorIndex = new VectorIndex();
-    vectorIndex.delete(id);
-    vectorIndex.close();
+    this.getVectorIndex().delete(id);
   }
 
   incrementAccess(id: string): void {
@@ -507,9 +512,14 @@ export class MemoryService {
     stmt.run(event.status, event.retryCount, event.eventId);
   }
 
-  getPendingEvents(): PendingEvent[] {
-    const stmt = this.db.prepare("SELECT * FROM pending_events WHERE status = 'pending'");
-    const rows = stmt.all() as any[];
+  getPendingEvents(opts?: { limit?: number }): PendingEvent[] {
+    const limit = opts?.limit;
+    const stmt = this.db.prepare(
+      `SELECT * FROM pending_events WHERE status = 'pending' ORDER BY createdAt ASC${
+        limit && limit > 0 ? " LIMIT ?" : ""
+      }`,
+    );
+    const rows = limit && limit > 0 ? (stmt.all(limit) as any[]) : (stmt.all() as any[]);
 
     return rows.map((row) => ({
       eventId: row.eventId,
@@ -605,6 +615,12 @@ export class MemoryService {
 
   /** 不再关闭共享连接，由 closeDatabase() 统一管理 */
   close(): void {
-    // shared connection — no-op
+    this.vectorIndex?.close();
+    this.vectorIndex = null;
+  }
+
+  private getVectorIndex(): VectorIndex {
+    this.vectorIndex ??= new VectorIndex();
+    return this.vectorIndex;
   }
 }

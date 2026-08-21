@@ -21,6 +21,7 @@ import { logger } from "../../lib/logger";
 import { VersionManager } from "../../features/audit/version-manager";
 
 const LIST_LIMIT = 500;
+const QUEUE_BATCH_SIZE = 100;
 /**
  * 去重时拉取的最近记忆条数。
  *
@@ -84,16 +85,14 @@ export class Orchestrator {
     tags: string[] = [],
   ): Promise<string> {
     // 1. 预处理：清洗 + 去重 + 拆包
-    const allMemories = this.memoryService.listMemories({ limit: DEDUP_SAMPLE_SIZE });
+    const existingContents = this.memoryService.listMemoryContents();
     const totalCount = this.memoryService.count(); // 资料库总量
     if (totalCount > DEDUP_SAMPLE_SIZE) {
       logger.ingest.warn(
-        `资料库已有 ${totalCount} 条记忆，去重仅检查最近 ${DEDUP_SAMPLE_SIZE} 条。` +
-          `建议启用环境变量配置更大的 DEDUP_SAMPLE_SIZE 或升级为向量语义去重。`,
+        `资料库已有 ${totalCount} 条记忆，去重将扫描全部正文内容。` +
+          `如需更高性能，可升级为向量语义去重或优化去重索引。`,
       );
     }
-    const existingContents = allMemories.map((m) => m.content);
-
     const pipelineResult = await processJsonPipeline(content, existingContents);
 
     if (pipelineResult.isDuplicate) {
@@ -143,7 +142,7 @@ export class Orchestrator {
   }
 
   async processQueue(): Promise<void> {
-    const pendingEvents = this.getPendingEvents();
+    const pendingEvents = this.getPendingEvents({ limit: QUEUE_BATCH_SIZE });
 
     for (const event of pendingEvents) {
       await this.processEvent(event);
@@ -168,7 +167,7 @@ export class Orchestrator {
 
   private async processEvent(event: PendingEvent): Promise<string | void> {
     try {
-      const candidate: MemoryRecord = JSON.parse(event.candidate);
+      const candidate = this.parseCandidate(event);
 
       // 删除事件：直接删除记忆，不经过审计差异比对
       if (event.eventType === "delete") {
@@ -412,8 +411,21 @@ export class Orchestrator {
     return updated;
   }
 
-  getPendingEvents(): PendingEvent[] {
-    return this.memoryService.getPendingEvents();
+  getPendingEvents(opts?: { limit?: number }): PendingEvent[] {
+    return this.memoryService.getPendingEvents(opts);
+  }
+
+  private parseCandidate(event: PendingEvent): MemoryRecord {
+    try {
+      return JSON.parse(event.candidate) as MemoryRecord;
+    } catch (error) {
+      throw new MemoryValidationError(
+        "candidate",
+        `PendingEvent ${event.eventId} for memory ${event.memoryId} contains invalid candidate JSON: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   /** 重试失败事件：将 retryCount < 3 的失败事件重置为 pending。供 AuditWorker 调用。 */

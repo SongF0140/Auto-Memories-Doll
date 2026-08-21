@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import {
+  GET as getAiConfig,
+  POST as updateAiConfig,
+} from "../app/api/config/ai/route";
+import {
   PATCH as previewStorageMigration,
   POST as updateStorageConfig,
 } from "../app/api/config/storage/route";
@@ -16,6 +20,52 @@ function jsonRequest(url: string, method: "POST" | "PATCH" | "PUT", body: unknow
 }
 
 describe("configuration API request validation", () => {
+  it("exposes the provider catalog with AI config responses", async () => {
+    const response = await getAiConfig();
+    const body = await response.json();
+
+    expect(body.providerCatalog.providers.openai.baseURL).toBe("https://api.openai.com/v1");
+  });
+
+  it("accepts provider IDs declared in providers.json without code changes", async () => {
+    const response = await updateAiConfig(
+      jsonRequest("http://localhost/api/config/ai", "POST", {
+        provider: "custom-proxy",
+        baseURL: "http://localhost:11434/v1",
+        apiKey: "local-key",
+        flagship: {
+          model: "qwen2.5:7b",
+          maxTokens: 4096,
+          temperature: 0.3,
+          timeout: 30000,
+          maxRetries: 1,
+        },
+        standard: {
+          model: "qwen2.5:7b",
+          maxTokens: 4096,
+          temperature: 0.7,
+          timeout: 30000,
+          maxRetries: 1,
+        },
+        budget: {
+          model: "qwen2.5:7b",
+          maxTokens: 2048,
+          temperature: 0.6,
+          timeout: 15000,
+          maxRetries: 0,
+        },
+        embedding: {
+          model: "text-embedding-3-small",
+          dimensions: 1536,
+          maxConcurrency: 8,
+          queueTimeoutMs: 60000,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it("rejects a string copyExisting value before storage migration", async () => {
     const response = await updateStorageConfig(
       jsonRequest("http://localhost/api/config/storage", "POST", {

@@ -149,6 +149,7 @@ function createMemoryServiceStub() {
     setVectorId: vi.fn(),
     deleteMemory: vi.fn(),
     listMemories: vi.fn(),
+    listMemoryContents: vi.fn(),
     enqueueEvent: vi.fn(),
     dequeueEvent: vi.fn(),
     getPendingEvents: vi.fn(),
@@ -230,6 +231,7 @@ describe("Orchestrator", () => {
     builderMock.validatorResult = true;
     qualityFilterMock.mockResolvedValue({ ok: true });
     auditorProcessMock.mockResolvedValue(null);
+    memoryServiceStub.listMemoryContents.mockReturnValue([]);
     orchestrator = new Orchestrator();
   });
 
@@ -360,6 +362,7 @@ describe("Orchestrator", () => {
   describe("processIngest", () => {
     it("成功：完整预处理管线 → 构建记录 → 校验 → 入队，返回 eventId", async () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
+      memoryServiceStub.listMemoryContents.mockReturnValue([]);
 
       const eventId = await orchestrator.processIngest(
         "test-source",
@@ -374,6 +377,8 @@ describe("Orchestrator", () => {
       expect(memoryServiceStub.enqueueEvent).toHaveBeenCalledWith(
         expect.objectContaining({ eventId: "evt-1", memoryId: expect.any(String) }),
       );
+      expect(memoryServiceStub.listMemoryContents).toHaveBeenCalledWith();
+      expect(memoryServiceStub.listMemories).not.toHaveBeenCalled();
     });
 
     it("复用调用方传入的 summary（优先于 pipeline 自动生成的)", async () => {
@@ -650,6 +655,16 @@ describe("Orchestrator", () => {
       expect(indexWriter.updateIndexMap).toHaveBeenCalled();
     });
 
+    it("按批次读取待处理事件，避免一次性加载全部队列", async () => {
+      memoryServiceStub.getPendingEvents.mockReturnValue([]);
+
+      await orchestrator.processQueue();
+
+      expect(memoryServiceStub.getPendingEvents).toHaveBeenCalledWith({
+        limit: expect.any(Number),
+      });
+    });
+
     it("异常事件 → catch 后置 failed + retryCount++ + 写失败记录", async () => {
       const event = {
         ...builderMock.pendingEvent,
@@ -665,6 +680,28 @@ describe("Orchestrator", () => {
 
       expect(event.status).toBe("failed");
       expect(event.retryCount).toBe(1);
+    });
+
+    it("candidate JSON 损坏时写入带上下文的失败记录", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventId: "evt-bad-json",
+        memoryId: "memory-bad-json",
+        candidate: "{",
+        retryCount: 0,
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+
+      await orchestrator.processQueue();
+
+      const fileManager = await import("../lib/storage/file-manager");
+      expect(fileManager.createFailureRecord).toHaveBeenCalledWith(
+        "memory-bad-json",
+        "orchestrator-process",
+        expect.objectContaining({
+          message: expect.stringContaining("evt-bad-json"),
+        }),
+      );
     });
   });
 

@@ -1,5 +1,5 @@
 import { watch, FSWatcher } from "chokidar";
-import { readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { createHash } from "crypto";
 import { resolve } from "path";
 import { MemoryRecord } from "../../types/memory";
@@ -13,6 +13,7 @@ import { isRecentWrite } from "../../lib/storage/write-tracker";
 import { logger } from "../../lib/logger";
 
 let watcher: FSWatcher | null = null;
+const inFlightIngests = new Map<string, Promise<void>>();
 
 export function startFileWatcher(): void {
   if (watcher) return;
@@ -62,8 +63,7 @@ type MarkdownFileEvent = "add" | "change";
  */
 function getStableFileMemoryId(filePath: string): string {
   const resolvedPath = resolve(filePath).replace(/\\/g, "/");
-  const normalizedPath = process.platform === "win32" ? resolvedPath.toLowerCase() : resolvedPath;
-  return `file-${createHash("sha256").update(normalizedPath).digest("hex").slice(0, 32)}`;
+  return `file-${createHash("sha256").update(resolvedPath).digest("hex").slice(0, 32)}`;
 }
 
 function getFileUpdates(record: MemoryRecord, filePath: string): Partial<MemoryRecord> {
@@ -91,11 +91,26 @@ export async function ingestMarkdownFile(
   filePath: string,
   eventType: MarkdownFileEvent,
 ): Promise<void> {
+  const ingestKey = resolve(filePath);
+  const active = inFlightIngests.get(ingestKey);
+  if (active) return active;
+
+  const ingest = ingestMarkdownFileOnce(filePath, eventType).finally(() => {
+    inFlightIngests.delete(ingestKey);
+  });
+  inFlightIngests.set(ingestKey, ingest);
+  return ingest;
+}
+
+async function ingestMarkdownFileOnce(
+  filePath: string,
+  eventType: MarkdownFileEvent,
+): Promise<void> {
   try {
     // 跳过本进程最近写入的文件，防止 Markdown 写回 → 监听 → 再次入队的循环
     if (isRecentWrite(filePath)) return;
 
-    const content = readFileSync(filePath, "utf-8");
+    const content = await readFile(filePath, "utf-8");
     if (content.length < 10) return;
 
     const memoryService = new MemoryService();

@@ -1,4 +1,8 @@
 import { MemoryRecord } from "../../types/memory";
+import {
+  RANKER_DEFAULT_MMR_ALPHA,
+  RANKER_WEIGHTS,
+} from "../../config/constants";
 
 export type RankResult = {
   memoryId: string;
@@ -22,7 +26,7 @@ export type MmrOptions = {
 export class Ranker {
   /**
    * 基础多因子加权排序（非 MMR）：
-   * score = 0.4*relevance + 0.25*heat + 0.2*recency + 0.1*access + 0.05*tagAffinity
+   * score = relevance*W.relevance + heat*W.heat + recency*W.recency + access*W.access + tagAffinity*W.tagAffinity
    * 各子项公式与 AGENTS.md 4.10 heatScore 子项一致（recency λ=0.01，半衰期 ~69h）
    */
   rank(
@@ -54,7 +58,7 @@ export class Ranker {
     profileTags: string[],
     options?: MmrOptions,
   ): RankResult[] {
-    const alpha = options?.alpha ?? 0.7;
+    const alpha = options?.alpha ?? RANKER_DEFAULT_MMR_ALPHA;
     const baseResults = this.computeBaseScores(candidates, memories, profileTags);
 
     if (baseResults.length <= 1) return baseResults;
@@ -129,11 +133,11 @@ export class Ranker {
         const tagAffinityScore = union > 0 ? intersection / union : 0;
 
         const score =
-          candidate.similarity * 0.4 +
-          memory.heatScore * 0.25 +
-          recencyScore * 0.2 +
-          accessScore * 0.1 +
-          tagAffinityScore * 0.05;
+          candidate.similarity * RANKER_WEIGHTS.relevance +
+          memory.heatScore * RANKER_WEIGHTS.heat +
+          recencyScore * RANKER_WEIGHTS.recency +
+          accessScore * RANKER_WEIGHTS.access +
+          tagAffinityScore * RANKER_WEIGHTS.tagAffinity;
 
         return {
           memoryId: candidate.memoryId,

@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ConversationProcessor } from "../../../features/ingest/conversation-processor";
 import { MemoryService } from "../../../server/services/memory-service";
+import { ListenStatsService } from "../../../server/services/listen-stats-service";
 import { getNotePath } from "../../../lib/storage/path-resolver";
+
+
+const MAX_LISTEN_BODY_BYTES = 1_000_000;
+const MAX_LISTEN_MESSAGES = 200;
 
 const listenRequestSchema = z.object({
   source: z.string().min(1, "source 不能为空"),
@@ -16,7 +21,8 @@ const listenRequestSchema = z.object({
         timestamp: z.string().optional(),
       }),
     )
-    .min(1, "messages 至少需要一条消息"),
+    .min(1, "messages 至少需要一条消息")
+    .max(MAX_LISTEN_MESSAGES, `messages 不能超过 ${MAX_LISTEN_MESSAGES} 条`),
   tags: z.array(z.string()).optional(),
   topic: z.string().optional(),
   metadata: z
@@ -28,22 +34,6 @@ const listenRequestSchema = z.object({
     .passthrough()
     .optional(),
 });
-
-// 对话监听状态
-const listenStats = {
-  totalReceived: 0,
-  totalProcessed: 0,
-  lastReceivedAt: null as string | null,
-  sources: {} as Record<string, number>,
-  topics: {} as Record<string, number>,
-};
-
-function updateStats(source: string, topic: string): void {
-  listenStats.totalReceived++;
-  listenStats.lastReceivedAt = new Date().toISOString();
-  listenStats.sources[source] = (listenStats.sources[source] || 0) + 1;
-  listenStats.topics[topic] = (listenStats.topics[topic] || 0) + 1;
-}
 
 /**
  * POST /api/listen
@@ -57,7 +47,28 @@ function updateStats(source: string, topic: string): void {
  * 5. 审计通过后由 Orchestrator 写入带稳定 memoryId 的 Markdown
  */
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > MAX_LISTEN_BODY_BYTES) {
+    return NextResponse.json(
+      { success: false, error: `请求体不能超过 ${MAX_LISTEN_BODY_BYTES} bytes` },
+      { status: 413 },
+    );
+  }
+
+  let body: unknown;
+  try {
+    const raw = await request.text();
+    if (Buffer.byteLength(raw, "utf8") > MAX_LISTEN_BODY_BYTES) {
+      return NextResponse.json(
+        { success: false, error: `请求体不能超过 ${MAX_LISTEN_BODY_BYTES} bytes` },
+        { status: 413 },
+      );
+    }
+    body = JSON.parse(raw);
+  } catch {
+    return NextResponse.json({ success: false, error: "请求体不是有效 JSON" }, { status: 400 });
+  }
+
   const parsed = listenRequestSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -70,6 +81,7 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
   const processor = new ConversationProcessor();
   const memoryService = new MemoryService();
+  const statsService = new ListenStatsService();
 
   try {
     // 1. 格式化对话并提取话题
@@ -96,9 +108,8 @@ export async function POST(request: NextRequest) {
     );
     const filePath = getNotePath(topic, memoryId);
 
-    // 4. 更新统计
-    updateStats(data.source, topic);
-    listenStats.totalProcessed++;
+    // 4. 更新持久统计
+    statsService.record(data.source, topic, true);
 
     return NextResponse.json({
       success: true,
@@ -114,13 +125,14 @@ export async function POST(request: NextRequest) {
       message: `已接收来自 "${data.source}" 的对话，话题: ${topic}`,
     });
   } catch (error) {
-    updateStats(data.source, data.topic || "unknown");
+    statsService.record(data.source, data.topic || "unknown", false);
     return NextResponse.json(
       { success: false, error: `处理失败: ${(error as Error).message}` },
       { status: 500 },
     );
   } finally {
     memoryService.close();
+    statsService.close();
   }
 }
 
@@ -129,10 +141,14 @@ export async function POST(request: NextRequest) {
  * 返回监听器状态，供外部工具检查服务是否就绪
  */
 export async function GET() {
+  const statsService = new ListenStatsService();
+  const stats = statsService.getStats();
+  statsService.close();
+
   return NextResponse.json({
     status: "listening",
     uptime: process.uptime(),
-    stats: listenStats,
+    stats,
     endpoints: {
       post: "POST /api/listen - 发送对话数据",
       get: "GET  /api/listen - 查看监听状态",

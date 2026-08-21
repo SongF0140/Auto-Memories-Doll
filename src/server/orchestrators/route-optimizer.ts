@@ -37,6 +37,11 @@ export class RouteOptimizer {
       return { suggestions: [], appliedCount: 0 };
     }
 
+    if (ModelAdapter.isDegradedMode) {
+      logger.nightly.info("模型降级中，跳过路由表优化");
+      return { suggestions: [], appliedCount: 0 };
+    }
+
     // 汇总今日记忆的主题和复杂度特征
     const topicDistribution: Record<string, number> = {};
     const topics = todaysMemories.map((m) => m.topic);

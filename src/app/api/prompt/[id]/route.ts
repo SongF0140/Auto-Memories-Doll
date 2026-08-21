@@ -5,6 +5,7 @@ import { apiResponse, apiError } from "../../../../lib/api-response";
 import { ErrorCode } from "../../../../lib/api-errors";
 import { TemplateNotFoundError } from "../../../../lib/errors";
 
+
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const manager = new PromptManager();
   const template = manager.getTemplate(params.id);

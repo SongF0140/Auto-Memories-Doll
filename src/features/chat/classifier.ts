@@ -1,5 +1,14 @@
 import { ModelAdapter } from "../../lib/ai/model-adapter";
 import { cosineSimilarity } from "../../lib/vector/similarity";
+import {
+  INTENT_CLASSIFY_KEYWORD_THRESHOLD,
+  INTENT_DEFAULT_CONFIDENCE,
+  INTENT_EMBEDDING_THRESHOLD,
+  INTENT_KEYWORD_BASE_CONFIDENCE,
+  INTENT_KEYWORD_MATCH_BONUS,
+  INTENT_KEYWORD_POSITION_BONUS,
+  INTENT_MAX_CONFIDENCE,
+} from "../../config/constants";
 
 export type IntentType =
   | "chat"
@@ -47,11 +56,11 @@ const INTENT_DESCRIPTIONS: Record<Exclude<IntentType, "chat" | "system_command">
  * 用户意图分类器 —— 三层级联增强版
  *
  * Layer 1 - 关键词匹配（同步，<1ms）
- *   基于关键词命中率的置信度评分，≥0.6 直接返回。
+   *   基于关键词命中率的置信度评分，≥配置阈值直接返回。
  *
  * Layer 2 - Embedding 语义回退（异步，~100ms）
- *   关键词置信度 <0.6 时，用 embedding 向量相似度匹配意图描述。
- *   支持多意图检测：返回相似度 >=0.3 的所有候选，降序排列。
+   *   关键词置信度 <配置阈值时，用 embedding 向量相似度匹配意图描述。
+   *   支持多意图检测：返回相似度 >=配置阈值的所有候选，降序排列。
  *
  * Layer 3 - Budget LLM 实体提取（异步，~500ms）
  *   memory_create / memory_update 意图时，调用廉价模型提取
@@ -83,7 +92,7 @@ export class ChatClassifier {
     }
 
     let bestIntent: IntentType = "chat";
-    let bestScore = 0.3;
+    let bestScore = INTENT_DEFAULT_CONFIDENCE;
     let bestMatched: string[] = [];
 
     for (const [intent, keywords] of Object.entries(ChatClassifier.INTENT_KEYWORDS) as Array<
@@ -92,8 +101,11 @@ export class ChatClassifier {
       const matched = keywords.filter((kw) => lowerText.includes(kw));
       if (matched.length === 0) continue;
 
-      const positionBonus = lowerText.indexOf(matched[0]) < 10 ? 0.05 : 0;
-      const score = Math.min(0.95, 0.5 + 0.12 * matched.length + positionBonus);
+      const positionBonus = lowerText.indexOf(matched[0]) < 10 ? INTENT_KEYWORD_POSITION_BONUS : 0;
+      const score = Math.min(
+        INTENT_MAX_CONFIDENCE,
+        INTENT_KEYWORD_BASE_CONFIDENCE + INTENT_KEYWORD_MATCH_BONUS * matched.length + positionBonus,
+      );
 
       if (score > bestScore) {
         bestScore = score;
@@ -122,7 +134,7 @@ export class ChatClassifier {
   async classifyAsync(text: string): Promise<IntentResult> {
     // Layer 1: 关键词快速路径
     const keywordResult = this.classify(text);
-    if (keywordResult.confidence >= 0.6 || keywordResult.type === "system_command") {
+    if (keywordResult.confidence >= INTENT_CLASSIFY_KEYWORD_THRESHOLD || keywordResult.type === "system_command") {
       return keywordResult;
     }
 
@@ -149,7 +161,7 @@ export class ChatClassifier {
       if (!intentEmb) continue;
 
       const similarity = cosineSimilarity(textEmbedding.embedding, intentEmb);
-      if (similarity >= 0.3) {
+      if (similarity >= INTENT_EMBEDDING_THRESHOLD) {
         candidates.push({ type: intent, confidence: Math.round(similarity * 100) / 100, matchedKeywords: [] });
       }
     }

@@ -253,7 +253,7 @@ Agent 循环不知道 Next.js 路由细节、React 组件、会话文件落盘�
 - 输入归一化：`src/server/pipelines/*`，将多源输入整理为标准事件对象
 - JSON 校验：Zod，用于请求体、记忆结构和回写结果校验
 - 校验顺序：先定义 `schema`，再定义 `zodSchema`，再定义 `parse` / `safeParse`，最后才允许进入业务处理函数
-- 请求响应约束（目标规范，当前待实现）：所有 route handler 应导出请求体 schema、响应体 schema、错误码表和处理函数；当前阶段至少保证 Zod 请求体校验覆盖
+- 请求响应约束：所有 API route 的请求体 schema、响应体 schema 和错误码表统一登记在 `src/config/api-route-contracts.ts`；route handler 实现侧继续在入口执行 Zod 请求校验，避免受 Next.js route module 导出限制影响
 - 批处理与调度：Node.js 任务与站内调度器；Cron 仅作为可选部署形态
 - 前端搜索：关键词索引、笔记检索、结果排序、点击回写
 - 本地推荐：按次数推荐算法、动态热度更新、个性化重排、曝光回写
@@ -707,7 +707,7 @@ export type ConflictRecord = {
 - 涉及写回时必须明确区分”增量更新”和”覆盖写入”。
 - 冲突分级处理：审计层收到候选记忆后，按 4.10 定义的冲突分级策略进行差异比对和处理。
 - API 降级处理：LLM API 不可用时，快轨层切换为本地检索模板回复，后台加工层暂停提取并排队；embedding API 不可用时，向量召回降级为关键词召回，新记忆标记”向量待生成”并在恢复后批量补建；降级状态须在前端提示。
-- API 开发规范（目标状态）：所有 API 应先定义请求体 Zod schema、响应体结构、错误码枚举，再写实现；当前阶段优先保证请求体 Zod 校验覆盖（见 11.1 偏差表）。
+- API 开发规范：所有 API 应先在 `src/config/api-route-contracts.ts` 登记请求体 Zod schema（无请求体可省略）、响应体 schema 和错误码枚举，再写 route handler；handler 内必须继续执行请求体 Zod 校验。
 - 并发写入本地文件时必须通过单写入队列或文件锁保证顺序；同一 `memory-root/` 下的写入任务不得并行覆盖同一目标文件。
 - 后台任务失败时必须保留失败上下文，并允许重试；重试前必须保留原始输入和上一次处理结果。
 - 任何推测性内容都应在代码中显式标注，不能伪装成确定数据。
@@ -793,10 +793,10 @@ export type ConflictRecord = {
 | memory/search 性能 | 无约束 | 已修复：`listMemories()` 调用处统一加 limit 约束（handler: 500, tool-registry: 200, orchestrator: 500） | ~~P1~~ |
 | 文件锁实现 | 未描述实现细节 | 已修复：`fs.open(path, O_WRONLY \| O_CREAT \| O_EXCL)` 原子操作 | ~~P2~~ |
 | 日志系统 | 未提及 | 已修复：核心链路（model-adapter, memory-service, orchestrator）迁移到 `logger` | ~~P3~~ |
-| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：24 文件 291 用例，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路及配置 API 请求体验证 | ~~P2~~ |
+| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：34 个测试文件，346 passed / 0 skipped，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路、配置 API 请求体验证、提供商目录、上下文压缩和首个 React 设置表单 SSR 测试 | ~~P2~~ |
 | 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
 | 会话系统提示快照 | 持久化 system 消息 | 已修复：`ChatSessionService.appendSnapshot` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
-| 提供商配置 | AI 配置仅前端表单 | 新增 `src/config/providers.json` 声明式目录 + `provider-loader.ts` 读写层 | P2 |
+| 提供商配置 | AI 配置仅前端表单 | 已修复：`src/config/providers.json` 声明式目录经 `provider-loader.ts` 做 Zod 校验和读写，`/api/config/ai` 返回 `providerCatalog`，设置页模型/供应商选项由目录驱动并有单测覆盖 | ~~P2~~ |
 | docs 目录未纳入版本控制 | 第 2 节要求文档跟随实现，差异有记录 | 已修复：`.gitignore` 不再忽略 `docs-zh/`，仅继续忽略 `docs-zh/.obsidian/workspace.json` 这类个人编辑器状态；项目文档可进入版本控制 | ~~P2~~ |
 | 降级状态恢复 | 第 4.11 节描述降级但未提恢复 | 已修复：`ModelAdapter.startHealthCheck()` 周期性轮询，恢复后自动退出降级；scheduler setInterval 类型修复 | ~~P1~~ |
 | 记忆创建绕过审计 | 第 4.8 节要求先入队再审计 | 已修复：tool-registry 的 create_memory/update_memory 改为生成 PendingEvent 入队而非直接写库 | ~~P0~~ |
@@ -809,7 +809,7 @@ export type ConflictRecord = {
 | validatePendingEvent sourceType 白名单 | 第 5.6 节 `sourceType` 含 `listen` | 已修复：`validator.ts` 的 `validatePendingEvent` 白名单补全 `listen`（共 6 种），与 `PendingEvent` 类型定义一致；`/api/listen` 入队事件校验恢复正常 | ~~P1~~ |
 | validateVectorRecord 空数组放行 | 无约束 | 已修复：`validateVectorRecord` 改为 `!Array.isArray(record.embedding) || record.embedding.length === 0`，空数组不再放行 | ~~P3~~ |
 | 访问计数回写入口 | 第 4.8 节"搜索回写由前端搜索命中事件触发" | 已修复：新增 `POST /api/memory/[id]/access` 端点，前端用户点击记忆时调用 `incrementAccess`；配合之前从 `retrieveRelevantMemories` 移除召回时递增的修复，访问计数现在有正确的回写路径 | ~~P2~~ |
-| 预处理管线未接入主路径 | 第 4.6 节"输入归一化：`src/server/pipelines/*`"与《架构检查文档》4.3 "不要让原始输入直接进入索引和记忆" | 已修复：`Orchestrator.processIngest` 接入 `processJsonPipeline`，完成 formatMemoryContent 清洗 + detectDuplicates（与最近 200 条 Jaccard 去重）+ splitText 长文拆包；重复内容抛 `MemoryValidationError` 拒绝入库，多 chunk 合并为 markdown 分段正文 | ~~P0~~ |
+| 预处理管线未接入主路径 | 第 4.6 节"输入归一化：`src/server/pipelines/*`"与《架构检查文档》4.3 "不要让原始输入直接进入索引和记忆" | 已修复：`Orchestrator.processIngest` 接入 `processJsonPipeline`，完成 formatMemoryContent 清洗 + detectDuplicates（全量内容扫描的 Jaccard 去重）+ splitText 长文拆包；重复内容抛 `MemoryValidationError` 拒绝入库，多 chunk 合并为 markdown 分段正文 | ~~P0~~ |
 | 分类驱动路由未生效 | 第 4.14 节工具调用流程 + 《架构检查文档》4.4 "分类驱动路由" | 已修复：`ChatHandler.streamResponse` 调用 `ChatClassifier.classify` 对最近 user 消息做本地意图分类，结果注入 prompt 的"用户意图"块（零 LLM 开销），引导模型选择工具与回复风格 | ~~P0~~ |
 | 置信度评分为硬编码常量 | 第 4.11 节"模型与检索约束"未约束置信度算法；《架构检查文档》4.4 要求区分"高可信事实"与"待确认推测" | 已修复：`ChatClassifier`/`MemoryClassifier` 改为 `score = min(0.95, 0.5 + 0.12*命中数 + 0.05*位置加分)`，区分多关键词命中（高可信）与单关键词命中（待确认） | ~~P1~~ |
 | 审计可读文本缺失 | 第 4.10 节"冲突分级策略" + 《架构检查文档》4.7 "markdown 流式转码 + LLM 检查" | 已修复：`AuditReporter.generateMarkdownReport()` 生成按来源/话题分布 + 冲突清单 + 最近记忆的可读 Markdown；`Orchestrator.processQueue` 末尾自动落盘到 `archive/audits/audit-{timestamp}.md` | ~~P1~~ |
@@ -817,7 +817,7 @@ export type ConflictRecord = {
 | Orchestrator 审计报告 I/O 内联 | 审计持久化层应由服务拆分职责 | 已修复：审计报告落盘拆到 `src/server/services/audit-report-writer.ts`，`Orchestrator` 仅调度 `AuditReportWriter.write()`；新增独立单测覆盖路径、文件名与写入内容 | ~~P3~~ |
 | 向量搜索后端固定 JS 实现 | Phase 3 规划升级原生向量索引 | 已修复：`VectorSearchBackend` 默认使用 USearch HNSW ANN；SQLite 版本触发器检测索引失配并自动重建，按 embedding 维度分图持久化；JS 精确搜索仅作 `VECTOR_BACKEND=js` 或初始化失败 fallback；测试覆盖增删改、持久化重载和自动重建 | ~~P3~~ |
 | 画像回写无阈值 | 《架构检查文档》6.3 "回写震荡风险：自动更新 loop 如果太激进，会导致提示词频繁变化、标签漂移" | 已修复：`ProfileUpdater` 新增 `UPDATE_SIMILARITY_THRESHOLD=0.85`，新旧画像行级 Jaccard 相似度 ≥ 阈值时跳过回写，避免 `profile.md` 反复刷新导致 `PromptCache` 震荡 | ~~P2~~ |
-| API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 请求体 Zod 覆盖已完成；响应体 schema、错误码表和 handler 导出仍未覆盖所有路由，继续按目标规范推进 | P2 |
+| API schema 导出 | 第 4.6 节和第 6 节要求所有 route handler 导出请求体 schema、响应体 schema、错误码表 | 已修复：受 Next.js route module 导出限制，契约集中到 `src/config/api-route-contracts.ts`，为所有 API route 声明请求 schema（需 body 的路由）、响应 schema 与错误码表；`api-route-contracts.test.ts` 防止新增路由漏登记 | ~~P2~~ |
 | 配置 API 请求体验证 | 当前阶段至少保证 Zod 请求体校验覆盖 | 已修复：`config/storage` POST/PATCH 与 `config/tool-sources` POST/PUT 统一使用 `validation.ts` 中的 Zod schema；工具源 PUT 字段与 `ToolWatchSource` 契约对齐，并补充错误类型、默认值、路径遍历和旧字段名测试 | ~~P1~~ |
 | 存储路径硬编码 | 第 8 节"本地存储目录：使用 `memory-root/` 作为根目录"未支持运行时可配置 | 已修复：`path-resolver.ts` 改造为 `getDatabasePath()` 固定用 env（避免循环依赖），`getMemoryRoot()` 从 db storage_config 读取带缓存；新增 `StorageMigrationService`（停 watcher→复制→更新 config→invalidatePathCache→重启 watcher）；`/api/config/storage` API（GET/POST/PATCH 预览）；`StorageConfigForm` 前端组件 | ~~P1~~ |
 | 本地工具对话无法采集 | 第 4.6.2 节仅描述 API 监听和书签抓取，无本地工具工作目录采集 | 已修复：新增 `ToolWatchSource` 类型 + `ConfigService` CRUD + `session-parser.ts`（Codex/Claude Code/Cursor/Markdown/Text 五种解析器，递归提取 content）+ `ToolDirWatcher`（多源 chokidar + mtime+size 去重）+ `/api/config/tool-sources` API + `ToolSourceList` 前端组件（预设快速添加） | ~~P1~~ |
@@ -827,7 +827,7 @@ export type ConflictRecord = {
 
 ### 11.2 渐进式路线图
 
-项目按 Phase 分阶段推进，每个 Phase 在前一阶段稳定后才开始。当前阶段：**Phase 1**。
+项目按 Phase 分阶段推进，每个 Phase 在前一阶段稳定后才开始。当前阶段：**Phase 4 收口**。
 
 ```text
 Phase 0 — 工程健康 [DONE]
@@ -838,7 +838,7 @@ Phase 0 — 工程健康 [DONE]
   [x] 文件锁原子操作（O_EXCL）
   [x] sortBy 白名单校验
 
-Phase 1 — 核心稳定 [IN PROGRESS]
+Phase 1 — 核心稳定 [DONE]
   [x] 设计原则清单化（7 条可验证架构约束）
   [x] 工具结果分层（ToolResult.content + data）
   [x] 会话系统提示重建（不持久化 system 消息）
@@ -867,13 +867,13 @@ Phase 2 — 会话升级
   [x] 会话恢复系统提示重建（ChatHandler 已支持，system 消息不持久化）
 
 Phase 3 — 智能增强
-  [ ] 会话上下文压缩（旧消息 AI 摘要替换）
+  [x] 会话上下文压缩（长对话旧消息压缩为稳定摘要块，保留最近上下文）
   [ ] 会话树形分支（从任意节点分支对话）
   [x] 向量检索升级为 USearch HNSW ANN（SQLite 版本触发器 + sidecar 持久化 + 自动重建 + JS fallback）
 
 Phase 4 — 测试与质量
   [x] 快轨层测试（ChatHandler Agent 循环、降级路径、候选记忆生成）
-  [ ] 后台加工层测试（清洗去重、分类打分）
+  [x] 后台加工层测试（清洗去重、分类打分、全量去重扫描）
   [x] 审计持久化层测试（冲突分级、版本管理）
   [x] 集成测试（端到端：用户输入 → 快轨 → 审计 → 文件写回）
 ```
@@ -883,5 +883,12 @@ Phase 4 — 测试与质量
 - 已完成 `ChatHandler` 系统提示拆分：`src/features/chat/system-prompt.ts`
 - 已完成审计报告写入拆分：`src/server/services/audit-report-writer.ts`
 - 已完成向量搜索后端抽象：`src/lib/vector/backend.ts`
-- 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`
-- 当前测试总量已更新为 274 用例，覆盖快轨、审计、向量后端与关键集成链路
+- 已完成提供商目录化配置：`providers.json` + `provider-loader.ts` + 设置页动态选项
+- 已完成 API 契约集中登记：`src/config/api-route-contracts.ts`
+- 已完成长对话上下文压缩：`src/lib/chat/conversation-compressor.ts`
+- 已完成分类/重排阈值常量化：`src/config/constants.ts`
+- 已完成去重扫描从固定最近 200 条扩展为全量内容扫描
+- 已完成 nightly 降级保护：模型降级时跳过矛盾精判、wikilink 智能补充、路由优化和旗舰画像更新
+- 已完成 WikiGraph 增量更新清理：文件变更/删除时移除旧节点关系，避免脏边残留
+- 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`、`provider-loader.test.ts`、`api-route-contracts.test.ts`、`conversation-compressor.test.ts`、`ai-config-form.test.tsx`
+- 当前测试总量：34 个测试文件，346 passed / 0 skipped（共 346 用例）

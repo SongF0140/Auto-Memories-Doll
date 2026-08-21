@@ -343,6 +343,16 @@ describe("MemoryService — listMemories 排序与过滤", () => {
     expect(result.every((m) => m.tags.includes("react"))).toBe(true);
   });
 
+  it("filters tags by exact JSON value instead of LIKE wildcards", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "百分比标签", "C", "S", ["100%"]);
+    await svc.createMemory("test", "manual", "相似标签", "C", "S", ["1000"]);
+
+    const result = svc.listMemories({ tag: "100%" });
+
+    expect(result.map((m) => m.title)).toEqual(["百分比标签"]);
+  });
+
   it("filters by tag with pagination", async () => {
     const svc = new MemoryService();
     for (let i = 0; i < 5; i++) {
@@ -401,6 +411,14 @@ describe("MemoryService — count with tag filter", () => {
 
     expect(svc.count("nextjs")).toBe(2);
     expect(svc.count("python")).toBe(1);
+  });
+
+  it("counts tags by exact JSON value instead of LIKE wildcards", async () => {
+    const svc = new MemoryService();
+    await svc.createMemory("test", "manual", "百分比标签", "C", "S", ["100%"]);
+    await svc.createMemory("test", "manual", "相似标签", "C", "S", ["1000"]);
+
+    expect(svc.count("100%")).toBe(1);
   });
 
   it("count returns 0 for unmatched tag", () => {

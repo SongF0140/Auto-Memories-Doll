@@ -1,6 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelAdapter } from "../lib/ai/model-adapter";
 import { AiEvent } from "../lib/ai/ai-events";
+
+const aiMock = vi.hoisted(() => ({
+  generateText: vi.fn(),
+}));
+
+const providerMock = vi.hoisted(() => ({
+  generateEmbedding: vi.fn(),
+  generateStream: vi.fn(),
+}));
 
 const configMock = vi.hoisted(() => ({
   config: {
@@ -31,6 +40,15 @@ const configMock = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("ai", () => ({
+  embed: vi.fn(),
+  generateText: aiMock.generateText,
+}));
+
+vi.mock("../lib/ai/openai-provider", () => ({
+  OpenAIProvider: vi.fn(() => providerMock),
+}));
+
 vi.mock("../server/services/config-service", () => ({
   ConfigService: vi.fn(() => ({
     getAiConfig: vi.fn(() => configMock.config),
@@ -51,6 +69,23 @@ async function drain(stream: ReadableStream<AiEvent>): Promise<AiEvent[]> {
 }
 
 describe("ModelAdapter degradation", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    configMock.config.apiKey = "";
+    ModelAdapter.stopHealthCheck();
+    const adapterState = ModelAdapter as unknown as {
+      isDegraded?: boolean;
+      llmDegraded?: boolean;
+      embeddingDegraded?: boolean;
+      apiKeyConfiguredCache?: unknown;
+    };
+    adapterState.isDegraded = false;
+    adapterState.llmDegraded = false;
+    adapterState.embeddingDegraded = false;
+    adapterState.apiKeyConfiguredCache = null;
+  });
+
   it("returns a fallback AiEvent stream when API key is missing", async () => {
     expect(ModelAdapter.isDegradedMode).toBe(true);
 
@@ -79,5 +114,39 @@ describe("ModelAdapter degradation", () => {
 
     expect(result.embedding).toEqual([]);
     expect(result.model).toBe("text-embedding-3-small");
+  });
+
+  it("keeps LLM degradation after a later embedding success", async () => {
+    configMock.config.apiKey = "test-key";
+    aiMock.generateText.mockRejectedValueOnce(new Error("llm down"));
+    providerMock.generateEmbedding.mockResolvedValueOnce([0.1, 0.2]);
+
+    const llmResult = await ModelAdapter.generate("remember this", "standard");
+    expect(llmResult.finishReason).toBe("degraded");
+    expect(ModelAdapter.isDegradedMode).toBe(true);
+
+    const embeddingResult = await ModelAdapter.generateEmbedding("query");
+
+    expect(embeddingResult.embedding).toEqual([0.1, 0.2]);
+    expect(ModelAdapter.isDegradedMode).toBe(true);
+  });
+
+  it("keeps degraded mode when health check embedding succeeds but LLM probe fails", async () => {
+    vi.useFakeTimers();
+    configMock.config.apiKey = "test-key";
+    aiMock.generateText
+      .mockRejectedValueOnce(new Error("initial llm down"))
+      .mockRejectedValueOnce(new Error("llm still down"));
+    providerMock.generateEmbedding.mockResolvedValue([0.1, 0.2]);
+
+    await ModelAdapter.generate("remember this", "standard");
+    expect(ModelAdapter.isDegradedMode).toBe(true);
+
+    ModelAdapter.startHealthCheck();
+    await vi.advanceTimersByTimeAsync(30000);
+
+    expect(providerMock.generateEmbedding).toHaveBeenCalledWith("health-check");
+    expect(aiMock.generateText).toHaveBeenCalledTimes(2);
+    expect(ModelAdapter.isDegradedMode).toBe(true);
   });
 });

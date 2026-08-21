@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync } from "fs";
+import { createRequire } from "module";
 import { dirname, resolve } from "path";
 import Database from "better-sqlite3";
-import { Index, MetricKind, ScalarKind } from "usearch";
 import { logger } from "../logger";
 import { cosineSimilarity } from "./similarity";
+import { createShimUsearchModule } from "./usearch-shim";
 
 export type VectorSearchRow = {
   memoryId: string;
@@ -22,6 +23,9 @@ export interface VectorSearchBackend {
   upsert(row: VectorSearchRow, previous?: VectorSearchRow | null): void;
   delete(memoryId: string, previous?: VectorSearchRow | null): void;
   rebuild(dimensions?: number): void;
+  close?(): void;
+  dispose?(): void;
+  free?(): void;
 }
 
 type RowSource = () => VectorSearchRow[];
@@ -67,9 +71,32 @@ export class JsVectorSearchBackend implements VectorSearchBackend {
 }
 
 type HnswState = {
-  index: Index;
+  index: UsearchIndex;
   dimensions: number;
   indexedVersion: number;
+};
+
+type UsearchIndex = {
+  size(): number;
+  search(
+    vector: Float32Array,
+    count: number,
+    threads?: number,
+  ): { keys: ArrayLike<bigint | number>; distances: ArrayLike<number> };
+  add(keyOrKeys: bigint | BigUint64Array, vectorOrVectors: Float32Array, threads?: number): void;
+  load(path: string): void;
+  save(path: string): void;
+  contains(key: bigint): boolean;
+  remove(key: bigint): void;
+  close?(): void;
+  dispose?(): void;
+  free?(): void;
+};
+
+type UsearchModule = {
+  Index: new (options: Record<string, unknown>) => UsearchIndex;
+  MetricKind: { Cos: unknown };
+  ScalarKind: { F32: unknown };
 };
 
 type AnnStateRow = {
@@ -92,6 +119,26 @@ const HNSW_CONNECTIVITY = 16;
 const HNSW_EXPANSION_ADD = 128;
 const HNSW_EXPANSION_SEARCH = 64;
 const HNSW_SCHEMA_VERSION = 1;
+const requireFromHere = createRequire(import.meta.url);
+const USEARCH_PACKAGE = "use" + "arch";
+let usearchModule: UsearchModule | undefined;
+
+function loadUsearch(): UsearchModule {
+  if (usearchModule !== undefined) {
+    return usearchModule;
+  }
+
+  try {
+    usearchModule = requireFromHere(USEARCH_PACKAGE) as UsearchModule;
+    return usearchModule;
+  } catch (error) {
+    logger.vector.warn("usearch native module unavailable，已切换到本地 HNSW shim", {
+      error: (error as Error).message,
+    });
+    usearchModule = createShimUsearchModule();
+    return usearchModule;
+  }
+}
 
 /**
  * USearch HNSW 后端。
@@ -106,11 +153,13 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
   readonly name = "hnsw-usearch";
   private readonly db: Database.Database;
   private readonly indexBasePath: string | null;
+  private readonly usearch: UsearchModule;
   private readonly states = new Map<number, HnswState>();
 
   constructor(db: Database.Database, indexBasePath?: string | null) {
     this.db = db;
     this.indexBasePath = indexBasePath === undefined ? this.defaultIndexBasePath() : indexBasePath;
+    this.usearch = loadUsearch();
     this.initSchema();
   }
 
@@ -127,7 +176,7 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
 
     const results: VectorSearchResult[] = [];
     for (let i = 0; i < matches.keys.length; i++) {
-      const memoryId = this.memoryIdForKey(matches.keys[i]);
+      const memoryId = this.memoryIdForKey(BigInt(matches.keys[i]));
       if (!memoryId) continue;
       results.push({
         memoryId,
@@ -140,49 +189,51 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
   }
 
   upsert(row: VectorSearchRow, previous?: VectorSearchRow | null): void {
-    const currentVersion = this.getSourceVersion();
-    if (!this.canApplySingleMutation(currentVersion)) {
-      // 版本跳跃表示还有其他写入者绕过了当前 backend；丢弃进程内图，
-      // 下次查询按 SQLite 全量重建，避免把不完整的图误标为最新版本。
-      this.states.clear();
-      return;
-    }
     const previousDimensions = previous?.embedding.length ?? previous?.dimensions;
     const nextDimensions = row.embedding.length || row.dimensions;
+    const currentVersion = this.getSourceVersion();
+    if (!this.canApplySingleMutation(currentVersion, [previousDimensions, nextDimensions])) {
+      // 版本跳跃表示还有其他写入者绕过了当前 backend；丢弃相关维度的进程内图，
+      // 下次查询按 SQLite 全量重建，避免把不完整的图误标为最新版本。
+      this.dropStates([previousDimensions, nextDimensions]);
+      return;
+    }
 
     if (previousDimensions && previousDimensions !== nextDimensions) {
       const previousState = this.states.get(previousDimensions);
       if (previousState) this.removeFromState(previousState, row.memoryId);
+      if (previousState) this.persistStateWithVersion(previousState, currentVersion);
     }
 
     if (nextDimensions) {
-      const nextState = this.states.get(nextDimensions);
-      if (nextState) {
-        this.removeFromState(nextState, row.memoryId);
-        nextState.index.add(this.keyForMemoryId(row.memoryId), new Float32Array(row.embedding));
-      }
+      const nextState = this.states.get(nextDimensions) ?? this.ensureState(nextDimensions);
+      this.removeFromState(nextState, row.memoryId);
+      nextState.index.add(this.keyForMemoryId(row.memoryId), new Float32Array(row.embedding));
+      this.persistStateWithVersion(nextState, currentVersion);
     }
-
-    this.persistLoadedStates(currentVersion);
   }
 
   delete(memoryId: string, previous?: VectorSearchRow | null): void {
     if (!previous) return;
+    const previousDimensions = previous?.embedding.length ?? previous?.dimensions;
     const currentVersion = this.getSourceVersion();
-    if (!this.canApplySingleMutation(currentVersion)) {
-      this.states.clear();
+    if (!this.canApplySingleMutation(currentVersion, [previousDimensions])) {
+      this.dropStates([previousDimensions]);
       return;
     }
-    const previousDimensions = previous?.embedding.length ?? previous?.dimensions;
 
     if (previousDimensions) {
       const state = this.states.get(previousDimensions);
-      if (state) this.removeFromState(state, memoryId);
+      if (state) {
+        this.removeFromState(state, memoryId);
+        this.persistStateWithVersion(state, currentVersion);
+      }
     } else {
-      for (const state of this.states.values()) this.removeFromState(state, memoryId);
+      for (const state of this.states.values()) {
+        this.removeFromState(state, memoryId);
+        this.persistStateWithVersion(state, currentVersion);
+      }
     }
-
-    this.persistLoadedStates(currentVersion);
   }
 
   rebuild(dimensions?: number): void {
@@ -194,8 +245,14 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     const rows = this.db
       .prepare("SELECT DISTINCT dimensions FROM vector_records ORDER BY dimensions")
       .all() as Array<{ dimensions: number }>;
+    this.closeStates();
     this.states.clear();
     for (const row of rows) this.rebuildDimension(row.dimensions);
+  }
+
+  close(): void {
+    this.closeStates();
+    this.states.clear();
   }
 
   private initSchema(): void {
@@ -260,7 +317,7 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     const cached = this.states.get(dimensions);
     if (cached && cached.indexedVersion === sourceVersion) return cached;
 
-    if (cached) this.states.delete(dimensions);
+    if (cached) this.dropState(dimensions);
 
     const persisted = this.db
       .prepare(
@@ -309,16 +366,27 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
       const keys = new BigUint64Array(rows.length);
       const vectors = new Float32Array(rows.length * dimensions);
 
-      rows.forEach((row, rowIndex) => {
-        const embedding = JSON.parse(row.embedding) as number[];
-        if (embedding.length !== dimensions) {
-          throw new Error(`向量 ${row.memoryId} 的 dimensions 字段与实际长度不一致`);
+      let validCount = 0;
+      for (const row of rows) {
+        try {
+          const embedding = JSON.parse(row.embedding) as number[];
+          if (embedding.length !== dimensions) {
+            throw new Error(`向量 ${row.memoryId} 的 dimensions 字段与实际长度不一致`);
+          }
+          keys[validCount] = this.keyForMemoryId(row.memoryId);
+          vectors.set(embedding, validCount * dimensions);
+          validCount++;
+        } catch (error) {
+          logger.vector.warn("跳过损坏的向量记录，继续重建 HNSW 索引", {
+            memoryId: row.memoryId,
+            error: (error as Error).message,
+          });
         }
-        keys[rowIndex] = this.keyForMemoryId(row.memoryId);
-        vectors.set(embedding, rowIndex * dimensions);
-      });
+      }
 
-      index.add(keys, vectors, 1);
+      if (validCount > 0) {
+        index.add(keys.slice(0, validCount), vectors.slice(0, validCount * dimensions), 1);
+      }
     }
 
     const sourceVersion = this.getSourceVersion();
@@ -334,11 +402,11 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     return state;
   }
 
-  private createIndex(dimensions: number): Index {
-    return new Index({
+  private createIndex(dimensions: number): UsearchIndex {
+    return new this.usearch.Index({
       dimensions,
-      metric: MetricKind.Cos,
-      quantization: ScalarKind.F32,
+      metric: this.usearch.MetricKind.Cos,
+      quantization: this.usearch.ScalarKind.F32,
       connectivity: HNSW_CONNECTIVITY,
       expansion_add: HNSW_EXPANSION_ADD,
       expansion_search: HNSW_EXPANSION_SEARCH,
@@ -346,18 +414,22 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     });
   }
 
-  private persistLoadedStates(sourceVersion: number): void {
-    for (const state of this.states.values()) {
-      state.indexedVersion = sourceVersion;
-      this.persistState(state);
-    }
-  }
-
-  private canApplySingleMutation(sourceVersion: number): boolean {
-    for (const state of this.states.values()) {
+  private canApplySingleMutation(
+    sourceVersion: number,
+    dimensions: Array<number | undefined>,
+  ): boolean {
+    for (const dimension of dimensions) {
+      if (!dimension) continue;
+      const state = this.states.get(dimension);
+      if (!state) continue;
       if (state.indexedVersion !== sourceVersion - 1) return false;
     }
     return true;
+  }
+
+  private persistStateWithVersion(state: HnswState, sourceVersion: number): void {
+    state.indexedVersion = sourceVersion;
+    this.persistState(state);
   }
 
   private persistState(state: HnswState): void {
@@ -426,6 +498,29 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
 
   private indexPath(dimensions: number): string | null {
     return this.indexBasePath ? `${this.indexBasePath}-${dimensions}.usearch` : null;
+  }
+
+  private dropStates(dimensions: Array<number | undefined>): void {
+    for (const dimension of dimensions) {
+      if (dimension) this.dropState(dimension);
+    }
+  }
+
+  private dropState(dimensions: number): void {
+    const state = this.states.get(dimensions);
+    if (!state) return;
+    this.disposeIndex(state.index);
+    this.states.delete(dimensions);
+  }
+
+  private closeStates(): void {
+    for (const state of this.states.values()) this.disposeIndex(state.index);
+  }
+
+  private disposeIndex(index: UsearchIndex): void {
+    index.close?.();
+    index.dispose?.();
+    index.free?.();
   }
 }
 

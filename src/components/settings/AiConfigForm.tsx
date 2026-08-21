@@ -1,22 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { AiConfig, AiProvider, ModelSlot, ModelTierConfig, EmbeddingConfig } from "../../types/config";
+import type { ProviderCatalog } from "../../config/provider-loader";
+import {
+  buildProviderOptions,
+  buildProviderSelectionPatch,
+} from "./ai-config-options";
 
 type ChatSlot = Exclude<ModelSlot, "embedding">;
 
 interface AiConfigFormProps {
   config: AiConfig;
+  providerCatalog?: ProviderCatalog;
   onSave: (config: AiConfig) => void;
   saving?: boolean;
 }
-
-const providers: { value: AiProvider; label: string }[] = [
-  { value: "openai", label: "OpenAI" },
-  { value: "openai-compatible", label: "OpenAI Compatible" },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "custom", label: "Custom" },
-];
 
 const tierLabels: Record<ChatSlot, { title: string; desc: string }> = {
   flagship: { title: "旗舰模型", desc: "分流、分析、评估 — 强推理，高精度" },
@@ -45,14 +44,23 @@ function ensureSlots(config: AiConfig): AiConfig {
   };
 }
 
-export default function AiConfigForm({ config, onSave, saving }: AiConfigFormProps) {
+export default function AiConfigForm({ config, providerCatalog, onSave, saving }: AiConfigFormProps) {
   const [form, setForm] = useState<AiConfig>(() => ensureSlots(config));
+  const providers = buildProviderOptions(providerCatalog, form.provider);
 
   const updateShared = <K extends "provider" | "baseURL" | "apiKey">(
     key: K,
     value: AiConfig[K],
   ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      if (key === "provider") {
+        return {
+          ...prev,
+          ...buildProviderSelectionPatch(prev, value as AiProvider, providerCatalog),
+        };
+      }
+      return { ...prev, [key]: value };
+    });
   };
 
   const updateTier = (slot: ChatSlot, key: keyof ModelTierConfig, value: string | number) => {

@@ -1,5 +1,5 @@
-import { generateText, embed } from "ai";
-import { createLanguageModel, createEmbeddingModel } from "./provider";
+import { generateText } from "ai";
+import { createLanguageModel } from "./provider";
 import { getCurrentTime } from "../utils/date";
 import { ConfigService } from "../../server/services/config-service";
 import { OpenAIProvider } from "./openai-provider";
@@ -39,15 +39,22 @@ function getProvider(): AiProvider {
 }
 
 export class ModelAdapter {
-  private static isDegraded = false;
+  private static llmDegraded = false;
+  private static embeddingDegraded = false;
   private static healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private static apiKeyConfiguredCache: boolean | null = (() => {
+    try {
+      return Boolean(getConfig().apiKey?.trim());
+    } catch {
+      return null;
+    }
+  })();
 
   /** 全系统模型调用池 — 按层级限制并发，防止 API 请求风暴 */
   private static pool = new ModelPool(apiConfig.concurrency);
 
   static get isDegradedMode(): boolean {
-    const config = getConfig();
-    return this.isDegraded || !config.apiKey || config.apiKey.trim() === "";
+    return this.llmDegraded || this.embeddingDegraded || !this.hasConfiguredApiKey();
   }
 
   /** 获取并发池统计信息 */
@@ -64,8 +71,15 @@ export class ModelAdapter {
       try {
         const provider = getProvider();
         await provider.generateEmbedding("health-check");
-        if (this.isDegraded) {
-          this.isDegraded = false;
+        this.embeddingDegraded = false;
+
+        await generateText({
+          model: createLanguageModel("budget"),
+          messages: [{ role: "user", content: "health-check" }],
+        });
+        const wasDegraded = this.llmDegraded || this.embeddingDegraded;
+        this.llmDegraded = false;
+        if (wasDegraded) {
           logger.api.info("AI API 已恢复，退出降级模式");
         }
       } catch {
@@ -91,6 +105,7 @@ export class ModelAdapter {
     modelType?: ModelType;
   }): ReadableStream<AiEvent> {
     const config = getConfig();
+    this.rememberApiKeyStatus(config.apiKey);
     const slot: ModelSlot = options.modelType || "standard";
 
     if (!config.apiKey || config.apiKey.trim() === "") {
@@ -120,12 +135,14 @@ export class ModelAdapter {
         } catch (error) {
           if (error instanceof ConcurrencyTimeoutError) {
             const msg = `[${slot}] 模型并发已满 (${error.timeoutMs}ms 超时)，请稍后重试。`;
-            controller.enqueue({ type: "text_start" } as any);
-            controller.enqueue({ type: "text_delta", content: msg } as any);
-            controller.enqueue({ type: "text_end" } as any);
-            controller.enqueue({ type: "done", finishReason: "error" } as any);
+            this.llmDegraded = true;
+            controller.enqueue({ type: "text_start" });
+            controller.enqueue({ type: "text_delta", content: msg });
+            controller.enqueue({ type: "text_end" });
+            controller.enqueue({ type: "done", finishReason: "error" });
           } else {
-            controller.enqueue({ type: "error", message: (error as Error).message } as AiEvent);
+            this.llmDegraded = true;
+            controller.enqueue({ type: "error", message: (error as Error).message });
           }
           controller.close();
         }
@@ -149,6 +166,7 @@ export class ModelAdapter {
 
   static async generate(prompt: string, modelType: ModelType): Promise<LlmResponse> {
     const config = getConfig();
+    this.rememberApiKeyStatus(config.apiKey);
     const slot: ModelSlot = modelType;
     const tier = config[slot] || config.standard;
 
@@ -161,7 +179,7 @@ export class ModelAdapter {
         });
       });
 
-      this.isDegraded = false;
+      this.llmDegraded = false;
 
       return {
         content: result.text,
@@ -172,6 +190,7 @@ export class ModelAdapter {
     } catch (error) {
       if (error instanceof ConcurrencyTimeoutError) {
         logger.api.warn(`[generate] ${slot} 并发超时`, { timeoutMs: error.timeoutMs });
+        this.llmDegraded = true;
         return {
           content: this.getFallbackResponse(prompt),
           finishReason: "degraded",
@@ -180,7 +199,7 @@ export class ModelAdapter {
         };
       }
 
-      this.isDegraded = true;
+      this.llmDegraded = true;
       logger.api.error("LLM API 调用失败", { error: (error as Error).message });
 
       return {
@@ -194,6 +213,7 @@ export class ModelAdapter {
 
   static async generateEmbedding(text: string): Promise<EmbeddingResponse> {
     const config = getConfig();
+    this.rememberApiKeyStatus(config.apiKey);
 
     if (!config.apiKey || config.apiKey.trim() === "") {
       logger.vector.warn("未配置 API Key，跳过向量生成");
@@ -211,7 +231,7 @@ export class ModelAdapter {
         return provider.generateEmbedding(text);
       });
 
-      this.isDegraded = false;
+      this.embeddingDegraded = false;
       return {
         embedding,
         model: config.embedding.model,
@@ -220,6 +240,7 @@ export class ModelAdapter {
     } catch (error) {
       if (error instanceof ConcurrencyTimeoutError) {
         logger.vector.warn("[generateEmbedding] 并发超时");
+        this.embeddingDegraded = true;
         return {
           embedding: [],
           model: config.embedding.model,
@@ -227,7 +248,7 @@ export class ModelAdapter {
         };
       }
 
-      this.isDegraded = true;
+      this.embeddingDegraded = true;
       logger.vector.error("Embedding API 调用失败", { error: (error as Error).message });
 
       return {
@@ -243,5 +264,16 @@ export class ModelAdapter {
       return "当前处于离线模式，无法连接 AI 服务。你可以查看本地已保存的记忆，或前往设置页面检查 API 配置是否正确。";
     }
     return "当前处于离线模式，无法生成智能回复。请检查 AI API 配置是否正确（设置 > AI 配置），确保 baseURL 和 API Key 已填写。";
+  }
+
+  private static hasConfiguredApiKey(): boolean {
+    if (this.apiKeyConfiguredCache !== null) return this.apiKeyConfiguredCache;
+    return this.rememberApiKeyStatus(getConfig().apiKey);
+  }
+
+  private static rememberApiKeyStatus(apiKey: string | undefined): boolean {
+    const value = Boolean(apiKey?.trim());
+    this.apiKeyConfiguredCache = value;
+    return value;
   }
 }

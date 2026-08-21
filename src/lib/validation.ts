@@ -40,7 +40,7 @@ const embeddingSchema = z.object({
 });
 
 export const aiConfigSchema = z.object({
-  provider: z.enum(["openai", "openai-compatible", "anthropic", "custom"]),
+  provider: z.string().trim().min(1, "provider 不能为空"),
   baseURL: z.string().url("baseURL 必须是有效的 URL"),
   apiKey: z.string().min(1, "apiKey 不能为空"),
   flagship: modelTierSchema,

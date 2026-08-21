@@ -40,6 +40,11 @@ export class LinkSupplementer {
       return { suggestions: [], addedCount: 0, failedCount: 0 };
     }
 
+    if (ModelAdapter.isDegradedMode) {
+      logger.nightly.info("模型降级中，跳过 wikilink 智能补充");
+      return { suggestions: [], addedCount: 0, failedCount: 0 };
+    }
+
     // 获取当日记忆的现有邻居
     const existingLinksMap = new Map<string, Set<string>>();
     for (const mem of todaysMemories) {

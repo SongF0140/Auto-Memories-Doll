@@ -5,6 +5,7 @@ import { getDatabasePath } from "../../../../lib/storage/path-resolver";
 import { logger } from "../../../../lib/logger";
 import { storageConfigPreviewSchema, storageConfigUpdateSchema } from "../../../../lib/validation";
 
+
 /**
  * GET /api/config/storage
  * 返回当前存储配置：笔记路径 + 数据库路径

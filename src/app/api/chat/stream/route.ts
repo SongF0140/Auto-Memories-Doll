@@ -6,6 +6,7 @@ import { ErrorCode } from "../../../../lib/api-errors";
 import { ChatSessionService } from "../../../../server/services/chat-session-service";
 import { logger } from "../../../../lib/logger";
 
+
 /**
  * POST /api/chat/stream
  * 流式对话入口：AiEvent → SSE。

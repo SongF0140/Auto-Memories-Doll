@@ -1,4 +1,4 @@
-export type AiProvider = "openai" | "openai-compatible" | "anthropic" | "custom";
+export type AiProvider = string;
 
 /** 模型分层槽位标识（chat 模型 + embedding 模型） */
 export type ModelSlot = "flagship" | "standard" | "budget" | "embedding";

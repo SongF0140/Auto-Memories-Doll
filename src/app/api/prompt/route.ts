@@ -5,6 +5,7 @@ import { apiResponse, apiError } from "../../../lib/api-response";
 import { ErrorCode } from "../../../lib/api-errors";
 import { TemplateConflictError } from "../../../lib/errors";
 
+
 export async function GET() {
   const manager = new PromptManager();
   const templates = manager.listTemplates();

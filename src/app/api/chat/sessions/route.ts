@@ -3,6 +3,7 @@ import { apiError, apiResponse } from "../../../../lib/api-response";
 import { ErrorCode } from "../../../../lib/api-errors";
 import { ChatSessionService } from "../../../../server/services/chat-session-service";
 
+
 export const dynamic = "force-dynamic";
 
 /** GET /api/chat/sessions — 返回轻量会话摘要，不携带完整消息。 */

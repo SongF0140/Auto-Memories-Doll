@@ -27,6 +27,8 @@ export class WikiGraph {
   private cachedIndex: Map<string, string[]> | null = null;
   /** 记录每个文件最后扫描时的 mtime，用于增量校验 */
   private fileMtimes: Map<string, number> = new Map();
+  /** 文件路径到 memoryId 的映射，用于删除时精确清理 */
+  private fileMemoryIds: Map<string, string> = new Map();
 
   // ── 内部 ──
 
@@ -99,6 +101,7 @@ export class WikiGraph {
   private async rebuildIndex(files: string[]): Promise<Map<string, string[]>> {
     const index = new Map<string, string[]>();
     const newMtimes = new Map<string, number>();
+    const newFileMemoryIds = new Map<string, string>();
 
     for (const filePath of files) {
       try {
@@ -111,6 +114,7 @@ export class WikiGraph {
         const record = parseMemoryFromText(content);
         if (!record || !record.id) continue;
 
+        newFileMemoryIds.set(filePath, record.id);
         index.set(
           record.id,
           record.graphLinks.filter((id) => id && id !== record.id),
@@ -122,6 +126,7 @@ export class WikiGraph {
 
     this.cachedIndex = index;
     this.fileMtimes = newMtimes;
+    this.fileMemoryIds = newFileMemoryIds;
     return index;
   }
 
@@ -143,35 +148,28 @@ export class WikiGraph {
         const record = parseMemoryFromText(content);
         if (!record || !record.id) continue;
 
+        const previousMemoryId = this.fileMemoryIds.get(filePath);
+        if (previousMemoryId && previousMemoryId !== record.id) {
+          index.delete(previousMemoryId);
+        }
         index.set(
           record.id,
           record.graphLinks.filter((id) => id && id !== record.id),
         );
+        this.fileMemoryIds.set(filePath, record.id);
       } catch {
         // 无法读取 → 跳过
       }
     }
 
-    // 处理删除文件：构建 filePath → memoryId 的反向映射来清理
-    // 全量扫描成本太高，改为重建剩余文件列表来检测孤立节点
+    // 处理删除文件：利用 filePath → memoryId 映射精确清理，不再全量重建
     for (const filePath of deleted) {
       this.fileMtimes.delete(filePath);
-
-      // 重建该路径对应的 memoryId（从缓存 mtime 反查困难，用批量方式清理）
-      // 如果缓存中没有该文件的旧记录，则无法精准删除，全量重建兜底
-      const remainingFiles = allFiles.filter((f) => !deleted.includes(f));
-      if (remainingFiles.length === 0) {
-        this.cachedIndex = new Map();
-        this.fileMtimes.clear();
-        return this.cachedIndex;
+      const memoryId = this.fileMemoryIds.get(filePath);
+      if (memoryId) {
+        index.delete(memoryId);
+        this.fileMemoryIds.delete(filePath);
       }
-    }
-
-    // 清理已删除文件对应的旧节点（通过对比 mtime 条目）
-    // 已通过 fileMtimes.delete 处理，但索引中可能残留孤儿节点
-    // 用全量重建兜底
-    if (deleted.length > 0) {
-      return this.rebuildIndex(allFiles);
     }
 
     this.cachedIndex = index;
@@ -182,6 +180,7 @@ export class WikiGraph {
   invalidateCache(): void {
     this.cachedIndex = null;
     this.fileMtimes.clear();
+    this.fileMemoryIds.clear();
   }
 
   // ── 公开查询 ──

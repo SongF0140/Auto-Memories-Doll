@@ -5,6 +5,7 @@ const memoryServiceMock = vi.hoisted(() => ({
   listMemories: vi.fn(),
   count: vi.fn(),
   getMemory: vi.fn(),
+  getMemoriesByIds: vi.fn(),
   listClassifications: vi.fn(),
   close: vi.fn(),
 }));
@@ -72,6 +73,7 @@ describe("memory list/search/ingest HTTP contracts", () => {
     memoryServiceMock.listMemories.mockReturnValue([memory]);
     memoryServiceMock.count.mockReturnValue(1);
     memoryServiceMock.getMemory.mockReturnValue(memory);
+    memoryServiceMock.getMemoriesByIds.mockReturnValue([memory]);
     memoryServiceMock.listClassifications.mockReturnValue([]);
     vectorRetrieverMock.search.mockResolvedValue([{ memoryId: memory.id, similarity: 0.92 }]);
     vectorRetrieverMock.searchDetailed.mockResolvedValue({
@@ -126,6 +128,44 @@ describe("memory list/search/ingest HTTP contracts", () => {
     expect(response.status).toBe(200);
     expect(body.data.retrievalMode).toBe("keyword");
     expect(body.data.degradedMode).toBe(true);
+  });
+
+  it("GET /api/memory/search batch-loads matching memories", async () => {
+    const memories = ["memory-1", "memory-2", "memory-3"].map((id) => ({ ...memory, id }));
+    vectorRetrieverMock.searchDetailed.mockResolvedValue({
+      results: memories.map((item) => ({ memoryId: item.id, similarity: 0.9 })),
+      mode: "vector",
+    });
+    memoryServiceMock.getMemory.mockImplementation(() => {
+      throw new Error("search route must not perform N+1 getMemory calls");
+    });
+    memoryServiceMock.getMemoriesByIds.mockReturnValue(memories);
+
+    const response = await searchMemories(
+      jsonRequest("http://localhost/api/memory/search?q=test&limit=3", "GET"),
+    );
+    const body = await responseJson(response);
+
+    expect(response.status).toBe(200);
+    expect(memoryServiceMock.getMemoriesByIds).toHaveBeenCalledWith([
+      "memory-1",
+      "memory-2",
+      "memory-3",
+    ]);
+    expect(memoryServiceMock.getMemory).not.toHaveBeenCalled();
+    expect(body.data.results.map((item: typeof memory) => item.id)).toEqual([
+      "memory-1",
+      "memory-2",
+      "memory-3",
+    ]);
+  });
+
+  it("GET /api/memory/search parses limit as base 10", async () => {
+    await searchMemories(
+      jsonRequest("http://localhost/api/memory/search?q=test&limit=08", "GET"),
+    );
+
+    expect(vectorRetrieverMock.searchDetailed).toHaveBeenCalledWith("test", 8, 0.3);
   });
 
   it("POST /api/ingest returns the queued event inside data", async () => {

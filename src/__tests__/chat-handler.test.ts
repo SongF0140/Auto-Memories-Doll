@@ -331,6 +331,24 @@ describe("ChatHandler", () => {
       expect(mocks.profileUpdater.enqueueAnalysis).not.toHaveBeenCalled();
       expect(mocks.classifier.classifyAsync).not.toHaveBeenCalled();
     });
+
+    it("会压缩过长对话后再发送给模型", async () => {
+      const longConversation = Array.from({ length: 30 }, (_, index) => ({
+        role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+        content: `message ${index + 1} ${"x".repeat(40)}`,
+      }));
+
+      await handler.streamResponse(
+        [...longConversation, { role: "user", content: "最后一条用户消息" }],
+        "chat",
+        "sess-1",
+      );
+
+      const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
+      expect(callArgs.messages.length).toBeLessThan(longConversation.length + 2);
+      expect(callArgs.messages[0].content).toContain("SYS-PREFIX");
+      expect(callArgs.messages.some((message: any) => message.content?.includes("压缩摘要"))).toBe(true);
+    });
   });
 
   // ═══════════════════════════════════════════════════════════

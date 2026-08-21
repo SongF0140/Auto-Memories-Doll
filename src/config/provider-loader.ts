@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 
 export type ProviderModelType = "chat" | "embedding";
 
@@ -19,6 +20,21 @@ export type ProviderCatalog = {
 };
 
 const DEFAULT_PATH = path.join(__dirname, "providers.json");
+const providerModelEntrySchema = z.object({
+  type: z.enum(["chat", "embedding"]),
+  contextWindow: z.number().int().positive().optional(),
+  dimensions: z.number().int().positive().optional(),
+});
+
+export const providerCatalogSchema = z.object({
+  providers: z.record(
+    z.string().min(1),
+    z.object({
+      baseURL: z.string().url(),
+      models: z.record(z.string().min(1), providerModelEntrySchema),
+    }),
+  ),
+});
 
 let _cached: ProviderCatalog | null = null;
 
@@ -26,13 +42,22 @@ let _cached: ProviderCatalog | null = null;
 export function loadProviderCatalog(filePath?: string): ProviderCatalog {
   if (_cached) return _cached;
   const raw = fs.readFileSync(filePath || DEFAULT_PATH, "utf-8");
-  _cached = JSON.parse(raw) as ProviderCatalog;
+  _cached = providerCatalogSchema.parse(JSON.parse(raw));
   return _cached;
 }
 
 /** 清除缓存（用于热更新） */
 export function clearProviderCache(): void {
   _cached = null;
+}
+
+/** 写入提供商目录并刷新缓存 */
+export function writeProviderCatalog(catalog: ProviderCatalog, filePath?: string): void {
+  const parsed = providerCatalogSchema.parse(catalog);
+  const target = filePath || DEFAULT_PATH;
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${JSON.stringify(parsed, null, 2)}\n`, "utf-8");
+  _cached = parsed;
 }
 
 /** 根据提供商名称获取其所有模型列表 */

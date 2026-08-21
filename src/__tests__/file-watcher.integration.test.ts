@@ -122,4 +122,19 @@ describe("FileWatcher external Markdown integration", () => {
     });
     expect(watcherMemoryState.memories.size).toBe(1);
   });
+
+  it("coalesces concurrent add and change events for the same file", async () => {
+    writeFileSync(filePath, formatMemoryAsMarkdown(makeRecord("并发事件正文")), "utf-8");
+
+    await Promise.all([
+      ingestMarkdownFile(filePath, "add"),
+      ingestMarkdownFile(filePath, "change"),
+    ]);
+
+    expect(watcherMemoryState.pending).toHaveLength(1);
+    expect(watcherMemoryState.pending[0]).toMatchObject({
+      eventType: "create",
+      memoryId: "external-memory-1",
+    });
+  });
 });

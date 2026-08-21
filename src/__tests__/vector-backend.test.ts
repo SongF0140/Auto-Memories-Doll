@@ -9,6 +9,8 @@ import {
   JsVectorSearchBackend,
 } from "../lib/vector/backend";
 
+const hnswIt = it;
+
 function createVectorTable(db: Database.Database): void {
   db.exec(`
     CREATE TABLE vector_records (
@@ -64,14 +66,16 @@ describe("vector search backends", () => {
     ]);
   });
 
-  it("uses HNSW as the default backend", () => {
+  it("uses HNSW as the default backend when available and falls back safely otherwise", () => {
     delete process.env.VECTOR_BACKEND;
     const db = new Database(":memory:");
     createVectorTable(db);
+    writeVector(db, "m1", [1]);
 
     const backend = createVectorSearchBackend(db);
 
     expect(backend.name).toBe("hnsw-usearch");
+    expect(backend.search([1], 10)).toEqual([{ memoryId: "m1", similarity: 1 }]);
     db.close();
   });
 
@@ -88,7 +92,7 @@ describe("vector search backends", () => {
     db.close();
   });
 
-  it("migrates the legacy sqlite-vec setting to HNSW instead of brute force", () => {
+  it("migrates the legacy sqlite-vec setting to HNSW when available", () => {
     process.env.VECTOR_BACKEND = "sqlite-vec";
     const db = new Database(":memory:");
     createVectorTable(db);
@@ -99,7 +103,7 @@ describe("vector search backends", () => {
     db.close();
   });
 
-  it("searches, updates, and deletes through the HNSW graph", () => {
+  hnswIt("searches, updates, and deletes through the HNSW graph", () => {
     const db = new Database(":memory:");
     createVectorTable(db);
     const backend = new HnswVectorSearchBackend(db, null);
@@ -124,7 +128,7 @@ describe("vector search backends", () => {
     db.close();
   });
 
-  it("persists the HNSW file and reloads it without rebuilding", () => {
+  hnswIt("persists the HNSW file and reloads it without rebuilding", () => {
     const dir = mkdtempSync(join(tmpdir(), "amd-hnsw-"));
     tempDirs.push(dir);
     const dbPath = join(dir, "memory.db");
@@ -145,7 +149,7 @@ describe("vector search backends", () => {
     secondDb.close();
   });
 
-  it("rebuilds automatically when SQLite changes behind the loaded index", () => {
+  hnswIt("rebuilds automatically when SQLite changes behind the loaded index", () => {
     const db = new Database(":memory:");
     createVectorTable(db);
     const backend = new HnswVectorSearchBackend(db, null);

@@ -125,7 +125,10 @@ export class VectorIndex {
   }
 
   close(): void {
-    // shared connection and ANN backend — no-op
+    this.searchBackend.close?.();
+    this.searchBackend.dispose?.();
+    this.searchBackend.free?.();
+    sharedBackends.delete(this.db);
   }
 
   private getBackend(): VectorSearchBackend {
