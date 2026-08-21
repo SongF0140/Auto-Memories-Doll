@@ -55,7 +55,10 @@ export class Auditor {
         return result;
       }
 
-      const changedFields = extractChangedFields(diffs);
+      // 以入队时声明的变更字段为准，避免 updatedAt/version 等系统字段
+      // 被误生成人工冲突；兼容旧事件时才从 diff 推导。
+      const changedFields =
+        event.changedFields.length > 0 ? event.changedFields : extractChangedFields(diffs);
       const resolution = resolveConflicts(existing, candidate, changedFields);
       result.resolution = resolution;
 

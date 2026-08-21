@@ -73,6 +73,7 @@ vi.mock("path", async () => {
 // ── mock: path-resolver ──
 vi.mock("../lib/storage/path-resolver", () => ({
   getArchivePath: () => "/fake/archive",
+  getNotePath: (topic: string, id: string) => `/fake/notes/${topic}/${id}.md`,
 }));
 
 // ── mock: index-writer ──
@@ -89,6 +90,7 @@ vi.mock("../lib/storage/memory-writer", () => ({
 // ── mock: file-manager ──
 vi.mock("../lib/storage/file-manager", () => ({
   createFailureRecord: vi.fn(() => Promise.resolve()),
+  deleteFile: vi.fn(() => Promise.resolve()),
 }));
 
 // ── mock: vector/generator ──
@@ -113,6 +115,7 @@ function createMemoryServiceStub() {
     getMemory: vi.fn(),
     createMemory: vi.fn(),
     updateMemory: vi.fn(),
+    setVectorId: vi.fn(),
     deleteMemory: vi.fn(),
     listMemories: vi.fn(),
     enqueueEvent: vi.fn(),
@@ -125,9 +128,28 @@ function createMemoryServiceStub() {
   };
 }
 
-const deleteAudioMock = vi.fn();
+let auditServiceStub: ReturnType<typeof createAuditServiceStub>;
+
+function createAuditServiceStub() {
+  return {
+    createConflict: vi.fn(),
+    getConflict: vi.fn(),
+    markConflictResolved: vi.fn(),
+    close: vi.fn(),
+  };
+}
+
 vi.mock("../server/services/audit-service", () => ({
-  AuditService: vi.fn(() => ({ createConflict: vi.fn(), close: vi.fn() })),
+  AuditService: vi.fn(() => auditServiceStub),
+}));
+
+const createSnapshotMock = vi.fn();
+vi.mock("../features/audit/version-manager", () => ({
+  VersionManager: vi.fn(() => ({
+    getSnapshot: vi.fn(() => null),
+    createSnapshot: createSnapshotMock,
+    close: vi.fn(),
+  })),
 }));
 
 const auditorProcessMock = vi.fn();
@@ -167,6 +189,7 @@ describe("Orchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     memoryServiceStub = createMemoryServiceStub();
+    auditServiceStub = createAuditServiceStub();
     // 重置 pipeline mock
     pipelineMock.pipelineResult = {
       isDuplicate: false,
@@ -177,6 +200,127 @@ describe("Orchestrator", () => {
     qualityFilterMock.mockResolvedValue({ ok: true });
     auditorProcessMock.mockResolvedValue(null);
     orchestrator = new Orchestrator();
+  });
+
+  describe("resolveConflict", () => {
+    it("接受候选内容后真正更新记忆正文并同步派生存储", async () => {
+      let stored = {
+        ...builderMock.memoryRecord,
+        content: "旧正文",
+        accessedAt: "2026-01-01",
+        accessCount: 0,
+        heatScore: 0,
+        vectorId: "test-id",
+      } as any;
+      auditServiceStub.getConflict.mockReturnValue({
+        conflictId: "conflict-1",
+        memoryId: stored.id,
+        eventId: "evt-1",
+        field: "content",
+        existingValue: JSON.stringify("旧正文"),
+        candidateValue: JSON.stringify("候选正文"),
+        status: "pending",
+        createdAt: "2026-01-01",
+      });
+      memoryServiceStub.getMemory.mockImplementation(() => stored);
+      memoryServiceStub.updateMemory.mockImplementation((_id, updates) => {
+        stored = { ...stored, ...updates, version: stored.version + 1 };
+      });
+      memoryServiceStub.listMemories.mockImplementation(() => [stored]);
+
+      const result = await orchestrator.resolveConflict("conflict-1", "accept");
+
+      expect(result.content).toBe("候选正文");
+      expect(stored.content).toBe("候选正文");
+      expect(createSnapshotMock).toHaveBeenCalledWith(expect.objectContaining({ content: "旧正文" }), 2);
+      expect(memoryServiceStub.setVectorId).toHaveBeenCalledWith(stored.id, stored.id);
+      expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith(stored.id, "候选正文");
+      expect(auditServiceStub.markConflictResolved).toHaveBeenCalledWith(
+        "conflict-1",
+        "accept",
+        undefined,
+      );
+
+      const memoryWriter = await import("../lib/storage/memory-writer");
+      expect(memoryWriter.writeMemoryMarkdown).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "候选正文" }),
+      );
+      expect(memoryWriter.updateAgentMarkdown).toHaveBeenCalled();
+      const indexWriter = await import("../lib/storage/index-writer");
+      expect(indexWriter.updateIndexMap).toHaveBeenCalledWith([
+        expect.objectContaining({ content: "候选正文" }),
+      ]);
+    });
+
+    it("保留现有值时不改正文，但仍完成投影同步后标记解决", async () => {
+      const stored = {
+        ...builderMock.memoryRecord,
+        content: "保留正文",
+        accessedAt: "2026-01-01",
+        accessCount: 0,
+        heatScore: 0,
+      } as any;
+      auditServiceStub.getConflict.mockReturnValue({
+        conflictId: "conflict-keep",
+        memoryId: stored.id,
+        eventId: "evt-keep",
+        field: "content",
+        existingValue: JSON.stringify("保留正文"),
+        candidateValue: JSON.stringify("候选正文"),
+        status: "pending",
+        createdAt: "2026-01-01",
+      });
+      memoryServiceStub.getMemory.mockReturnValue(stored);
+      memoryServiceStub.listMemories.mockReturnValue([stored]);
+
+      const result = await orchestrator.resolveConflict("conflict-keep", "keep");
+
+      expect(result.content).toBe("保留正文");
+      expect(memoryServiceStub.updateMemory).not.toHaveBeenCalled();
+      expect(auditServiceStub.markConflictResolved).toHaveBeenCalledWith(
+        "conflict-keep",
+        "keep",
+        undefined,
+      );
+    });
+
+    it("手动编辑会写入人工值", async () => {
+      let stored = {
+        ...builderMock.memoryRecord,
+        title: "原标题",
+        accessedAt: "2026-01-01",
+        accessCount: 0,
+        heatScore: 0,
+      } as any;
+      auditServiceStub.getConflict.mockReturnValue({
+        conflictId: "conflict-manual",
+        memoryId: stored.id,
+        eventId: "evt-manual",
+        field: "title",
+        existingValue: JSON.stringify("原标题"),
+        candidateValue: JSON.stringify("候选标题"),
+        status: "pending",
+        createdAt: "2026-01-01",
+      });
+      memoryServiceStub.getMemory.mockImplementation(() => stored);
+      memoryServiceStub.updateMemory.mockImplementation((_id, updates) => {
+        stored = { ...stored, ...updates, version: stored.version + 1 };
+      });
+      memoryServiceStub.listMemories.mockImplementation(() => [stored]);
+
+      const result = await orchestrator.resolveConflict(
+        "conflict-manual",
+        "manual",
+        "人工标题",
+      );
+
+      expect(result.title).toBe("人工标题");
+      expect(auditServiceStub.markConflictResolved).toHaveBeenCalledWith(
+        "conflict-manual",
+        "manual",
+        "人工标题",
+      );
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════

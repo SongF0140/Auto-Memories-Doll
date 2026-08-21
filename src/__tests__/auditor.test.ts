@@ -156,6 +156,23 @@ describe("Auditor.process — 三种分流", () => {
     }
   });
 
+  it("只审计事件声明的字段，不把系统 updatedAt 生成人工冲突", async () => {
+    const existing = makeMemory({ id: "m1", content: "旧", updatedAt: "2026-01-01" });
+    const candidate = makeMemory({ id: "m1", content: "新", updatedAt: "2026-01-02" });
+    const event = makeEvent("m1", candidate, ["content"]);
+    const store = makeMockStore({ memory: existing, event });
+    const auditor = new Auditor(store);
+
+    const result = await auditor.process("m1");
+
+    expect(result!.status).toBe("conflict");
+    if (result!.resolution!.action === "manual_decision") {
+      expect(result!.resolution!.conflicts.map((conflict) => conflict.field)).toEqual([
+        "content",
+      ]);
+    }
+  });
+
   it("returns status=failed when candidate JSON is corrupted", async () => {
     const event: PendingEvent = {
       eventId: "evt-bad",

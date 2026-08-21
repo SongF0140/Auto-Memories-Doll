@@ -1,4 +1,4 @@
-import { MemoryRecord, PendingEvent, ConflictRecord } from "../../types/memory";
+import { MemoryRecord, ConflictRecord } from "../../types/memory";
 import { generateId } from "../../lib/utils/id";
 import { getCurrentTime } from "../../lib/utils/date";
 import { getDatabase } from "../../lib/storage/database";
@@ -100,7 +100,7 @@ export class AuditService {
     return conflict;
   }
 
-  resolveConflict(
+  markConflictResolved(
     conflictId: string,
     resolution: "accept" | "keep" | "manual",
     manualValue?: string,
@@ -112,9 +112,38 @@ export class AuditService {
     };
 
     const stmt = this.db.prepare(`
-      UPDATE conflict_records SET status = ?, resolution = ?, resolvedAt = ? WHERE conflictId = ?
+      UPDATE conflict_records SET status = ?, resolution = ?, resolvedAt = ?
+      WHERE conflictId = ? AND status = 'pending'
     `);
-    stmt.run(statusMap[resolution], manualValue || "", getCurrentTime(), conflictId);
+    const result = stmt.run(
+      statusMap[resolution],
+      manualValue ?? "",
+      getCurrentTime(),
+      conflictId,
+    );
+    if (result.changes === 0) {
+      throw new Error(`冲突不存在或已解决: ${conflictId}`);
+    }
+  }
+
+  getConflict(conflictId: string): ConflictRecord | null {
+    const row = this.db
+      .prepare("SELECT * FROM conflict_records WHERE conflictId = ?")
+      .get(conflictId) as any;
+    if (!row) return null;
+
+    return {
+      conflictId: row.conflictId,
+      memoryId: row.memoryId,
+      eventId: row.eventId,
+      field: row.field,
+      existingValue: row.existingValue,
+      candidateValue: row.candidateValue,
+      status: row.status as ConflictRecord["status"],
+      resolution: row.resolution,
+      createdAt: row.createdAt,
+      resolvedAt: row.resolvedAt,
+    };
   }
 
   listConflicts(status?: string): ConflictRecord[] {

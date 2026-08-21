@@ -11,11 +11,14 @@ import { buildVectorRecord } from "../../lib/vector/generator";
 import { VectorIndex } from "../../lib/vector/index";
 import { updateIndexMap } from "../../lib/storage/index-writer";
 import { writeMemoryMarkdown, updateAgentMarkdown } from "../../lib/storage/memory-writer";
-import { createFailureRecord } from "../../lib/storage/file-manager";
+import { createFailureRecord, deleteFile } from "../../lib/storage/file-manager";
+import { getNotePath } from "../../lib/storage/path-resolver";
 import { processJsonPipeline } from "../pipelines/json-pipeline";
 import { MemoryValidationError } from "../../lib/errors";
 import { generateId } from "../../lib/utils/id";
+import { getCurrentTime } from "../../lib/utils/date";
 import { logger } from "../../lib/logger";
+import { VersionManager } from "../../features/audit/version-manager";
 
 const LIST_LIMIT = 500;
 /**
@@ -25,6 +28,21 @@ const LIST_LIMIT = 500;
  * N 条做去重。长期建议改为基于向量的语义去重。
  */
 const DEDUP_SAMPLE_SIZE = 200;
+
+const RESOLVABLE_MEMORY_FIELDS = new Set<keyof MemoryRecord>([
+  "source",
+  "sourceType",
+  "title",
+  "titleZh",
+  "content",
+  "summary",
+  "summaryZh",
+  "tags",
+  "tagsZh",
+  "topic",
+  "topicZh",
+  "graphLinks",
+]);
 
 export class Orchestrator {
   private memoryService: MemoryService;
@@ -267,6 +285,8 @@ export class Orchestrator {
             );
           }
         }
+        // PendingEvent 的审计阶段已经结束；尚未裁决的状态由
+        // conflict_records.status='pending' 单独承载。
         event.status = "done";
         this.memoryService.updateEvent(event);
       } else {
@@ -289,12 +309,108 @@ export class Orchestrator {
     try {
       const vectorRecord = await buildVectorRecord(memoryId, content);
       vectorIndex.create(vectorRecord);
-      this.memoryService.updateMemory(memoryId, { vectorId: memoryId });
+      this.memoryService.setVectorId(memoryId, memoryId);
     } catch (vectorError) {
       logger.vector.warn("更新向量失败，记忆仍会继续保存:", { error: (vectorError as Error).message });
     } finally {
       vectorIndex.close();
     }
+  }
+
+  /**
+   * 执行人工冲突解决命令。
+   *
+   * 冲突记录只是审计凭证；只有本方法完成 SQLite 更新及所有派生存储同步后，
+   * 冲突才会被标记为 resolved，避免 UI 出现“已解决但正文未变化”。
+   */
+  async resolveConflict(
+    conflictId: string,
+    resolution: "accept" | "keep" | "manual",
+    manualValue?: string,
+  ): Promise<MemoryRecord> {
+    const conflict = this.auditService.getConflict(conflictId);
+    if (!conflict) throw new Error(`冲突不存在: ${conflictId}`);
+    if (conflict.status !== "pending") throw new Error(`冲突已解决: ${conflictId}`);
+
+    const existing = this.memoryService.getMemory(conflict.memoryId);
+    if (!existing) throw new Error(`冲突对应的记忆不存在: ${conflict.memoryId}`);
+
+    const field = conflict.field as keyof MemoryRecord;
+    if (!RESOLVABLE_MEMORY_FIELDS.has(field)) {
+      throw new Error(`不允许通过冲突命令修改字段: ${conflict.field}`);
+    }
+
+    let selectedValue: unknown;
+    if (resolution === "accept") {
+      selectedValue = this.parseConflictValue(conflict.candidateValue);
+    } else if (resolution === "manual") {
+      if (manualValue === undefined) throw new Error("手动解决冲突时必须提供 manualValue");
+      selectedValue = this.parseConflictValue(manualValue);
+    }
+
+    let updated = existing;
+    if (resolution !== "keep") {
+      const candidate = {
+        ...existing,
+        [field]: selectedValue,
+        updatedAt: getCurrentTime(),
+      } as MemoryRecord;
+      if (!validateMemoryRecord(candidate)) {
+        throw new MemoryValidationError(conflict.field, "冲突解决值会产生无效的记忆记录");
+      }
+
+      if (JSON.stringify(existing[field]) !== JSON.stringify(selectedValue)) {
+        const versionManager = new VersionManager();
+        try {
+          if (!versionManager.getSnapshot(existing.id, existing.version)) {
+            versionManager.createSnapshot(existing, existing.version);
+          }
+        } finally {
+          versionManager.close();
+        }
+        this.memoryService.updateMemory(existing.id, {
+          [field]: selectedValue,
+          updatedAt: candidate.updatedAt,
+        } as Partial<MemoryRecord>);
+        updated = this.memoryService.getMemory(existing.id)!;
+      }
+    }
+
+    updated = await this.syncResolvedMemory(existing, updated);
+    this.auditService.markConflictResolved(conflictId, resolution, manualValue);
+    return updated;
+  }
+
+  private parseConflictValue(raw: string): unknown {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  private async syncResolvedMemory(
+    previous: MemoryRecord,
+    updated: MemoryRecord,
+  ): Promise<MemoryRecord> {
+    if (previous.content !== updated.content) {
+      await this.refreshVector(updated.id, updated.content);
+      this.memoryService.classifyMemory(updated.id, updated.content);
+      updated = this.memoryService.getMemory(updated.id)!;
+    }
+
+    await writeMemoryMarkdown(updated);
+    if (previous.topic !== updated.topic) {
+      await deleteFile(getNotePath(previous.topic, previous.id));
+    }
+
+    const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
+    const topics = [...new Set([previous.topic, updated.topic])];
+    await Promise.all([
+      ...topics.map((topic) => updateAgentMarkdown(topic, all)),
+      updateIndexMap(all),
+    ]);
+    return updated;
   }
 
   getPendingEvents(): PendingEvent[] {

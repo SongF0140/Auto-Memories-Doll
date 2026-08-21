@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 type ConflictRecord = {
-  id: string;
+  conflictId: string;
   memoryId: string;
   eventId: string;
   field: string;
@@ -24,6 +24,8 @@ export default function AuditPanel() {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [replaying, setReplaying] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"report" | "conflicts">("report");
 
   const fetchData = useCallback(async () => {
@@ -64,18 +66,33 @@ export default function AuditPanel() {
     }
   };
 
-  const handleResolve = async (conflictId: string, resolution: "accept" | "keep") => {
+  const handleResolve = async (
+    conflictId: string,
+    resolution: "accept" | "keep" | "manual",
+  ) => {
+    setResolvingId(conflictId);
     try {
       const res = await fetch("/api/audit/conflicts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conflictId, resolution }),
+        body: JSON.stringify({
+          conflictId,
+          resolution,
+          ...(resolution === "manual" ? { manualValue: manualValues[conflictId] ?? "" } : {}),
+        }),
       });
       if (res.ok) {
-        setConflicts((prev) => prev.filter((c) => c.id !== conflictId));
+        setConflicts((prev) => prev.filter((c) => c.conflictId !== conflictId));
+        setManualValues((prev) => {
+          const next = { ...prev };
+          delete next[conflictId];
+          return next;
+        });
       }
     } catch (e) {
       console.error("解决冲突失败:", e);
+    } finally {
+      setResolvingId(null);
     }
   };
 
@@ -169,11 +186,11 @@ export default function AuditPanel() {
             ) : (
               <div className="space-y-4">
                 {conflicts.map((conflict) => (
-                  <div key={conflict.id} className="card p-5">
+                  <div key={conflict.conflictId} className="card p-5">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-text-tertiary font-mono">
-                          {conflict.id.slice(0, 12)}...
+                          {conflict.conflictId.slice(0, 12)}...
                         </span>
                         <span className="tag">字段: {conflict.field}</span>
                         <span className="tag">{conflict.status}</span>
@@ -198,18 +215,44 @@ export default function AuditPanel() {
                       </div>
                     </div>
 
+                    <label className="block mb-3">
+                      <span className="block text-xs font-medium text-text-tertiary mb-1">
+                        手动编辑值（字符串可直接输入；数组或对象请使用 JSON）
+                      </span>
+                      <textarea
+                        value={manualValues[conflict.conflictId] ?? ""}
+                        onChange={(event) =>
+                          setManualValues((prev) => ({
+                            ...prev,
+                            [conflict.conflictId]: event.target.value,
+                          }))
+                        }
+                        rows={3}
+                        className="w-full bg-muted rounded-lg p-3 text-sm text-text-secondary font-mono border border-border"
+                      />
+                    </label>
+
                     <div className="flex gap-2 border-t border-border pt-3">
                       <button
-                        onClick={() => handleResolve(conflict.id, "accept")}
+                        onClick={() => handleResolve(conflict.conflictId, "accept")}
+                        disabled={resolvingId === conflict.conflictId}
                         className="shimmer-button h-8 px-4 text-xs"
                       >
                         接受候选值
                       </button>
                       <button
-                        onClick={() => handleResolve(conflict.id, "keep")}
+                        onClick={() => handleResolve(conflict.conflictId, "keep")}
+                        disabled={resolvingId === conflict.conflictId}
                         className="btn-secondary h-8 px-4 text-xs"
                       >
                         保留现有值
+                      </button>
+                      <button
+                        onClick={() => handleResolve(conflict.conflictId, "manual")}
+                        disabled={resolvingId === conflict.conflictId}
+                        className="btn-secondary h-8 px-4 text-xs"
+                      >
+                        应用手动值
                       </button>
                     </div>
                   </div>

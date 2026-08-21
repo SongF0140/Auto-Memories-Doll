@@ -393,6 +393,14 @@ export class MemoryService {
     );
   }
 
+  /** 更新派生向量引用，不递增记忆业务版本。 */
+  setVectorId(id: string, vectorId: string): void {
+    const result = this.db
+      .prepare("UPDATE memories SET vectorId = ? WHERE id = ?")
+      .run(vectorId, id);
+    if (result.changes === 0) throw new MemoryNotFoundError(id);
+  }
+
   deleteMemory(id: string): void {
     const stmt = this.db.prepare("DELETE FROM memories WHERE id = ?");
     stmt.run(id);
