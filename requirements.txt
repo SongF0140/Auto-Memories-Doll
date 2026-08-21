@@ -1,0 +1,27 @@
+# Auto-Memories-Doll Python 依赖
+#
+# 说明：本项目主体是 Node.js / Next.js 应用。
+# 前端、后端 API、数据库、测试、构建等主要依赖在 package.json / package-lock.json 中管理，安装方式：
+#   npm install
+#
+# 本文件只记录 Python 侧依赖，用于向量检索实验/扩展（usearch Python 版本）。
+# 安装方式：
+#   pip install -r requirements.txt
+#
+# usearch 2.x 正确导入方式（注意 Index 在子模块中）:
+#   from usearch.index import Index
+#   idx = Index(ndim=768, metric="cos")
+#   idx.add(key, vector)           # 写入向量
+#   matches = idx.search(query, k) # 近邻检索
+
+# 数值计算；usearch 的向量输入依赖 numpy 数组。
+numpy>=1.24
+
+# 进度条；usearch 官方元数据依赖。
+tqdm>=4.66
+
+# Windows 终端颜色支持；tqdm 在 Windows 环境常用依赖。
+colorama>=0.4.6; platform_system == "Windows"
+
+# 高性能近似最近邻(ANN)向量检索库。
+usearch>=2.26.0,<3.0

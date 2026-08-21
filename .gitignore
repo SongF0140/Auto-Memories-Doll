@@ -1,6 +1,14 @@
 # Dependencies
 node_modules
 
+# Python
+.python-deps/
+__pycache__/
+*.pyc
+*.egg-info/
+venv/
+.venv/
+
 # Next.js build output
 .next
 out/

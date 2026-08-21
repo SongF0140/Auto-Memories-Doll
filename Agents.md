@@ -809,7 +809,7 @@ export type ConflictRecord = {
 | validatePendingEvent sourceType 白名单 | 第 5.6 节 `sourceType` 含 `listen` | 已修复：`validator.ts` 的 `validatePendingEvent` 白名单补全 `listen`（共 6 种），与 `PendingEvent` 类型定义一致；`/api/listen` 入队事件校验恢复正常 | ~~P1~~ |
 | validateVectorRecord 空数组放行 | 无约束 | 已修复：`validateVectorRecord` 改为 `!Array.isArray(record.embedding) || record.embedding.length === 0`，空数组不再放行 | ~~P3~~ |
 | 访问计数回写入口 | 第 4.8 节"搜索回写由前端搜索命中事件触发" | 已修复：新增 `POST /api/memory/[id]/access` 端点，前端用户点击记忆时调用 `incrementAccess`；配合之前从 `retrieveRelevantMemories` 移除召回时递增的修复，访问计数现在有正确的回写路径 | ~~P2~~ |
-| 预处理管线未接入主路径 | 第 4.6 节"输入归一化：`src/server/pipelines/*`"与《架构检查文档》4.3 "不要让原始输入直接进入索引和记忆" | 已修复：`Orchestrator.processIngest` 接入 `processJsonPipeline`，完成 formatMemoryContent 清洗 + detectDuplicates（全量内容扫描的 Jaccard 去重）+ splitText 长文拆包；重复内容抛 `MemoryValidationError` 拒绝入库，多 chunk 合并为 markdown 分段正文 | ~~P0~~ |
+| 预处理管线未接入主路径 | 第 4.6 节"输入归一化：`src/server/pipelines/*`"与《架构检查文档》4.3 "不要让原始输入直接进入索引和记忆" | 已修复：`Orchestrator.processIngest` 接入 `processJsonPipeline`，完成 formatMemoryContent 清洗 + detectDuplicates（分页全量扫描的 Jaccard 去重）+ splitText 长文拆包；重复内容抛 `MemoryValidationError` 拒绝入库，多 chunk 合并为 markdown 分段正文 | ~~P0~~ |
 | 分类驱动路由未生效 | 第 4.14 节工具调用流程 + 《架构检查文档》4.4 "分类驱动路由" | 已修复：`ChatHandler.streamResponse` 调用 `ChatClassifier.classify` 对最近 user 消息做本地意图分类，结果注入 prompt 的"用户意图"块（零 LLM 开销），引导模型选择工具与回复风格 | ~~P0~~ |
 | 置信度评分为硬编码常量 | 第 4.11 节"模型与检索约束"未约束置信度算法；《架构检查文档》4.4 要求区分"高可信事实"与"待确认推测" | 已修复：`ChatClassifier`/`MemoryClassifier` 改为 `score = min(0.95, 0.5 + 0.12*命中数 + 0.05*位置加分)`，区分多关键词命中（高可信）与单关键词命中（待确认） | ~~P1~~ |
 | 审计可读文本缺失 | 第 4.10 节"冲突分级策略" + 《架构检查文档》4.7 "markdown 流式转码 + LLM 检查" | 已修复：`AuditReporter.generateMarkdownReport()` 生成按来源/话题分布 + 冲突清单 + 最近记忆的可读 Markdown；`Orchestrator.processQueue` 末尾自动落盘到 `archive/audits/audit-{timestamp}.md` | ~~P1~~ |
@@ -887,7 +887,7 @@ Phase 4 — 测试与质量
 - 已完成 API 契约集中登记：`src/config/api-route-contracts.ts`
 - 已完成长对话上下文压缩：`src/lib/chat/conversation-compressor.ts`
 - 已完成分类/重排阈值常量化：`src/config/constants.ts`
-- 已完成去重扫描从固定最近 200 条扩展为全量内容扫描
+- 已完成去重扫描从固定最近 200 条扩展为分页全量内容扫描
 - 已完成 nightly 降级保护：模型降级时跳过矛盾精判、wikilink 智能补充、路由优化和旗舰画像更新
 - 已完成 WikiGraph 增量更新清理：文件变更/删除时移除旧节点关系，避免脏边残留
 - 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`、`provider-loader.test.ts`、`api-route-contracts.test.ts`、`conversation-compressor.test.ts`、`ai-config-form.test.tsx`

@@ -377,8 +377,37 @@ describe("Orchestrator", () => {
       expect(memoryServiceStub.enqueueEvent).toHaveBeenCalledWith(
         expect.objectContaining({ eventId: "evt-1", memoryId: expect.any(String) }),
       );
-      expect(memoryServiceStub.listMemoryContents).toHaveBeenCalledWith();
+      expect(memoryServiceStub.listMemoryContents).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: expect.any(Number), offset: 0 }),
+      );
       expect(memoryServiceStub.listMemories).not.toHaveBeenCalled();
+    });
+
+    it("分页扫描去重候选，不一次性加载全量正文", async () => {
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      memoryServiceStub.count.mockReturnValue(5);
+      memoryServiceStub.listMemoryContents.mockImplementation((opts?: { limit?: number; offset?: number }) => {
+        if (!opts) {
+          return ["alpha", "beta", "gamma", "raw content", "delta"];
+        }
+
+        if (opts.offset === 0) return ["alpha", "beta"];
+        if (opts.offset === 2) return ["gamma", "raw content"];
+        return [];
+      });
+
+      await expect(
+        orchestrator.processIngest("test-source", "ingest", "raw content", "My Title", "My Summary", [
+          "tag1",
+        ]),
+      ).rejects.toBeInstanceOf(MemoryValidationError);
+
+      expect(
+        memoryServiceStub.listMemoryContents.mock.calls.every(
+          ([arg]) => Boolean(arg && typeof arg.limit === "number" && typeof arg.offset === "number"),
+        ),
+      ).toBe(true);
+      expect(memoryServiceStub.listMemoryContents).toHaveBeenCalledTimes(2);
     });
 
     it("复用调用方传入的 summary（优先于 pipeline 自动生成的)", async () => {

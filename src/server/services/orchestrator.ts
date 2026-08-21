@@ -14,6 +14,8 @@ import { writeMemoryMarkdown, updateAgentMarkdown } from "../../lib/storage/memo
 import { createFailureRecord, deleteFile } from "../../lib/storage/file-manager";
 import { getNotePath } from "../../lib/storage/path-resolver";
 import { processJsonPipeline } from "../pipelines/json-pipeline";
+import { formatMemoryContent } from "../pipelines/formatter";
+import { detectDuplicates } from "../pipelines/deduplicator";
 import { MemoryValidationError } from "../../lib/errors";
 import { generateId } from "../../lib/utils/id";
 import { getCurrentTime } from "../../lib/utils/date";
@@ -23,12 +25,12 @@ import { VersionManager } from "../../features/audit/version-manager";
 const LIST_LIMIT = 500;
 const QUEUE_BATCH_SIZE = 100;
 /**
- * 去重时拉取的最近记忆条数。
+ * 去重分页拉取的单批记忆条数。
  *
- * 限制：样本量固定，当资料库超过此值时，只对最近
- * N 条做去重。长期建议改为基于向量的语义去重。
+ * 现在去重会分页扫描全量正文，但每次只加载这一批，
+ * 避免一次性把整库正文塞进内存。
  */
-const DEDUP_SAMPLE_SIZE = 200;
+const DEDUP_SCAN_BATCH_SIZE = 500;
 
 const RESOLVABLE_MEMORY_FIELDS = new Set<keyof MemoryRecord>([
   "source",
@@ -85,15 +87,23 @@ export class Orchestrator {
     tags: string[] = [],
   ): Promise<string> {
     // 1. 预处理：清洗 + 去重 + 拆包
-    const existingContents = this.memoryService.listMemoryContents();
+    const formattedContent = formatMemoryContent(content);
     const totalCount = this.memoryService.count(); // 资料库总量
-    if (totalCount > DEDUP_SAMPLE_SIZE) {
+    if (totalCount > DEDUP_SCAN_BATCH_SIZE) {
       logger.ingest.warn(
-        `资料库已有 ${totalCount} 条记忆，去重将扫描全部正文内容。` +
+        `资料库已有 ${totalCount} 条记忆，去重将分页扫描全部正文内容。` +
           `如需更高性能，可升级为向量语义去重或优化去重索引。`,
       );
     }
-    const pipelineResult = await processJsonPipeline(content, existingContents);
+    const duplicateCheck = this.detectDuplicateContent(formattedContent);
+    if (duplicateCheck.isDuplicate) {
+      throw new MemoryValidationError(
+        "content",
+        `内容与现有记忆高度重复（相似度 ${(duplicateCheck.similarity * 100).toFixed(1)}%），已拒绝入库`,
+      );
+    }
+
+    const pipelineResult = await processJsonPipeline(formattedContent, []);
 
     if (pipelineResult.isDuplicate) {
       throw new MemoryValidationError(
@@ -413,6 +423,28 @@ export class Orchestrator {
 
   getPendingEvents(opts?: { limit?: number }): PendingEvent[] {
     return this.memoryService.getPendingEvents(opts);
+  }
+
+  private detectDuplicateContent(formattedContent: string): { isDuplicate: boolean; similarity: number } {
+    let offset = 0;
+
+    while (true) {
+      const batch = this.memoryService.listMemoryContents({
+        limit: DEDUP_SCAN_BATCH_SIZE,
+        offset,
+      });
+
+      if (batch.length === 0) {
+        return { isDuplicate: false, similarity: 0 };
+      }
+
+      const duplicateCheck = detectDuplicates(formattedContent, batch);
+      if (duplicateCheck.isDuplicate) {
+        return duplicateCheck;
+      }
+
+      offset += batch.length;
+    }
   }
 
   private parseCandidate(event: PendingEvent): MemoryRecord {
