@@ -26,10 +26,12 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
-      # usearch 已移至 optionalDependencies：CI 上不安装原生 usearch，
-      # 向量检索走纯 JS 精确后端（见 src/lib/vector/backend.ts 的降级逻辑）。
+      # 不能加 --omit=optional：rollup 的平台二进制（@rollup/rollup-*-*) 也是
+      # optionalDependencies，vitest 运行必需。usearch 在 optionalDependencies 中，
+      # 原生安装失败时 npm 会自动跳过，代码侧降级到纯 JS HNSW shim（见
+      # src/lib/vector/backend.ts 的 loadUsearch 降级逻辑）。
       - name: Install dependencies
-        run: npm ci --omit=optional
+        run: npm ci
 
       - name: Type check
         run: npm run typecheck
