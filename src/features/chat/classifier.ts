@@ -46,7 +46,7 @@ export interface ExtractedMemoryEntity {
 /** 意图的语义描述，用于 embedding 相似度计算 */
 const INTENT_DESCRIPTIONS: Record<Exclude<IntentType, "chat" | "system_command">, string> = {
   memory_create: "创建、保存、记录新的记忆或知识，例如记住某个信息、存储内容、创建备忘录、留存笔记",
-  memory_update: "修改、更新、编辑已有的记忆，例如改一下、变更内容、修正信息、调整记录",
+  memory_update: "修改、更新、编辑、纠正已有的记忆，例如改一下、变更内容、修正信息、调整记录、指出记错的地方",
   memory_delete: "删除、移除、清除记忆或知识，例如删掉、去掉、清理不需要的内容、擦除记录",
   memory_query: "查询、搜索、查找、回忆已有的记忆，例如找一下之前的内容、看看保存的知识、搜索信息",
   prompt_edit: "修改提示词、prompt、系统模板、AI 指令，例如改提示词、调整系统设定",
@@ -71,7 +71,7 @@ export class ChatClassifier {
 
   private static readonly INTENT_KEYWORDS: Record<Exclude<IntentType, "chat" | "system_command">, string[]> = {
     memory_create: ["记住", "保存", "记录", "存下", "记一下"],
-    memory_update: ["更新", "修改", "编辑", "改一下", "变更"],
+    memory_update: ["更新", "修改", "编辑", "改一下", "变更", "记错", "纠正", "更正"],
     memory_delete: ["删除", "移除", "清除", "删掉", "去掉"],
     memory_query: ["查询", "查找", "搜索", "回忆", "找一下", "看看"],
     prompt_edit: ["提示词", "prompt", "模板", "template"],

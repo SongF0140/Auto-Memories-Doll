@@ -6,7 +6,12 @@ import { TemplateManager, initializeTemplates } from "../../lib/prompt/template-
 import { PromptCache } from "../../lib/prompt/cache";
 import { MemoryService } from "../../server/services/memory-service";
 import { VectorRetriever } from "../../lib/vector/retriever";
+import { searchWithExpansion } from "../../lib/vector/query-expansion";
 import { Ranker } from "../../lib/vector/ranker";
+import {
+  RETRIEVAL_CANDIDATE_LIMIT,
+  RETRIEVAL_MAX_INJECTED_MEMORIES,
+} from "../../config/constants";
 import { readProfileTags } from "../../lib/storage/index-writer";
 import { SkillManager } from "../../lib/skills/manager";
 import { McpManager } from "../../lib/mcp/manager";
@@ -309,29 +314,45 @@ ${blocks.memoryBlock}
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage) return "";
 
-    const memories = this.memoryService.listMemories({ limit: 500 });
-    if (memories.length === 0) return "";
+    // 多路召回：原始查询 + 改写变体分别检索，按最高相似度合并去重。
+    // 改写不可用（无 Key / 模型降级）时自动退化为单路召回。
+    const results = await searchWithExpansion(
+      this.vectorRetriever,
+      lastMessage.content,
+      RETRIEVAL_CANDIDATE_LIMIT,
+    );
 
-    const memoryMap = new Map(memories.map((m) => [m.id, m]));
-
-    // 优先收集用户手动选中的记忆
-    const selectedMemories: MemoryRecord[] = [];
+    // 只按 id 精确加载候选记忆 + 用户手动选中的记忆，不再全量拉取记忆库
+    const candidateIds = new Set<string>(results.map((r) => r.memoryId));
     if (selectedMemoryIds && selectedMemoryIds.length > 0) {
-      for (const id of selectedMemoryIds) {
-        const mem = memoryMap.get(id);
-        if (mem) selectedMemories.push(mem);
-      }
+      for (const id of selectedMemoryIds) candidateIds.add(id);
     }
+    if (candidateIds.size === 0) return "";
 
-    // 向量检索补充相关记忆 + MMR 重排（相关性与多样性平衡，避免主题重复）
-    const results = await this.vectorRetriever.search(lastMessage.content, 10);
+    const targetMemories = this.memoryService.getMemoriesByIds(Array.from(candidateIds));
+    if (targetMemories.length === 0) return "";
+    const memoryMap = new Map(targetMemories.map((m) => [m.id, m]));
+
+    // MMR 重排（相关性与多样性平衡，避免主题重复）
     const profileTags = await readProfileTags();
     const rankedResults = this.ranker.rankWithMMR(results, memoryMap, profileTags);
 
-    const relevantMemories: MemoryRecord[] = [...selectedMemories];
+    const relevantMemories: MemoryRecord[] = [];
 
+    // 用户手动选中的记忆优先级最高
+    if (selectedMemoryIds && selectedMemoryIds.length > 0) {
+      for (const id of selectedMemoryIds) {
+        const mem = memoryMap.get(id);
+        if (mem && !relevantMemories.some((m) => m.id === mem.id)) {
+          relevantMemories.push(mem);
+        }
+      }
+    }
+
+    // 主体相关记忆上限 8 条，为图谱邻居预留注入名额
+    const PRIMARY_RELEVANCE_CAP = 8;
     for (const r of rankedResults) {
-      if (relevantMemories.length >= 8) break;
+      if (relevantMemories.length >= PRIMARY_RELEVANCE_CAP) break;
       const mem = memoryMap.get(r.memoryId);
       if (mem && !relevantMemories.some((m) => m.id === mem.id)) {
         relevantMemories.push(mem);
@@ -342,18 +363,23 @@ ${blocks.memoryBlock}
     // "搜索回写由前端搜索命中事件触发"——只有用户主动点击/查看记忆时才递增，
     // 否则每次对话都会推高 accessCount 导致 heatScore 失真。
 
-    // 图谱扩展：纳入关联记忆的邻居
+    // 图谱扩展：按 id 批量加载邻居，注入总量受上限约束
     const expandedIds = new Set(relevantMemories.map((m) => m.id));
+    const neighborIds: string[] = [];
     for (const mem of relevantMemories) {
       const neighbors = await this.wikiGraph.getNeighbors(mem.id);
       for (const neighborId of neighbors) {
-        if (!expandedIds.has(neighborId)) {
-          const neighbor = memoryMap.get(neighborId);
-          if (neighbor) {
-            relevantMemories.push(neighbor);
-            expandedIds.add(neighborId);
-          }
+        if (!expandedIds.has(neighborId) && !neighborIds.includes(neighborId)) {
+          neighborIds.push(neighborId);
         }
+      }
+    }
+    if (neighborIds.length > 0) {
+      const neighborMemories = this.memoryService.getMemoriesByIds(neighborIds);
+      for (const neighbor of neighborMemories) {
+        if (relevantMemories.length >= RETRIEVAL_MAX_INJECTED_MEMORIES) break;
+        relevantMemories.push(neighbor);
+        expandedIds.add(neighbor.id);
       }
     }
 

@@ -22,6 +22,17 @@ export const toolSchemas = {
     ),
   }),
 
+  correct_memory: z
+    .object({
+      memoryId: z.string().optional(),
+      locateQuery: z.string().optional(),
+      instruction: z.string().min(1, "纠错指令不能为空"),
+    })
+    .refine(
+      (obj) => Boolean(obj.memoryId || (obj.locateQuery && obj.locateQuery.trim().length > 0)),
+      { message: "必须提供 memoryId 或 locateQuery 之一用于定位记忆" },
+    ),
+
   delete_memory: z.object({
     id: z.string().min(1, "记忆 ID 不能为空"),
   }),

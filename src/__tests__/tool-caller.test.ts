@@ -31,7 +31,24 @@ describe("ToolCaller", () => {
     expect(tools).toContain("create_memory");
     expect(tools).toContain("delete_memory");
     expect(tools).toContain("update_memory");
+    expect(tools).toContain("correct_memory");
     expect(tools).toContain("query_graph");
+  });
+
+  it("validates correct_memory params: 需要定位信息和纠错指令", async () => {
+    const noLocator = await ToolCaller.callTool({
+      toolName: "correct_memory",
+      arguments: { instruction: "改一下" },
+    });
+    expect(noLocator.success).toBe(false);
+    expect(noLocator.error).toContain("参数校验失败");
+
+    const noInstruction = await ToolCaller.callTool({
+      toolName: "correct_memory",
+      arguments: { memoryId: "m1", instruction: "" },
+    });
+    expect(noInstruction.success).toBe(false);
+    expect(noInstruction.error).toContain("参数校验失败");
   });
 
   it("validates query_graph params", async () => {

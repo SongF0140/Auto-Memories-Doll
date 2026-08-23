@@ -5,6 +5,7 @@ import { ChatExtractor } from "../chat/extractor";
 import { ChatHandler } from "../chat/handler";
 import { MemoryService } from "../../server/services/memory-service";
 import { VectorRetriever } from "../../lib/vector/retriever";
+import { MemoryCorrectionService } from "../../lib/memory/correction";
 
 export type DispatchResult =
   | { type: "json"; data: Record<string, unknown> }
@@ -135,20 +136,25 @@ export class AgentDispatcher {
     const memoryService = new MemoryService();
     const retriever = new VectorRetriever();
     try {
-      const searchText = query.replace(/更新|修改|变更/g, "").trim();
+      const searchText = query.replace(/更新|修改|变更|编辑|改一下|记错|纠正|更正/g, "").trim();
       if (!searchText) {
-        return { type: "json", data: { content: "请提供要更新的记忆标题或关键词。" } };
+        return { type: "json", data: { content: "请提供要纠正的记忆标题或关键词。" } };
       }
-      const results = await retriever.search(searchText, 1);
-      if (results.length === 0) {
-        return { type: "json", data: { content: "未找到要更新的记忆，请提供记忆标题或关键词。" } };
+
+      // 纠错闭环：定位目标记忆 → 按指令改写 → 变更经审计队列落库
+      const correction = new MemoryCorrectionService(memoryService, retriever);
+      const result = await correction.correct({ locateQuery: searchText, instruction: query });
+      if (!result.success) {
+        return { type: "json", data: { content: result.error } };
       }
-      const memory = memoryService.getMemory(results[0].memoryId);
-      if (!memory) {
-        return { type: "json", data: { content: "未找到要更新的记忆。" } };
-      }
-      memoryService.stageUpdateMemory(memory.id, { updatedAt: new Date().toISOString() });
-      return { type: "json", data: { content: `已更新记忆（待审计）: ${memory.title}` } };
+      return {
+        type: "json",
+        data: {
+          content: `已提交纠错（待审计）: ${result.title}，改动字段: ${result.changedFields.join(", ")}`,
+          memoryId: result.memoryId,
+          eventId: result.eventId,
+        },
+      };
     } finally {
       retriever.close();
       memoryService.close();

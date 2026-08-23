@@ -54,3 +54,12 @@ export const COLD_HEAT_THRESHOLD = 0.05;
 export const RETENTION_RUN_INTERVAL_MS = 3600000; // 1 小时
 
 export const DEGRADATION_ALERT_THRESHOLD = 600000;
+
+/** 检索增强：query 改写最多生成的变体数（不含原句） */
+export const QUERY_REWRITE_MAX_VARIANTS = 2;
+/** 检索增强：单个改写变体的最大字符数，超长视为异常输出丢弃 */
+export const QUERY_REWRITE_MAX_CHARS = 80;
+/** 检索增强：进入重排前的候选召回条数（略大于最终注入条数，给 MMR 留选择空间） */
+export const RETRIEVAL_CANDIDATE_LIMIT = 12;
+/** 注入提示词的最大记忆条数（含图谱邻居扩展后的总量） */
+export const RETRIEVAL_MAX_INJECTED_MEMORIES = 12;

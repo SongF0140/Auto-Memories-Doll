@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ChatHandler } from "../features/chat/handler";
 import { AiEvent } from "../lib/ai/ai-events";
+import { RETRIEVAL_CANDIDATE_LIMIT } from "../config/constants";
 
 // ─────────────────────────────────────────────────────────────
 // 可变 mock 状态：每个用例可通过 mocks.xxx.fn.mockXxx 定制行为
@@ -26,12 +27,14 @@ const mocks = vi.hoisted(() => ({
   memoryService: {
     listMemories: vi.fn(),
     getMemory: vi.fn(),
+    getMemoriesByIds: vi.fn(),
     close: vi.fn(),
   },
   vectorRetriever: {
     search: vi.fn(),
     close: vi.fn(),
   },
+  searchWithExpansion: vi.fn(),
   ranker: {
     rankWithMMR: vi.fn(),
   },
@@ -69,6 +72,9 @@ vi.mock("../server/services/memory-service", () => ({
 }));
 vi.mock("../lib/vector/retriever", () => ({
   VectorRetriever: vi.fn(() => mocks.vectorRetriever),
+}));
+vi.mock("../lib/vector/query-expansion", () => ({
+  searchWithExpansion: mocks.searchWithExpansion,
 }));
 vi.mock("../lib/vector/ranker", () => ({ Ranker: vi.fn(() => mocks.ranker) }));
 vi.mock("../lib/skills/manager", () => ({ SkillManager: vi.fn(() => mocks.skillManager) }));
@@ -129,6 +135,8 @@ describe("ChatHandler", () => {
     mocks.classifier.extractMemoryEntity.mockResolvedValue(null);
     mocks.skillManager.matchSkill.mockReturnValue(null);
     mocks.memoryService.listMemories.mockReturnValue([]);
+    mocks.memoryService.getMemoriesByIds.mockReturnValue([]);
+    mocks.searchWithExpansion.mockResolvedValue([]);
     mocks.vectorRetriever.search.mockResolvedValue([]);
     mocks.readProfileTags.mockResolvedValue([]);
     mocks.ranker.rankWithMMR.mockReturnValue([]);
@@ -169,15 +177,17 @@ describe("ChatHandler", () => {
         "sess-1",
       );
 
-      expect(mocks.memoryService.listMemories).not.toHaveBeenCalled();
-      expect(mocks.vectorRetriever.search).not.toHaveBeenCalled();
+      expect(mocks.searchWithExpansion).not.toHaveBeenCalled();
+      expect(mocks.memoryService.getMemoriesByIds).not.toHaveBeenCalled();
     });
 
-    it("memory 模式：调用 retrieveRelevantMemories，记忆内容注入 system message", async () => {
-      mocks.memoryService.listMemories.mockReturnValue([
-        { id: "m1", title: "T1", summary: "S1", tags: ["a"], titleZh: "", summaryZh: "", tagsZh: [] },
-      ]);
-      mocks.vectorRetriever.search.mockResolvedValue([{ memoryId: "m1", similarity: 0.9 }]);
+    it("memory 模式：调用多路召回，记忆内容注入 system message", async () => {
+      const memory = {
+        id: "m1", title: "T1", summary: "S1", tags: ["a"],
+        titleZh: "", summaryZh: "", tagsZh: [],
+      };
+      mocks.searchWithExpansion.mockResolvedValue([{ memoryId: "m1", similarity: 0.9 }]);
+      mocks.memoryService.getMemoriesByIds.mockReturnValue([memory]);
       mocks.ranker.rankWithMMR.mockReturnValue([{ memoryId: "m1" }]);
       mocks.wikiGraph.getNeighbors.mockResolvedValue([]);
 
@@ -187,7 +197,12 @@ describe("ChatHandler", () => {
         "sess-1",
       );
 
-      expect(mocks.vectorRetriever.search).toHaveBeenCalledWith("查一下相关记忆", 10);
+      expect(mocks.searchWithExpansion).toHaveBeenCalledWith(
+        mocks.vectorRetriever,
+        "查一下相关记忆",
+        RETRIEVAL_CANDIDATE_LIMIT,
+      );
+      expect(mocks.memoryService.getMemoriesByIds).toHaveBeenCalledWith(["m1"]);
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       expect(callArgs.messages[0].role).toBe("system");
       expect(callArgs.messages[0].content).toContain("T1");
@@ -366,10 +381,12 @@ describe("ChatHandler", () => {
     });
 
     it("memory 模式注入记忆到 system message", async () => {
-      mocks.memoryService.listMemories.mockReturnValue([
-        { id: "m1", title: "知识A", summary: "摘要A", tags: ["x"], titleZh: "", summaryZh: "", tagsZh: [] },
-      ]);
-      mocks.vectorRetriever.search.mockResolvedValue([{ memoryId: "m1", similarity: 0.9 }]);
+      const memory = {
+        id: "m1", title: "知识A", summary: "摘要A", tags: ["x"],
+        titleZh: "", summaryZh: "", tagsZh: [],
+      };
+      mocks.searchWithExpansion.mockResolvedValue([{ memoryId: "m1", similarity: 0.9 }]);
+      mocks.memoryService.getMemoriesByIds.mockReturnValue([memory]);
       mocks.ranker.rankWithMMR.mockReturnValue([{ memoryId: "m1" }]);
       mocks.wikiGraph.getNeighbors.mockResolvedValue([]);
 

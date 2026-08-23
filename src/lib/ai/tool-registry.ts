@@ -1,6 +1,8 @@
 import { ToolCaller } from "./tool-caller";
 import { MemoryService } from "../../server/services/memory-service";
+import { VectorRetriever } from "../../lib/vector/retriever";
 import { WikiGraph } from "../graph/wiki-graph";
+import { MemoryCorrectionService } from "../memory/correction";
 import { buildPendingEvent } from "../memory/builder";
 import { generateId } from "../utils/id";
 
@@ -106,6 +108,42 @@ export const registerDefaultTools = (): void => {
       }
     },
     "更新已有记忆的部分字段，需提供记忆 ID 和要更新的字段",
+  );
+
+  ToolCaller.registerTool(
+    "correct_memory",
+    async (args) => {
+      const { memoryId, locateQuery, instruction } = args as {
+        memoryId?: string;
+        locateQuery?: string;
+        instruction: string;
+      };
+      const service = new MemoryService();
+      const retriever = new VectorRetriever();
+      try {
+        const correction = new MemoryCorrectionService(service, retriever);
+        const result = await correction.correct({ memoryId, locateQuery, instruction });
+        if (!result.success) {
+          return { success: false, error: result.error };
+        }
+        return {
+          success: true,
+          id: result.memoryId,
+          title: result.title,
+          content: `记忆 "${result.title}" 纠错已入队（改动字段: ${result.changedFields.join(", ")}），等待审计处理。`,
+          data: {
+            memoryId: result.memoryId,
+            eventId: result.eventId,
+            changedFields: result.changedFields,
+            status: "pending_audit",
+          },
+        };
+      } finally {
+        retriever.close();
+        service.close();
+      }
+    },
+    "纠正一条记忆中的错误信息。通过记忆 ID 或描述定位目标，按纠错指令改写标题/摘要/内容，变更经审计队列落库",
   );
 
   ToolCaller.registerTool(
