@@ -18,6 +18,9 @@
 | **工具会话采集** | 监听 Cursor/Codex/Claude Code 工作目录，解析会话文件自动入队 | `src/server/watchers/tool-dir-watcher.ts` |
 | **用户画像演化** | 对话后自动分析画像，相似度 < 0.85 才回写，变更历史记 jsonl 供前端可视化 | `src/server/services/profile-updater.ts` |
 | **浏览器采集** | 定时 copy Chrome/Edge 的 History SQLite，按域名分组总结成笔记 | `src/lib/browser/history-collector.ts` |
+| **多路召回** | 原句 + budget 模型改写变体并行检索、按最高相似度合并去重；改写失败自动退回单路 | `src/lib/vector/query-expansion.ts` / `query-rewriter.ts` |
+| **记忆纠错闭环** | 定位目标记忆 → budget 模型按指令改写 → 变更经审计队列落库并打 `corrected` 标签 | `src/lib/memory/correction.ts` |
+| **检索评测** | 固定评测集上的 Recall@k / MRR 回归基线，报告写入 `evals/reports/`，`npm run eval` 触发 | `src/eval/retrieval-eval.test.ts` |
 
 ## 1. 文档目标
 本文件用于描述系统架构、数据流、处理阶段、技术边界与推荐技术栈，供 AI 在编写、修改和审查代码时作为统一上下文。
@@ -389,6 +392,10 @@ memory-root/
 
 ### 4.9 记忆检索与推荐
 - 检索采用混合策略：关键词召回、向量召回、标签过滤三者并行，再进行合并与重排。
+- 向量召回前置多路召回（`searchWithExpansion`）：原句 + budget 模型改写变体分别检索，按最高相似度合并去重；改写失败或模型降级时自动退回单路原句召回。
+- 注入提示词时按召回的 `memoryId` 精确加载（`getMemoriesByIds`），不再全量拉取记忆库；主体相关记忆上限 8 条，叠加图谱邻居后总量不超过 `RETRIEVAL_MAX_INJECTED_MEMORIES`。
+- 记忆纠错闭环（`MemoryCorrectionService`）：按 `memoryId` 或检索定位目标 → budget 模型按纠错指令改写标题/摘要/内容 → 变更经 `stageUpdateMemory` 走审计队列落库并追加 `corrected` 标签；模型降级时拒绝改写以避免污染。
+- 检索质量由 `src/eval/retrieval-eval.test.ts` 的 Recall@k / MRR 基线守护，`npm run eval` 生成报告。
 - 重排优先级依次考虑相关度、热度、最近更新、访问次数和个性标签偏置。
 - 检索结果注入 prompt 时，只注入摘要、来源和引用路径，不直接展开全部原文。
 - 前端必须支持关键词搜索索引到笔记。
@@ -827,7 +834,7 @@ export type ConflictRecord = {
 
 ### 11.2 渐进式路线图
 
-项目按 Phase 分阶段推进，每个 Phase 在前一阶段稳定后才开始。当前阶段：**Phase 4 收口**。
+项目按 Phase 分阶段推进，每个 Phase 在前一阶段稳定后才开始。当前阶段：**Phase 5 检索与质量收口**。
 
 ```text
 Phase 0 — 工程健康 [DONE]
@@ -876,6 +883,14 @@ Phase 4 — 测试与质量
   [x] 后台加工层测试（清洗去重、分类打分、全量去重扫描）
   [x] 审计持久化层测试（冲突分级、版本管理）
   [x] 集成测试（端到端：用户输入 → 快轨 → 审计 → 文件写回）
+
+Phase 5 — 检索与质量收口
+  [x] 多路召回（query-rewriter budget 改写 + query-expansion 合并去重，降级退回单路）
+  [x] 注入改为 getMemoriesByIds 精确加载，移除 500 条全量拉取
+  [x] 记忆纠错闭环（MemoryCorrectionService + correct_memory 工具 + memory_update 意图路由 + 记错/纠正关键词）
+  [x] 检索评测集与指标（src/eval，Recall@k / MRR，npm run eval 出报告）
+  [x] GitHub Actions CI（ubuntu + windows，typecheck + lint + test + eval）
+  [x] usearch 移至 optionalDependencies（CI 走 JS 精确后端）
 ```
 
 ## 12. 本轮补充记录
@@ -890,5 +905,11 @@ Phase 4 — 测试与质量
 - 已完成去重扫描从固定最近 200 条扩展为分页全量内容扫描
 - 已完成 nightly 降级保护：模型降级时跳过矛盾精判、wikilink 智能补充、路由优化和旗舰画像更新
 - 已完成 WikiGraph 增量更新清理：文件变更/删除时移除旧节点关系，避免脏边残留
-- 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`、`provider-loader.test.ts`、`api-route-contracts.test.ts`、`conversation-compressor.test.ts`、`ai-config-form.test.tsx`
-- 当前测试总量：34 个测试文件，346 passed / 0 skipped（共 346 用例）
+- 已完成多路召回：`query-rewriter.ts`（budget 改写，降级退回空变体）+ `query-expansion.ts`（多路合并取最高相似度）
+- 已完成注入精确加载：`handler.ts retrieveRelevantMemories` 用 `getMemoriesByIds` 替代 `listMemories({limit:500})`
+- 已完成记忆纠错闭环：`src/lib/memory/correction.ts` + `correct_memory` 工具 + `memory_update` 意图接入纠错
+- 已完成检索评测：`src/eval/`（fixtures/metrics/retrieval-eval），Recall@k / MRR 回归基线 + 报告
+- 已完成 GitHub Actions CI：`.github/workflows/ci.yml`（typecheck + lint + test + eval，ubuntu/windows）
+- usearch 移至 `optionalDependencies`：CI 不装原生 usearch，向量检索走 JS 精确后端
+- 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`、`provider-loader.test.ts`、`api-route-contracts.test.ts`、`conversation-compressor.test.ts`、`ai-config-form.test.tsx`、`query-rewriter.test.ts`、`query-expansion.test.ts`、`memory-correction.test.ts`、`eval-metrics.test.ts`、`retrieval-eval.test.ts`
+- 当前测试总量：40 个测试文件，383 passed / 0 skipped（共 383 用例）
