@@ -86,3 +86,6 @@ coverage/
 
 # ESLint
 .eslintcache
+
+# 检索评测报告（每次 npm run eval 重新生成）
+evals/reports/

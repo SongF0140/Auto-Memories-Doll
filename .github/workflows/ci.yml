@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (node ${{ matrix.node }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # usearch 已移至 optionalDependencies：CI 上不安装原生 usearch，
+      # 向量检索走纯 JS 精确后端（见 src/lib/vector/backend.ts 的降级逻辑）。
+      - name: Install dependencies
+        run: npm ci --omit=optional
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit & integration tests
+        run: npm run test
+
+      # 检索评测：无 MODEL_API_KEY 时走确定性本地 embedding 与关键词保底，
+      # 生成 Recall@k / MRR 报告并作为产物上传，便于回归对比。
+      - name: Retrieval eval
+        run: npm run eval
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-eval-report-${{ matrix.os }}-node${{ matrix.node }}
+          path: evals/reports/
+          if-no-files-found: ignore
