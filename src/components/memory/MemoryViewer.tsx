@@ -95,11 +95,12 @@ export default function MemoryViewer({
   if (loading) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         onClick={onClose}
       >
         <div
-          className="violet-letter-mark w-full max-w-2xl mx-4 p-8"
+          className="w-full max-w-2xl mx-4 p-8 bg-white rounded-2xl border text-center"
+          style={{ borderColor: "var(--color-border-default)" }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="loading-dots flex justify-center py-8">
@@ -115,15 +116,16 @@ export default function MemoryViewer({
   if (!memory) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         onClick={onClose}
       >
         <div
-          className="violet-letter-mark w-full max-w-2xl mx-4 p-8 text-center"
+          className="w-full max-w-2xl mx-4 p-8 bg-white rounded-2xl border text-center"
+          style={{ borderColor: "var(--color-border-default)" }}
           onClick={(e) => e.stopPropagation()}
         >
-          <p className="text-text-secondary">记忆未找到</p>
-          <button onClick={onClose} className="mt-4 text-sm text-accent underline">
+          <p style={{ color: "var(--color-text-secondary)" }}>记忆未找到</p>
+          <button onClick={onClose} className="mt-4 text-sm underline" style={{ color: "var(--color-brand-blue)" }}>
             关闭
           </button>
         </div>
@@ -133,11 +135,12 @@ export default function MemoryViewer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-bg/80 backdrop-blur-sm py-12"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 py-12"
       onClick={onClose}
     >
       <div
-        className="violet-letter-mark w-full max-w-2xl mx-4"
+        className="w-full max-w-2xl mx-4 bg-white rounded-2xl border shadow-lg"
+        style={{ borderColor: "var(--color-border-default)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -186,7 +189,7 @@ export default function MemoryViewer({
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="shimmer-button h-10 px-6 text-sm"
+                  className="btn h-10 px-6 text-sm"
                 >
                   {saving ? "保存中..." : "保存"}
                 </button>
@@ -244,7 +247,7 @@ export default function MemoryViewer({
               <div className="mt-6 flex gap-3 pt-4 border-t border-border">
                 <button
                   onClick={() => setEditing(true)}
-                  className="shimmer-button h-10 px-6 text-sm"
+                  className="btn h-10 px-6 text-sm"
                 >
                   编辑
                 </button>

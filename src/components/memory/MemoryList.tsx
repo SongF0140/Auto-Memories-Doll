@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
 import EmptyState from "../common/EmptyState";
-import { MagicCard } from "../ui/magic-card";
-import { ShimmerButton } from "../ui/shimmer-button";
 import MemoryViewer from "./MemoryViewer";
 import { requestApi } from "../../lib/api-client";
 import { IngestResponse, MemoryListResponse } from "../../types/api";
@@ -72,13 +70,13 @@ export default function MemoryList() {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-8">
       <div className="mx-auto max-w-6xl space-y-8">
-        <MagicCard className="overflow-hidden p-0">
+        <div className="card overflow-hidden p-0">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="p-6 sm:p-8">
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-tertiary">
                 Memory Archive
               </p>
-              <h2 className="section-title text-gradient">我的记忆</h2>
+              <h2 className="section-title">我的记忆</h2>
               <p className="section-subtitle mt-2 max-w-xl">
                 把片段、想法和重要经历整理成长期记忆。粘贴文本后点击导入，系统会自动生成标题、摘要和标签。
               </p>
@@ -94,26 +92,26 @@ export default function MemoryList() {
                   <p className="text-sm text-text-tertiary">
                     {importMessage || `${memories.length} 条记忆已保存`}
                   </p>
-                  <ShimmerButton
+                  <button
                     onClick={handleImport}
                     disabled={importing || !importContent.trim()}
-                    className="h-11 px-5"
+                    className="btn h-11 px-5"
                   >
                     {importing ? "导入中..." : "导入记忆"}
-                  </ShimmerButton>
+                  </button>
                 </div>
               </div>
             </div>
             <div className="relative min-h-[260px] overflow-hidden lg:min-h-full">
               <img
                 src={memoryGardenImage}
-                alt="淡紫花园中的信纸与打字机"
+                alt="记忆花园中的信纸与打字机"
                 className="h-full w-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#f6f0df]/10 to-[#f6f0df]/55 lg:bg-gradient-to-r" />
+              <div className="absolute inset-0 bg-gradient-to-l from-transparent via-brand-blue/5 to-brand-blue/20 lg:bg-gradient-to-r" />
             </div>
           </div>
-        </MagicCard>
+        </div>
 
         {loading ? (
           <EmptyState title="加载记忆中" description="正在获取你的记忆库..." />

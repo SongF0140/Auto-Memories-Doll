@@ -4,6 +4,7 @@ import { formatSummary } from "../../server/pipelines/formatter";
 import { extractTags } from "../../server/pipelines/json-pipeline";
 import { classifyTopic, classifyTopicWithRules, TopicRule } from "../../config/topics.config";
 import { generateZhFields } from "../../lib/memory/translator";
+import { extractCleanTitle, sanitizeTitle, sanitizeTags } from "../../lib/utils/title-sanitizer";
 
 export type { TopicRule };
 
@@ -26,9 +27,10 @@ export class MemoryExtractor {
     text: string,
     options: MemoryExtractionOptions = {},
   ): MemoryRecord {
-    const title = this.extractTitle(text);
+    const title = extractCleanTitle(text);
     const summary = formatSummary(text, options.maxSummaryLength || 200);
-    const tags = extractTags(text).slice(0, options.maxTagCount || 5);
+    const rawTags = extractTags(text).slice(0, options.maxTagCount || 5);
+    const tags = sanitizeTags(rawTags);
     const topic = this.extractTopic(text);
     const zhFields = generateZhFields(title, summary, tags, topic);
 
@@ -50,9 +52,11 @@ export class MemoryExtractor {
     sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen",
     data: { title: string; content: string; tags?: string[]; summary?: string; topic?: string },
   ): MemoryRecord {
-    const title = data.title || this.extractTitle(data.content);
+    const rawTitle = data.title || this.extractTitle(data.content);
+    const title = sanitizeTitle(rawTitle);
     const summary = data.summary || formatSummary(data.content);
-    const tags = data.tags || extractTags(data.content).slice(0, 5);
+    const rawTags = data.tags || extractTags(data.content).slice(0, 5);
+    const tags = sanitizeTags(rawTags);
     const topic = data.topic || this.extractTopic(data.content);
     const zhFields = generateZhFields(title, summary, tags, topic);
 

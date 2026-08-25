@@ -1,7 +1,6 @@
 "use client";
 
 import { MemoryRecord } from "../../types/memory";
-import { MagicCard } from "../ui/magic-card";
 import Badge from "../common/Badge";
 import { getTopicLabelClient } from "../../config/topics-data";
 
@@ -19,9 +18,9 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
 
   if (compact) {
     return (
-      <MagicCard className={`p-4 ${className}`}>
+      <div className={`card p-4 ${className}`}>
         <div className="flex items-start gap-3">
-          <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[radial-gradient(circle,#b88735_0%,#8a6aa4_70%)] shadow-[0_0_18px_rgba(184,135,53,0.45)]" />
+          <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[radial-gradient(circle,#2563EB_0%,#1D4ED8_70%)] shadow-[0_0_8px_rgba(37,99,235,0.35)]" />
           <div className="min-w-0">
             <h4 className="mb-1 truncate text-sm font-semibold leading-tight text-text-primary">
               {displayTitle}
@@ -40,12 +39,12 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
             )}
           </div>
         </div>
-      </MagicCard>
+      </div>
     );
   }
 
   return (
-    <MagicCard className={`p-5 ${className}`}>
+    <div className={`card p-5 ${className}`}>
       <div className="mb-3 flex items-start justify-between gap-4">
         <h3 className="text-lg font-semibold leading-tight text-text-primary">{displayTitle}</h3>
         <div className="flex items-center gap-2">
@@ -84,6 +83,6 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
           })}
         </time>
       </div>
-    </MagicCard>
+    </div>
   );
 }

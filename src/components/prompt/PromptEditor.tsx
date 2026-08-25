@@ -52,7 +52,7 @@ export default function PromptEditor({ template, onSave, onCancel }: PromptEdito
   };
 
   return (
-    <div className="violet-letter-mark p-6 space-y-4">
+    <div className="card p-6 space-y-4">
       <h3 className="text-lg font-semibold text-text-primary">
         {template ? "编辑模板" : "新建模板"}
       </h3>
@@ -102,7 +102,7 @@ export default function PromptEditor({ template, onSave, onCancel }: PromptEdito
       </div>
 
       <div className="flex gap-3 pt-2">
-        <button onClick={handleSubmit} className="shimmer-button h-10 px-6 text-sm">
+        <button onClick={handleSubmit} className="btn h-10 px-6 text-sm">
           保存
         </button>
         <button onClick={onCancel} className="btn-secondary h-10 px-6 text-sm">

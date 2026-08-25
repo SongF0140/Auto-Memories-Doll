@@ -8,16 +8,10 @@ import ChatInput from "./ChatInput";
 import ChatModeSelector from "./ChatModeSelector";
 import MemoryCard from "../memory/MemoryCard";
 import EmptyState from "../common/EmptyState";
-import { MagicCard } from "../ui/magic-card";
-import { SpotlightCard } from "../ui/spotlight-card";
-import { MagneticButton } from "../ui/magnetic-button";
 import { AppError } from "../../lib/errors";
 import { requestApi } from "../../lib/api-client";
 import { AiEvent } from "../../lib/ai/ai-events";
 import { useChatSession } from "./useChatSession";
-
-// Photo by RetroSupply on Unsplash (free to use, no attribution required)
-const chatGardenImage = "https://images.unsplash.com/photo-1432821596592-e2c18b78144f?w=1200&q=80";
 
 const display = (memory: MemoryRecord) => ({
   title: memory.titleZh || memory.title,
@@ -251,46 +245,42 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-transparent">
+    <div className="flex h-full flex-col bg-white">
       <div className="px-6 py-5">
-        <MagicCard className="mx-auto max-w-6xl overflow-hidden p-0">
-          <div className="grid items-stretch gap-0 lg:grid-cols-[1fr_320px]">
+        <div
+          className="mx-auto max-w-6xl overflow-hidden rounded-xl border p-0"
+          style={{
+            borderColor: "var(--color-border-default)",
+            background: "var(--color-bg)",
+            boxShadow: "var(--shadow-card)",
+          }}
+        >
+          <div className="grid items-stretch gap-0 lg:grid-cols-1">
             <div className="flex items-center justify-between gap-6 p-5">
               <div className="flex items-center gap-4">
-                <div className="violet-letter-mark hidden h-20 w-28 shrink-0 md:block">
-                  <div className="absolute left-5 top-5 h-1.5 w-12 rounded-full bg-accent/25" />
-                  <div className="absolute left-5 top-9 h-1.5 w-16 rounded-full bg-gold/25" />
-                  <div className="absolute left-5 top-[52px] h-1.5 w-10 rounded-full bg-accent/20" />
-                </div>
                 <div>
-                  <h2 className="section-title text-gradient">对话</h2>
-                  <p className="section-subtitle mt-1">
+                  <h2 className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-text-primary)" }}>
+                    对话
+                  </h2>
+                  <p className="text-sm mt-1" style={{ color: "var(--color-text-tertiary)" }}>
                     {mode === "memory" ? "提取并保存有意义的记忆" : "与你的 AI 伙伴对话"}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <ChatModeSelector mode={mode} onModeChange={setMode} />
-                <MagneticButton
+                <button
                   onClick={newSession}
                   disabled={loading || hydrating}
-                  className="h-9 px-3.5 text-xs"
+                  className="btn h-9 px-3.5 text-xs"
                   title="新建会话"
                 >
                   新会话
-                </MagneticButton>
+                </button>
               </div>
             </div>
-            <div className="relative hidden min-h-[132px] overflow-hidden lg:block">
-              <img
-                src={chatGardenImage}
-                alt="淡紫花园、信件与打字机的动漫感背景"
-                className="h-full w-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-bg/70 via-bg/20 to-transparent" />
-            </div>
           </div>
-        </MagicCard>
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -340,7 +330,7 @@ export default function ChatInterface() {
           <div className="flex-1 overflow-y-auto px-6 py-8">
             {/* 降级模式提示 */}
             {degraded && (
-              <div className="max-w-3xl mx-auto mb-5 rounded-2xl border border-warning-bg bg-warning-bg backdrop-blur-xl px-4 py-3 shadow-sm">
+              <div className="max-w-3xl mx-auto mb-5 rounded-xl border border-warning-bg bg-warning-bg px-4 py-3 shadow-sm">
                 <div className="flex items-start gap-3">
                   <div className="relative flex-shrink-0 mt-0.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />
@@ -399,17 +389,20 @@ export default function ChatInterface() {
         </div>
 
         {mode === "memory" && (
-          <div className="w-80 lg:w-96 bg-surface/70 border-l border-border/60 backdrop-blur-xl flex flex-col">
-            <div className="px-5 py-4 border-b border-border/60">
-              <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+          <div
+            className="w-80 lg:w-96 bg-gray-50 border-l flex flex-col"
+            style={{ borderColor: "var(--color-border-default)" }}
+          >
+            <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border-default)" }}>
+              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--color-text-primary)" }}>
                 选择记忆
                 {selectedMemoryIds.size > 0 && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-accent/10 text-accent border border-accent/20">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[rgba(166,124,0,0.10)] text-[#A67C00] border border-[rgba(166,124,0,0.25)]">
                     已选 {selectedMemoryIds.size} 条
                   </span>
                 )}
               </h3>
-              <p className="text-xs text-text-tertiary mt-1">
+              <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>
                 {availableMemories.length > 0
                   ? `共 ${availableMemories.length} 条，勾选后作为对话上下文`
                   : "暂无记忆，先去导入一些吧"}
@@ -418,40 +411,32 @@ export default function ChatInterface() {
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {availableMemories.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-sm text-text-secondary">暂无记忆</p>
-                  <p className="text-xs text-text-tertiary mt-1">切换到记忆页面导入内容</p>
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>暂无记忆</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>切换到记忆页面导入内容</p>
                 </div>
               ) : (
                 availableMemories.map((memory) => {
                   const isSelected = selectedMemoryIds.has(memory.id);
                   return (
-                    <SpotlightCard
+                    <div
                       key={memory.id}
-                      spotlightColor="rgba(142, 113, 166, 0.10)"
-                      className={`p-0 cursor-pointer transition-all duration-300 ${
+                      className={`p-0 cursor-pointer transition-all duration-200 rounded-xl border ${
                         isSelected
-                          ? "border-accent/30 bg-accent/[0.04]"
-                          : "hover:border-border-strong"
+                          ? "border-[#D4B84A] bg-[rgba(166,124,0,0.06)]"
+                          : "border-[#E8E0D4] hover:border-[#D4C8B5] bg-white"
                       }`}
+                      style={{ boxShadow: "var(--shadow-card)" }}
                     >
                       <label className="flex items-start gap-3 p-3 cursor-pointer">
                         <span
                           className={`mt-0.5 h-4 w-4 shrink-0 rounded border transition-all duration-200 flex items-center justify-center ${
                             isSelected
-                              ? "bg-accent border-accent"
-                              : "border-border bg-surface hover:border-accent/50"
+                              ? "bg-[#A67C00] border-[#A67C00]"
+                              : "border-[#E8E0D4] bg-white hover:border-[#C9A227]"
                           }`}
                         >
                           {isSelected && (
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="w-3 h-3 text-accent-text"
-                            >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-white">
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
                           )}
@@ -473,10 +458,10 @@ export default function ChatInterface() {
                           className="sr-only"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-text-primary truncate">
+                          <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
                             {display(memory).title}
                           </p>
-                          <p className="text-xs text-text-tertiary mt-0.5 line-clamp-2">
+                          <p className="text-xs mt-0.5 line-clamp-2" style={{ color: "var(--color-text-tertiary)" }}>
                             {memory.summaryZh || memory.summary}
                           </p>
                           <div className="flex flex-wrap gap-1 mt-1.5">
@@ -485,7 +470,7 @@ export default function ChatInterface() {
                               .map((tag) => (
                                 <span
                                   key={tag}
-                                  className="inline-block px-1.5 py-0.5 text-[10px] rounded-full bg-muted/70 text-text-tertiary border border-border/60"
+                                  className="inline-block px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-500 border border-gray-200"
                                 >
                                   {tag}
                                 </span>
@@ -493,7 +478,7 @@ export default function ChatInterface() {
                           </div>
                         </div>
                       </label>
-                    </SpotlightCard>
+                    </div>
                   );
                 })
               )}

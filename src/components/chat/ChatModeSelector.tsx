@@ -39,7 +39,7 @@ export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelecto
   ];
 
   return (
-    <div className="relative flex gap-1 p-1 rounded-2xl bg-muted/50 border border-border backdrop-blur-sm">
+    <div className="relative flex gap-1 p-1 rounded-2xl bg-muted/50 border border-border">
       {modes.map(({ value, label, description, iconKey }) => {
         const active = mode === value;
         return (
@@ -54,7 +54,7 @@ export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelecto
             title={description}
           >
             {active && (
-              <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent/5 to-[#b88735]/5 pointer-events-none" />
+              <span className="absolute inset-0 rounded-xl bg-gradient-to-br from-accent/5 to-brand-orange/5 pointer-events-none" />
             )}
             <span
               className={`relative z-10 flex items-center gap-1.5 text-sm font-semibold transition-colors ${

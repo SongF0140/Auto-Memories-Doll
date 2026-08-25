@@ -10,6 +10,10 @@ interface McpServerListProps {
 
 export default function McpServerList({ servers, onChange }: McpServerListProps) {
   const [editing, setEditing] = useState<Partial<McpServerConfig> | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
 
   const save = async (server: Partial<McpServerConfig>) => {
     const isNew = !server.id;
@@ -46,8 +50,147 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
     onChange(data);
   };
 
+  // JSON 批量导入
+  const handleImport = async () => {
+    setImporting(true);
+    setImportError("");
+
+    try {
+      // 尝试解析 JSON
+      let parsed;
+      try {
+        parsed = JSON.parse(importText);
+      } catch {
+        setImportError("JSON 格式错误，请检查语法");
+        setImporting(false);
+        return;
+      }
+
+      // 支持两种格式：数组或单个对象
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      let imported = 0;
+
+      for (const item of items) {
+        if (!item.name || !item.command) continue;
+
+        const response = await fetch("/api/config/mcp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: item.name,
+            command: item.command,
+            args: item.args || [],
+            env: item.env || {},
+            enabled: item.enabled !== false,
+            description: item.description || "",
+          }),
+        });
+
+        if (response.ok) imported++;
+      }
+
+      if (imported > 0) {
+        setShowImport(false);
+        setImportText("");
+        refresh();
+      } else {
+        setImportError("没有成功导入任何服务器，请确保每项都有 name 和 command");
+      }
+    } catch (e) {
+      setImportError(`导入失败: ${(e as Error).message}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* 操作栏 */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-text-tertiary">
+          已配置 {servers.length} 个 MCP 服务
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="btn btn-secondary text-sm px-3 py-1.5"
+          >
+            JSON 导入
+          </button>
+          <button
+            onClick={() => setEditing({ name: "", command: "", args: [], env: {}, enabled: true })}
+            className="btn text-sm px-3 py-1.5"
+          >
+            + 添加
+          </button>
+        </div>
+      </div>
+
+      {/* 导入面板 */}
+      {showImport && (
+        <div className="card p-5 space-y-4">
+          <div>
+            <h4 className="text-sm font-semibold text-text-primary mb-1">JSON 批量导入</h4>
+            <p className="text-xs text-text-secondary">
+              粘贴 MCP 服务器配置 JSON（支持数组或单个对象）
+            </p>
+          </div>
+
+          {/* 示例提示 */}
+          <div
+            className="rounded-lg p-3 text-xs font-mono overflow-x-auto"
+            style={{ background: "#FAF8F5", border: "1px dashed #E8E0D4", color: "#8B7355" }}
+          >
+{`[
+  {
+    "name": "filesystem",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
+    "description": "文件系统访问"
+  },
+  {
+    "name": "github",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": { "GITHUB_TOKEN": "ghp_xxx" }
+  }
+]`}
+          </div>
+
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder="粘贴 JSON 配置..."
+            className="input min-h-[140px] font-mono text-xs"
+          />
+
+          {importError && (
+            <p className="text-sm text-error">{importError}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => {
+                setShowImport(false);
+                setImportText("");
+                setImportError("");
+              }}
+              className="btn btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={importing || !importText.trim()}
+              className="btn disabled:opacity-50"
+            >
+              {importing ? "导入中..." : `导入配置`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 服务器列表 */}
       {servers.map((server) => (
         <div key={server.id} className="card card-hover p-5">
           <div className="flex items-start justify-between gap-4">
@@ -91,13 +234,18 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
         <McpServerEditor server={editing} onSave={save} onCancel={() => setEditing(null)} />
       )}
 
-      {!editing && (
-        <button
-          onClick={() => setEditing({ name: "", command: "", args: [], env: {}, enabled: true })}
-          className="w-full py-4 border-2 border-dashed border-border rounded-xl text-text-secondary hover:border-border-strong hover:text-text-primary transition-colors"
-        >
-          + 添加 MCP 服务器
-        </button>
+      {/* 空状态 */}
+      {servers.length === 0 && !editing && !showImport && (
+        <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E8E0D4]">
+          <p className="text-text-secondary mb-2">尚未配置 MCP 服务</p>
+          <p className="text-xs text-text-tertiary mb-4">通过 JSON 导入或手动添加来连接外部工具服务</p>
+          <button
+            onClick={() => setShowImport(true)}
+            className="btn btn-secondary text-sm"
+          >
+            导入配置
+          </button>
+        </div>
       )}
     </div>
   );

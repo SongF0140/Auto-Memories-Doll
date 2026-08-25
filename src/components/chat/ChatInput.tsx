@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, KeyboardEvent } from "react";
-import { ShimmerButton } from "../ui/shimmer-button";
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -32,7 +31,7 @@ export default function ChatInput({
   };
 
   return (
-    <div className="border-t border-border bg-surface/80 backdrop-blur-xl p-5">
+    <div className="border-t border-border bg-white p-5">
       <div className="max-w-3xl mx-auto flex gap-3 items-end">
         <textarea
           value={content}
@@ -44,13 +43,13 @@ export default function ChatInput({
           rows={1}
           style={{ minHeight: "52px", maxHeight: "180px" }}
         />
-        <ShimmerButton
+        <button
           onClick={handleSubmit}
           disabled={disabled || !content.trim()}
-          className="h-[52px] px-6"
+          className="btn h-[52px] px-6"
         >
           发送
-        </ShimmerButton>
+        </button>
       </div>
     </div>
   );

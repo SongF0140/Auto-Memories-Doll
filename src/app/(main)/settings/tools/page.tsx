@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { ToolWatchSource, ToolType } from "@/types/config";
 import ToolSourceList from "@/components/settings/ToolSourceList";
-import { MagicCard } from "@/components/ui/magic-card";
 
 const API_BASE = "/api/config";
 
@@ -32,11 +31,11 @@ export default function ToolSourcesPage() {
 
   return (
     <div className="p-6 md:p-10 max-w-3xl mx-auto">
-      <MagicCard className="p-6">
+      <div className="card p-6">
         <h2 className="text-lg font-semibold text-text-primary mb-1">工具监听</h2>
         <p className="text-xs text-text-tertiary mb-6">配置 IDE/AI 工具的工作目录监听源</p>
         <ToolSourceList sources={sources} presets={presets} onChange={handleChange} />
-      </MagicCard>
+      </div>
     </div>
   );
 }

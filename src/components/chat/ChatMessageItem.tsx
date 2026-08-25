@@ -23,7 +23,7 @@ export default function ChatMessageItem({ message }: ChatMessageItemProps) {
   if (isSystem) {
     return (
       <div className="flex justify-center py-2 animate-fade-in">
-        <div className="flex items-center gap-2.5 bg-error-bg/80 backdrop-blur-sm border border-error/10 text-error px-4 py-2.5 rounded-2xl text-sm shadow-sm">
+        <div className="flex items-center gap-2.5 bg-error-bg/80 border border-error/10 text-error px-4 py-2.5 rounded-2xl text-sm shadow-sm">
           <AlertIcon />
           <span>{message.content}</span>
         </div>
@@ -33,17 +33,17 @@ export default function ChatMessageItem({ message }: ChatMessageItemProps) {
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""} animate-fade-in`}>
-      <Avatar name={isUser ? "You" : "AI"} size="md" className={isUser ? "ring-2 ring-accent/20" : "ring-2 ring-[#b88735]/20"} />
+      <Avatar name={isUser ? "You" : "AI"} size="md" className={isUser ? "ring-2 ring-accent/20" : "ring-2 ring-brand-blue/20"} />
       <div className={`max-w-[80%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
         <div
           className={`relative px-5 py-3.5 rounded-2xl text-base leading-relaxed transition-shadow duration-300 ${
             isUser
               ? "bg-gradient-to-br from-accent to-accent-hover text-accent-text rounded-tr-sm shadow-md shadow-accent/15"
-              : "bg-surface/90 backdrop-blur-sm border border-border rounded-tl-sm shadow-sm hover:shadow-md"
+              : "bg-surface border border-border rounded-tl-sm shadow-sm hover:shadow-md"
           }`}
         >
           {!isUser && (
-            <span className="absolute -top-px -left-px h-full w-full rounded-2xl rounded-tl-sm pointer-events-none bg-gradient-to-br from-accent/5 via-transparent to-[#b88735]/5 opacity-60" />
+            <span className="absolute -top-px -left-px h-full w-full rounded-2xl rounded-tl-sm pointer-events-none bg-gradient-to-br from-accent/5 via-transparent to-brand-orange/5 opacity-60" />
           )}
           <p className="whitespace-pre-wrap relative z-10">{message.content}</p>
         </div>

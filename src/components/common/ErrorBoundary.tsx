@@ -38,9 +38,9 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
       return (
         <div className="flex min-h-[400px] items-center justify-center px-6 py-16">
-          <div className="violet-letter-mark max-w-lg p-8 text-center">
+          <div className="card max-w-lg p-8 text-center">
             <div className="mb-4 flex justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[radial-gradient(circle,rgba(184,135,53,0.28),rgba(142,113,166,0.18)_60%,transparent_80%)] text-2xl">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[radial-gradient(circle,rgba(37,99,235,0.15),rgba(29,78,216,0.08)_60%,transparent_80%)] text-2xl text-brand-blue">
                 !
               </div>
             </div>
@@ -56,7 +56,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
                 </pre>
               </details>
             )}
-            <button onClick={this.handleRetry} className="shimmer-button mx-auto h-10 px-6">
+            <button onClick={this.handleRetry} className="btn mx-auto h-10 px-6">
               重试
             </button>
             <p className="mt-3 text-xs text-text-tertiary">

@@ -42,7 +42,7 @@ export default function DegradationBanner() {
   if (!degraded) return null;
 
   return (
-    <div className="sticky top-0 z-50 w-full border-b border-warning-bg bg-warning-bg/95 backdrop-blur-xl">
+    <div className="sticky top-0 z-50 w-full border-b border-warning-bg bg-warning-bg/95">
       <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
         <span className="relative flex h-2.5 w-2.5 shrink-0">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-warning opacity-75" />

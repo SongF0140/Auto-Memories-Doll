@@ -113,21 +113,31 @@ export default function AuditPanel() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-gradient">审计与冲突</h2>
-            <p className="text-xs text-text-tertiary mt-1">管理记忆版本冲突和待处理事件</p>
+            <h2 className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-text-primary)" }}>
+              审计与冲突
+            </h2>
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+              管理记忆版本冲突和待处理事件
+            </p>
           </div>
         </div>
 
         <div className="flex gap-2 mb-6">
           <button
             onClick={() => setActiveTab("report")}
-            className={`text-sm px-4 py-2 rounded-lg transition-colors ${activeTab === "report" ? "card-active" : "card-hover"}`}
+            className={`text-sm px-4 py-2 rounded-lg transition-colors ${
+              activeTab === "report" ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold" : "hover:bg-[#FAF7F2]"
+            }`}
+            style={activeTab === "report" ? {} : { color: "#8B7355" }}
           >
             总览
           </button>
           <button
             onClick={() => setActiveTab("conflicts")}
-            className={`text-sm px-4 py-2 rounded-lg transition-colors ${activeTab === "conflicts" ? "card-active" : "card-hover"}`}
+            className={`text-sm px-4 py-2 rounded-lg transition-colors ${
+              activeTab === "conflicts" ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold" : "hover:bg-[#FAF7F2]"
+            }`}
+            style={activeTab === "conflicts" ? {} : { color: "#8B7355" }}
           >
             冲突 ({conflicts.length})
           </button>
@@ -136,38 +146,38 @@ export default function AuditPanel() {
         {activeTab === "report" && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
-              <div className="card p-5 text-center">
-                <div className="text-3xl font-bold text-gradient mb-1">
+              <div className="bg-white border rounded-xl p-5 text-center" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
+                <div className="text-3xl font-bold mb-1" style={{ color: "var(--color-brand-blue)" }}>
                   {report?.totalMemories ?? 0}
                 </div>
-                <div className="text-xs text-text-tertiary">记忆总数</div>
+                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>记忆总数</div>
               </div>
-              <div className="card p-5 text-center">
-                <div className="text-3xl font-bold text-gradient mb-1">
+              <div className="bg-white border rounded-xl p-5 text-center" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
+                <div className="text-3xl font-bold mb-1" style={{ color: "var(--color-brand-orange)" }}>
                   {report?.pendingEvents ?? 0}
                 </div>
-                <div className="text-xs text-text-tertiary">待处理事件</div>
+                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>待处理事件</div>
               </div>
-              <div className="card p-5 text-center">
-                <div className="text-3xl font-bold text-error mb-1">{report?.conflicts ?? 0}</div>
-                <div className="text-xs text-text-tertiary">待解决冲突</div>
+              <div className="bg-white border rounded-xl p-5 text-center" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
+                <div className="text-3xl font-bold mb-1 text-red-600">{report?.conflicts ?? 0}</div>
+                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>待解决冲突</div>
               </div>
             </div>
 
-            <div className="card p-5">
-              <h3 className="text-base font-semibold text-text-primary mb-3">操作</h3>
+            <div className="bg-white border rounded-xl p-5" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
+              <h3 className="text-base font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>操作</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-text-secondary">重放待处理事件</p>
-                    <p className="text-xs text-text-tertiary">
+                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>重放待处理事件</p>
+                    <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
                       重新处理所有 pending 状态的记忆事件
                     </p>
                   </div>
                   <button
                     onClick={handleReplay}
                     disabled={replaying}
-                    className="shimmer-button h-9 px-4 text-sm"
+                    className="btn h-9 px-4 text-sm"
                   >
                     {replaying ? "处理中..." : "执行重放"}
                   </button>
@@ -180,43 +190,53 @@ export default function AuditPanel() {
         {activeTab === "conflicts" && (
           <div>
             {conflicts.length === 0 ? (
-              <div className="empty-state py-16">
-                <p className="text-text-tertiary">暂无待解决的冲突</p>
+              <div className="py-16 text-center" style={{ color: "var(--color-text-tertiary)" }}>
+                暂无待解决的冲突
               </div>
             ) : (
               <div className="space-y-4">
                 {conflicts.map((conflict) => (
-                  <div key={conflict.conflictId} className="card p-5">
+                  <div
+                    key={conflict.conflictId}
+                    className="bg-white border rounded-xl p-5"
+                    style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-text-tertiary font-mono">
+                        <span className="text-xs font-mono" style={{ color: "var(--color-text-tertiary)" }}>
                           {conflict.conflictId.slice(0, 12)}...
                         </span>
                         <span className="tag">字段: {conflict.field}</span>
                         <span className="tag">{conflict.status}</span>
                       </div>
-                      <span className="text-xs text-text-tertiary">
+                      <span className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
                         {new Date(conflict.createdAt).toLocaleString("zh-CN")}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       <div>
-                        <p className="text-xs font-medium text-text-tertiary mb-1">现有值</p>
-                        <div className="bg-muted rounded-lg p-3 text-sm text-text-secondary whitespace-pre-wrap font-mono">
+                        <p className="text-xs font-medium mb-1" style={{ color: "var(--color-text-tertiary)" }}>现有值</p>
+                        <div
+                          className="rounded-lg p-3 text-sm font-mono whitespace-pre-wrap"
+                          style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}
+                        >
                           {conflict.existingValue}
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-text-tertiary mb-1">候选值</p>
-                        <div className="bg-muted rounded-lg p-3 text-sm text-text-secondary whitespace-pre-wrap font-mono">
+                        <p className="text-xs font-medium mb-1" style={{ color: "var(--color-text-tertiary)" }}>候选值</p>
+                        <div
+                          className="rounded-lg p-3 text-sm font-mono whitespace-pre-wrap"
+                          style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}
+                        >
                           {conflict.candidateValue}
                         </div>
                       </div>
                     </div>
 
                     <label className="block mb-3">
-                      <span className="block text-xs font-medium text-text-tertiary mb-1">
+                      <span className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-tertiary)" }}>
                         手动编辑值（字符串可直接输入；数组或对象请使用 JSON）
                       </span>
                       <textarea
@@ -228,29 +248,30 @@ export default function AuditPanel() {
                           }))
                         }
                         rows={3}
-                        className="w-full bg-muted rounded-lg p-3 text-sm text-text-secondary font-mono border border-border"
+                        className="w-full bg-gray-50 rounded-lg p-3 text-sm font-mono border"
+                        style={{ borderColor: "var(--color-border-default)" }}
                       />
                     </label>
 
-                    <div className="flex gap-2 border-t border-border pt-3">
+                    <div className="flex gap-2 pt-3 border-t" style={{ borderColor: "var(--color-border-default)" }}>
                       <button
                         onClick={() => handleResolve(conflict.conflictId, "accept")}
                         disabled={resolvingId === conflict.conflictId}
-                        className="shimmer-button h-8 px-4 text-xs"
+                        className="btn h-8 px-4 text-xs"
                       >
                         接受候选值
                       </button>
                       <button
                         onClick={() => handleResolve(conflict.conflictId, "keep")}
                         disabled={resolvingId === conflict.conflictId}
-                        className="btn-secondary h-8 px-4 text-xs"
+                        className="btn btn-secondary h-8 px-4 text-xs"
                       >
                         保留现有值
                       </button>
                       <button
                         onClick={() => handleResolve(conflict.conflictId, "manual")}
                         disabled={resolvingId === conflict.conflictId}
-                        className="btn-secondary h-8 px-4 text-xs"
+                        className="btn btn-secondary h-8 px-4 text-xs"
                       >
                         应用手动值
                       </button>

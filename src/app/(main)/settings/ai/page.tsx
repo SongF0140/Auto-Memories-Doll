@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { AiConfig } from "@/types/config";
 import AiConfigForm from "@/components/settings/AiConfigForm";
-import { MagicCard } from "@/components/ui/magic-card";
 
 const API_BASE = "/api/config";
 
@@ -40,7 +39,7 @@ export default function AiSettingsPage() {
 
   return (
     <div className="p-6 md:p-10 max-w-3xl mx-auto">
-      <MagicCard className="p-6">
+      <div className="card p-6">
         <h2 className="text-lg font-semibold text-text-primary mb-1">AI 模型配置</h2>
         <p className="text-xs text-text-tertiary mb-6">配置旗舰、标准、廉价和嵌入模型的 API 连接</p>
         {error && <p className="text-error text-sm mb-4">{error}</p>}
@@ -49,7 +48,7 @@ export default function AiSettingsPage() {
         ) : (
           <p className="text-text-tertiary text-sm">加载中…</p>
         )}
-      </MagicCard>
+      </div>
     </div>
   );
 }

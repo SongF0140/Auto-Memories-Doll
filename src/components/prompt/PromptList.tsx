@@ -131,10 +131,10 @@ export default function PromptList() {
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-xl font-semibold tracking-tight text-gradient">提示词</h2>
+              <h2 className="text-xl font-semibold tracking-tight">提示词</h2>
               <p className="text-sm text-text-tertiary mt-1">暂无模板</p>
             </div>
-            <button onClick={() => setEditing("new")} className="shimmer-button h-10 px-5 text-sm">
+            <button onClick={() => setEditing("new")} className="btn h-10 px-5 text-sm">
               新建模板
             </button>
           </div>
@@ -151,10 +151,10 @@ export default function PromptList() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-baseline justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-gradient">提示词</h2>
-            <p className="text-xs text-text-tertiary mt-1">{templates.length} 个模板</p>
-          </div>
-          <button onClick={() => setEditing("new")} className="shimmer-button h-10 px-5 text-sm">
+          <h2 className="text-xl font-semibold tracking-tight">提示词</h2>
+          <p className="text-xs text-text-tertiary mt-1">{templates.length} 个模板</p>
+        </div>
+        <button onClick={() => setEditing("new")} className="btn h-10 px-5 text-sm">
             新建模板
           </button>
         </div>

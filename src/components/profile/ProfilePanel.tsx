@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { MagicCard } from "../ui/magic-card";
 
 type ChangelogEntry = {
   timestamp: string;
@@ -114,7 +113,7 @@ export default function ProfilePanel() {
         {/* 标题区 */}
         <div className="mb-8 flex items-start justify-between">
           <div>
-            <h2 className="section-title text-gradient">用户画像</h2>
+            <h2 className="section-title">用户画像</h2>
             <p className="section-subtitle mt-1">
               系统通过分析对话自动维护你的画像，让回复越来越贴合你的需求
             </p>
@@ -143,15 +142,15 @@ export default function ProfilePanel() {
 
         {/* 画像内容 */}
         {!hasProfile ? (
-          <MagicCard className="p-8 text-center">
+          <div className="card p-8 text-center">
             <p className="text-text-tertiary">
               还没有用户画像。开始对话后，系统会自动分析并维护你的画像。
             </p>
-          </MagicCard>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             {sections.map((section) => (
-              <MagicCard key={section.title} className="p-5">
+              <div key={section.title} className="card p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent text-xs font-bold">
                     {SECTION_ICONS[section.title] || "·"}
@@ -169,14 +168,14 @@ export default function ProfilePanel() {
                     </li>
                   ))}
                 </ul>
-              </MagicCard>
+              </div>
             ))}
           </div>
         )}
 
         {/* 变更历史 */}
         {data && data.changelog.length > 0 && (
-          <MagicCard className="p-6">
+          <div className="card p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-text-primary">画像演化历史</h3>
               <span className="text-[11px] text-text-tertiary">
@@ -231,7 +230,7 @@ export default function ProfilePanel() {
                   </div>
                 ))}
             </div>
-          </MagicCard>
+          </div>
         )}
       </div>
     </div>
