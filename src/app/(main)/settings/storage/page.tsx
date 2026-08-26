@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import StorageConfigForm from "@/components/settings/StorageConfigForm";
-import { MagicCard } from "@/components/ui/magic-card";
 
 const API_BASE = "/api/config";
 
@@ -36,7 +35,7 @@ export default function StorageSettingsPage() {
   if (error) {
     return (
       <div className="p-6 md:p-10 max-w-3xl mx-auto">
-        <MagicCard className="p-6 text-center">
+        <div className="card p-6 text-center">
           <p className="text-error text-sm">加载失败: {error}</p>
           <button
             onClick={load}
@@ -44,14 +43,14 @@ export default function StorageSettingsPage() {
           >
             重试
           </button>
-        </MagicCard>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="p-6 md:p-10 max-w-3xl mx-auto">
-      <MagicCard className="p-6">
+      <div className="card p-6">
         <h2 className="text-lg font-semibold text-text-primary mb-1">存储路径</h2>
         <p className="text-xs text-text-tertiary mb-6">配置记忆库文件的本地存储位置</p>
         {config ? (
@@ -59,7 +58,7 @@ export default function StorageSettingsPage() {
         ) : (
           <p className="text-text-tertiary text-sm">加载中…</p>
         )}
-      </MagicCard>
+      </div>
     </div>
   );
 }

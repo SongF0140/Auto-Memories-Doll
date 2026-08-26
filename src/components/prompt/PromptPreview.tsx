@@ -26,7 +26,7 @@ export default function PromptPreview({ template }: PromptPreviewProps) {
   }, [template]);
 
   return (
-    <div className="violet-letter-mark p-6">
+    <div className="card p-6">
       <h3 className="text-lg font-semibold text-text-primary mb-4">预览: {template.name}</h3>
 
       {template.variables.length > 0 && (

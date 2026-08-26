@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { SkillConfig } from "@/types/config";
 import SkillList from "@/components/settings/SkillList";
-import { MagicCard } from "@/components/ui/magic-card";
 
 const API_BASE = "/api/config";
 
@@ -25,12 +24,16 @@ export default function SkillsSettingsPage() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-3xl mx-auto">
-      <MagicCard className="p-6">
-        <h2 className="text-lg font-semibold text-text-primary mb-1">技能管理</h2>
-        <p className="text-xs text-text-tertiary mb-6">配置对话前置处理规则</p>
+    <div className="max-w-3xl">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-[#3E3224] mb-2 font-mono">技能配置</h1>
+        <p className="text-sm text-[#8B7D6B]">
+          管理触发式技能和自动化规则，扩展系统能力
+        </p>
+      </div>
+      <div className="card p-6">
         <SkillList skills={skills} onChange={handleChange} />
-      </MagicCard>
+      </div>
     </div>
   );
 }

@@ -4,8 +4,6 @@ import { useState } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
 import EmptyState from "../common/EmptyState";
-import { SpotlightCard } from "../ui/spotlight-card";
-import { MagneticButton } from "../ui/magnetic-button";
 import { requestApi } from "../../lib/api-client";
 import { MemorySearchResponse } from "../../types/api";
 
@@ -45,11 +43,11 @@ export default function MemorySearch() {
     <div className="flex-1 overflow-y-auto px-6 py-8">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
-          <h2 className="section-title text-gradient">搜索记忆</h2>
+          <h2 className="section-title">搜索记忆</h2>
           <p className="section-subtitle mt-1">按语义搜索，而不仅是关键词</p>
         </div>
 
-        <SpotlightCard className="p-2 mb-8 max-w-2xl">
+        <div className="card p-2 mb-8 max-w-2xl">
           <div className="flex gap-2 items-center">
             <input
               type="text"
@@ -59,15 +57,15 @@ export default function MemorySearch() {
               placeholder="你在找什么？"
               className="input border-0 shadow-none bg-transparent flex-1"
             />
-            <MagneticButton
+            <button
               onClick={handleSearch}
               disabled={loading || !query.trim()}
-              className="whitespace-nowrap"
+              className="btn whitespace-nowrap"
             >
               搜索
-            </MagneticButton>
+            </button>
           </div>
-        </SpotlightCard>
+        </div>
 
         {loading && (
           <EmptyState title="搜索中" description={`正在搜索与 "${query}" 相关的记忆...`} />
@@ -78,7 +76,7 @@ export default function MemorySearch() {
             {retrievalMode === "keyword" ? (
               <div
                 role="status"
-                className="mb-6 rounded-xl border border-warning-bg bg-warning-bg/70 px-4 py-3 text-sm text-warning"
+                className="mb-6 rounded-lg border border-warning-bg bg-warning-bg/70 px-4 py-3 text-sm text-warning"
               >
                 当前处于降级模式：Embedding 不可用，搜索已自动切换为标题、正文和标签关键词匹配。
               </div>

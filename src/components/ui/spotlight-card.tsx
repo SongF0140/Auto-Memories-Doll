@@ -39,7 +39,7 @@ export function SpotlightCard({
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       whileHover={{ y: -4, transition: { duration: 0.2 } }}
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-border bg-surface/80 backdrop-blur-xl shadow-sm",
+        "relative overflow-hidden rounded-xl border border-border bg-white shadow-sm",
         className,
       )}
     >
