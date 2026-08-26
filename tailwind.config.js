@@ -84,11 +84,21 @@ module.exports = {
           '"Microsoft YaHei"',
           'sans-serif',
         ],
+        // 等宽字体（rl-handbook 风格标题字体）
         mono: [
           '"Geist Mono"',
           '"SF Mono"',
+          '"Cascadia Code"',
           '"Consolas"',
           '"PingFang SC"',
+          'monospace',
+        ],
+        // 显示字体（用于 Hero 标题）
+        heading: [
+          '"Geist Mono"',
+          '"SF Mono"',
+          '"Cascadia Code"',
+          '"Consolas"',
           'monospace',
         ],
       },
