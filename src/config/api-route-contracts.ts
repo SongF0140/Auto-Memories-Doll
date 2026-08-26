@@ -44,6 +44,11 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
     responseSchema: "aiConfigResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
   },
+  "src/app/api/config/ai/test/route.ts": {
+    requestSchema: "aiConfigTestSchema",
+    responseSchema: "aiConfigTestResponseSchema",
+    errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
+  },
   "src/app/api/config/mcp/route.ts": {
     requestSchema: "mcpServerSchema",
     responseSchema: "mcpServerListResponseSchema",
@@ -57,6 +62,11 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
   "src/app/api/config/skills/route.ts": {
     requestSchema: "skillSchema",
     responseSchema: "skillListResponseSchema",
+    errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
+  },
+  "src/app/api/config/skills/import/route.ts": {
+    requestSchema: "skillImportSchema",
+    responseSchema: "skillImportResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
   },
   "src/app/api/config/skills/[id]/route.ts": {
