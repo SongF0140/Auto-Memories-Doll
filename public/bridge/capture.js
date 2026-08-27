@@ -201,7 +201,11 @@
           showToast("记忆已成功导入！");
           setTimeout(() => container.remove(), 2000);
         } else {
-          throw new Error(data.error || "未知错误");
+          const errorMessage =
+            typeof data.error === "string"
+              ? data.error
+              : data.error?.message || "未知错误";
+          throw new Error(errorMessage);
         }
       } catch (err) {
         resultEl.className = "amd-result error";

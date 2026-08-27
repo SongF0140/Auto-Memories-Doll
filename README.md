@@ -158,6 +158,18 @@ curl -X POST http://localhost:3000/api/listen \
 
 返回自动归类的话题、生成的摘要和标签。
 
+请求失败时统一返回以下结构，`error.code` 可用于调用方区分错误类型：
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "具体错误"
+  }
+}
+```
+
 ### 监听本地工具目录
 
 在设置页面（`/settings/tools`）添加 Cursor、Codex CLI 或 Claude Code 的工作目录，新会话文件自动解析导入。

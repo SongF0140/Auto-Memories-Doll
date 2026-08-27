@@ -4,13 +4,15 @@ import { ConversationProcessor } from "../../../features/ingest/conversation-pro
 import { MemoryService } from "../../../server/services/memory-service";
 import { ListenStatsService } from "../../../server/services/listen-stats-service";
 import { getNotePath } from "../../../lib/storage/path-resolver";
-
+import { ErrorCode } from "../../../lib/api-errors";
+import { apiError } from "../../../lib/api-response";
+import { logger } from "../../../lib/logger";
 
 const MAX_LISTEN_BODY_BYTES = 1_000_000;
 const MAX_LISTEN_MESSAGES = 200;
 
 const listenRequestSchema = z.object({
-  source: z.string().min(1, "source 不能为空"),
+  source: z.string({ error: "source 不能为空" }).min(1, "source 不能为空"),
   sourceType: z.enum(["listen", "chat", "ingest", "manual", "mcp", "skill"]).default("listen"),
   title: z.string().optional(),
   messages: z
@@ -47,12 +49,15 @@ const listenRequestSchema = z.object({
  * 5. 审计通过后由 Orchestrator 写入带稳定 memoryId 的 Markdown
  */
 export async function POST(request: NextRequest) {
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > MAX_LISTEN_BODY_BYTES) {
-    return NextResponse.json(
-      { success: false, error: `请求体不能超过 ${MAX_LISTEN_BODY_BYTES} bytes` },
-      { status: 413 },
-    );
+  const contentLengthHeader = request.headers.get("content-length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (!Number.isFinite(contentLength) || contentLength > MAX_LISTEN_BODY_BYTES) {
+      return NextResponse.json(
+        apiError(ErrorCode.VALIDATION_FAILED, `请求体不能超过 ${MAX_LISTEN_BODY_BYTES} bytes`),
+        { status: 413 },
+      );
+    }
   }
 
   let body: unknown;
@@ -60,30 +65,33 @@ export async function POST(request: NextRequest) {
     const raw = await request.text();
     if (Buffer.byteLength(raw, "utf8") > MAX_LISTEN_BODY_BYTES) {
       return NextResponse.json(
-        { success: false, error: `请求体不能超过 ${MAX_LISTEN_BODY_BYTES} bytes` },
+        apiError(ErrorCode.VALIDATION_FAILED, `请求体不能超过 ${MAX_LISTEN_BODY_BYTES} bytes`),
         { status: 413 },
       );
     }
     body = JSON.parse(raw);
   } catch {
-    return NextResponse.json({ success: false, error: "请求体不是有效 JSON" }, { status: 400 });
+    return NextResponse.json(apiError(ErrorCode.INVALID_JSON, "请求体不是有效 JSON"), { status: 400 });
   }
 
   const parsed = listenRequestSchema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { success: false, error: parsed.error.issues[0].message },
+      apiError(ErrorCode.VALIDATION_FAILED, parsed.error.issues[0]?.message || "请求参数校验失败"),
       { status: 400 },
     );
   }
 
   const data = parsed.data;
-  const processor = new ConversationProcessor();
-  const memoryService = new MemoryService();
-  const statsService = new ListenStatsService();
+  let memoryService: MemoryService | undefined;
+  let statsService: ListenStatsService | undefined;
 
   try {
+    const processor = new ConversationProcessor();
+    memoryService = new MemoryService();
+    statsService = new ListenStatsService();
+
     // 1. 格式化对话并提取话题
     const { title, content, topic } = processor.formatConversation(data);
 
@@ -125,14 +133,22 @@ export async function POST(request: NextRequest) {
       message: `已接收来自 "${data.source}" 的对话，话题: ${topic}`,
     });
   } catch (error) {
-    statsService.record(data.source, data.topic || "unknown", false);
-    return NextResponse.json(
-      { success: false, error: `处理失败: ${(error as Error).message}` },
-      { status: 500 },
-    );
+    const detail = error instanceof Error ? error.message : String(error);
+    logger.api.error("POST /api/listen 处理失败", {
+      message: detail,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    try {
+      statsService?.record(data.source, data.topic || "unknown", false);
+    } catch (statsError) {
+      logger.api.error("POST /api/listen 失败统计写入失败", {
+        message: statsError instanceof Error ? statsError.message : String(statsError),
+      });
+    }
+    return NextResponse.json(apiError(ErrorCode.INTERNAL_ERROR, "监听请求处理失败"), { status: 500 });
   } finally {
-    memoryService.close();
-    statsService.close();
+    memoryService?.close();
+    statsService?.close();
   }
 }
 
