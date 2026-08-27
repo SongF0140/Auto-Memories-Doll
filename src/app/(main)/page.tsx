@@ -18,6 +18,54 @@ interface SearchResult {
   score?: number;
 }
 
+type QuickAccessIconName = 'library' | 'settings' | 'profile' | 'audit';
+
+const QuickAccessIcon = ({ name }: { name: QuickAccessIconName }) => {
+  const iconProps = {
+    width: 21,
+    height: 21,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+
+  switch (name) {
+    case 'library':
+      return (
+        <svg {...iconProps}>
+          <path d="M5 5.25A2.25 2.25 0 0 1 7.25 3H19v16H7.25A2.25 2.25 0 0 0 5 21.25V5.25Z" />
+          <path d="M5 5.25V19A2.25 2.25 0 0 0 7.25 21H19" />
+          <path d="M8.5 7.5h7M8.5 11h7" />
+        </svg>
+      );
+    case 'settings':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+        </svg>
+      );
+    case 'profile':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="8" r="3.25" />
+          <path d="M5 20c.9-3.25 3.2-5 7-5s6.1 1.75 7 5" />
+        </svg>
+      );
+    case 'audit':
+      return (
+        <svg {...iconProps}>
+          <path d="M7 3.5h7l3 3v14H7z" />
+          <path d="M14 3.5v3h3M9.5 11h5M9.5 14.5h5M9.5 18h3" />
+        </svg>
+      );
+  }
+};
+
 // Section 标题组件（rl-handbook 风格）
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
   <h2
@@ -45,7 +93,9 @@ export default function DashboardPage() {
     try {
       const saved = localStorage.getItem('memory-search-history');
       if (saved) setRecentQueries(JSON.parse(saved).slice(0, 5));
-    } catch {}
+    } catch {
+      // 忽略损坏的本地搜索历史，保证首页仍可正常使用。
+    }
   }, []);
 
   // 向量检索
@@ -67,7 +117,9 @@ export default function DashboardPage() {
         setRecentQueries(updated);
         try {
           localStorage.setItem('memory-search-history', JSON.stringify(updated));
-        } catch {}
+        } catch {
+          // 本地存储不可用时不影响搜索结果展示。
+        }
       } catch {
         setResults([]);
       } finally {
@@ -100,11 +152,13 @@ export default function DashboardPage() {
     <main className="landing-page">
       {/* ===== HERO 区域 - 带粒子网络动画 ===== */}
       <section
-        className="relative overflow-hidden grain-overlay flex items-center justify-center"
+        className="landing-hero relative overflow-hidden grain-overlay flex items-center justify-center"
         style={{ minHeight: '65vh' }}
       >
         {/* 粒子动画背景 */}
-        <HeroCanvas />
+        <div className="landing-hero-visual" aria-hidden="true">
+          <HeroCanvas />
+        </div>
 
         {/* Hero 内容 */}
         <div className="relative z-10 w-full max-w-[720px] min-w-0 text-center px-4 sm:px-6">
@@ -151,9 +205,9 @@ export default function DashboardPage() {
           <div className="mt-8">
             <button
               onClick={() => document.getElementById('search-section')?.scrollIntoView({ behavior: 'smooth' })}
-              className="cta-btn inline-block font-mono font-semibold text-sm uppercase rounded-none px-8 py-3 min-h-[44px] leading-[44px]"
+              className="cta-btn inline-block font-mono font-semibold text-sm rounded-xl px-7 py-3 min-h-[44px] leading-normal"
               style={{
-                letterSpacing: '0.08em',
+                letterSpacing: '0.04em',
                 background: 'var(--accent)',
                 color: '#FFFFFF',
               }}
@@ -165,7 +219,7 @@ export default function DashboardPage() {
       </section>
 
       {/* ===== 搜索区域 ===== */}
-      <section id="search-section" className="py-10 sm:py-24 px-4 sm:px-6">
+      <section id="search-section" className="landing-section landing-section-search py-10 sm:py-20 px-4 sm:px-6">
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
           <SectionTitle>语义检索</SectionTitle>
 
@@ -198,7 +252,7 @@ export default function DashboardPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="输入关键词，向量检索相关知识..."
-              className="w-full h-14 pl-6 pr-14 rounded-2xl text-base outline-none transition-all duration-200 bg-white"
+              className="w-full h-14 pl-6 pr-14 rounded-xl text-base outline-none transition-all duration-200 bg-white"
               style={{
                 border: '2px solid var(--card-border)',
                 color: 'var(--foreground)',
@@ -361,105 +415,37 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* ===== 功能特性介绍 ===== */}
+      {/* ===== 快捷入口 ===== */}
       {!showResults && (
-        <>
-          <section className="py-10 sm:py-24 px-4 sm:px-6">
-            <div style={{ maxWidth: 700, margin: '0 auto' }}>
-              <SectionTitle>核心能力</SectionTitle>
+        <section className="landing-section landing-section-quick-access pt-2 pb-12 sm:pt-4 sm:pb-20 px-4 sm:px-6">
+          <div style={{ maxWidth: 700, margin: '0 auto' }}>
+            <SectionTitle>快捷入口</SectionTitle>
 
-              <ol className="mt-10 space-y-10" style={{ listStyle: 'none', padding: 0 }}>
-                {[
-                  {
-                    num: '01',
-                    title: '向量语义检索',
-                    desc: '基于 Embedding 的深度语义理解，超越关键词匹配，真正理解你的查询意图',
-                  },
-                  {
-                    num: '02',
-                    title: '多源知识融合',
-                    desc: '自动整合对话记录、笔记文档、代码片段等多维度信息，构建统一知识图谱',
-                  },
-                  {
-                    num: '03',
-                    title: '智能记忆管理',
-                    dedesc: 'AI 驱动的记忆提取、分类、关联分析，让知识库持续进化',
-                  },
-                  {
-                    num: '04',
-                    title: '隐私优先架构',
-                    desc: '本地化部署，数据完全自控，支持离线使用，确保知识安全',
-                  },
-                ].map((feature) => (
-                  <li key={feature.num}>
-                    <div className="flex items-baseline gap-4 flex-wrap">
-                      <span
-                        className="font-mono font-semibold text-sm"
-                        style={{
-                          color: 'var(--foreground-subtle)',
-                          letterSpacing: '0.05em',
-                          minWidth: '2.5rem',
-                        }}
-                      >
-                        {feature.num}
-                      </span>
-                      <h3
-                        className="font-mono font-semibold"
-                        style={{
-                          fontSize: '1.05rem',
-                          letterSpacing: '-0.01em',
-                          color: 'var(--foreground)',
-                        }}
-                      >
-                        {feature.title}
-                      </h3>
-                    </div>
-                    <p
-                      className="font-sans mt-3"
-                      style={{
-                        fontSize: '0.95rem',
-                        lineHeight: 1.6,
-                        color: 'var(--foreground-subtle)',
-                        marginLeft: '2.5rem',
-                        paddingLeft: '1rem',
-                        borderLeft: '1px solid var(--card-border)',
-                      }}
-                    >
-                      {feature.desc}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 sm:mt-10">
+              {[
+                { label: '浏览全部记忆', href: '/memory', icon: 'library' as const },
+                { label: '配置 AI 模型', href: '/settings/ai', icon: 'settings' as const },
+                { label: '查看用户画像', href: '/profile', icon: 'profile' as const },
+                { label: '审计日志', href: '/audit', icon: 'audit' as const },
+              ].map((item) => (
+                <button
+                  key={item.href}
+                  onClick={() => router.push(item.href)}
+                  className="quick-link p-5 rounded-xl"
+                  style={{ color: 'var(--foreground)' }}
+                >
+                  <span className="quick-link__header">
+                    <span className="quick-link__icon">
+                      <QuickAccessIcon name={item.icon} />
+                    </span>
+                    <span className="font-sans font-semibold text-sm">{item.label}</span>
+                  </span>
+                  <span className="quick-link__hint">点击进入 →</span>
+                </button>
+              ))}
             </div>
-          </section>
-
-          {/* 快捷入口 */}
-          <section className="py-10 sm:py-24 px-4 sm:px-6">
-            <div style={{ maxWidth: 700, margin: '0 auto' }}>
-              <SectionTitle>快捷入口</SectionTitle>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-10">
-                {[
-                  { label: '浏览全部记忆', href: '/memory', icon: '📚' },
-                  { label: '配置 AI 模型', href: '/settings/ai', icon: '⚙️' },
-                  { label: '查看用户画像', href: '/profile', icon: '👤' },
-                  { label: '审计日志', href: '/audit', icon: '📋' },
-                ].map((item) => (
-                  <button
-                    key={item.href}
-                    onClick={() => router.push(item.href)}
-                    className="icon-link text-left p-5 rounded-xl transition-all duration-200 bg-white border border-[#E8E0D4] hover:border-[#D4B84A] hover:shadow-md group"
-                    style={{ color: 'var(--foreground)' }}
-                  >
-                    <span className="text-2xl mr-3">{item.icon}</span>
-                    <span className="font-mono font-semibold text-sm">{item.label}</span>
-                    <span className="block text-xs mt-2 opacity-60">点击进入 →</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-        </>
+          </div>
+        </section>
       )}
 
       {/* ===== Footer ===== */}

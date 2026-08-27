@@ -165,6 +165,88 @@ body::before {
   background-color: transparent;
 }
 
+/* 首页首屏：让粒子网络融入暖纸张背景，而不是形成独立的视觉孤岛 */
+.landing-hero {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(201, 162, 39, 0.09), transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 249, 0.42), rgba(245, 240, 232, 0));
+  border-bottom: 1px solid rgba(166, 124, 0, 0.12);
+}
+
+.landing-hero-visual {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+  opacity: 0.72;
+  mix-blend-mode: multiply;
+}
+
+.landing-section-search {
+  border-bottom: 1px solid rgba(166, 124, 0, 0.1);
+}
+
+/* 快捷入口：使用同一套卡片、图标和提示层级 */
+.quick-link {
+  display: flex;
+  min-height: 7.75rem;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--card-border);
+  background: rgba(255, 253, 249, 0.86);
+  box-shadow: var(--shadow-card);
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  transition:
+    transform 200ms var(--ease-smooth),
+    border-color 200ms var(--ease-smooth),
+    box-shadow 200ms var(--ease-smooth),
+    background-color 200ms var(--ease-smooth);
+}
+
+.quick-link:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-line);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.quick-link__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.quick-link__icon {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  transition:
+    background-color 200ms var(--ease-smooth),
+    border-color 200ms var(--ease-smooth),
+    color 200ms var(--ease-smooth);
+}
+
+.quick-link:hover .quick-link__icon {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #FFFFFF;
+}
+
+.quick-link__hint {
+  color: var(--foreground-subtle);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
 /* Grain overlay（局部噪点） */
 .grain-overlay::after {
   content: '';
@@ -189,13 +271,13 @@ body::before {
     box-shadow 0.2s ease;
 }
 .cta-btn:hover {
-  transform: scale(1.04);
-  background-color: var(--background-warm) !important;
-  color: var(--foreground) !important;
-  box-shadow: 0 0 0 2px var(--foreground);
+  transform: translateY(-2px);
+  background-color: var(--accent-hover) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 8px 20px rgba(166, 124, 0, 0.2);
 }
 .cta-btn:active {
-  transform: scale(0.98);
+  transform: translateY(0);
 }
 .cta-btn:focus-visible {
   outline: 2px solid var(--foreground);
