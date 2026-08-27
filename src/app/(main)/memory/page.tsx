@@ -1,491 +1,243 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import React, { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
+import EmptyState from '@/components/common/EmptyState';
+import MemoryLibraryItem from '@/components/memory/MemoryLibraryItem';
+import {
+  listMemoriesClient,
+  searchMemoriesClient,
+} from '@/lib/memory-api-client';
+import { defaultTopicLabels } from '@/config/topics-data';
 import type { MemoryRecord } from '@/types/memory';
-import { listMemoriesClient, memoryTopicHref } from '@/lib/memory-api-client';
 
-// 动态导入 HeroCanvas（避免 SSR 问题）
-const HeroCanvas = dynamic(
-  () => import('@/components/ui/HeroCanvas').then((mod) => ({ default: mod.HeroCanvas })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="absolute inset-0 bg-gradient-to-br from-[#FAF8F5] via-[#FFFDF9] to-[#F5F0E8]" />
-    ),
-  }
-);
+const PAGE_SIZE = 12;
+const SEARCH_LIMIT = 50;
 
-interface ViewState {
-  x: number;
-  y: number;
-  k: number;
-}
-
-const VIEW_W = 1600;
-const VIEW_H = 1000;
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 6;
-
-// 将记忆数据转换为地图节点
-interface KnowledgeNode {
-  id: string;
-  title: string;
-  x: number;
-  y: number;
-  r: number; // 半径（基于访问次数）
-  category: string;
-  tags: string[];
-  count: number; // 包含的记忆数量
-  color: string; // 棕白金配色
-  labelDy?: number; // 标签 Y 偏移
-}
-
-export default function MemoryMapPage() {
-  const router = useRouter();
-  const [memories, setMemories] = useState<MemoryRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<ViewState>({ x: 0, y: 0, k: 1 });
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const svgRef = useRef<SVGSVGElement>(null);
-  const isDragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-
-  // 加载记忆数据
-  useEffect(() => {
-    async function loadMemories() {
-      try {
-        const data = await listMemoriesClient();
-        setMemories(data.items);
-      } catch (error) {
-        console.error('Failed to load memories:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadMemories();
-  }, []);
-
-  // 将记忆聚合为知识节点
-  const nodes: KnowledgeNode[] = useMemo(() => {
-    const topicMap = new Map<
-      string,
-      {
-        memories: MemoryRecord[];
-        tags: Set<string>;
-        category: string;
-        visits: number;
-      }
-    >();
-
-    memories.forEach((mem) => {
-      const topic = mem.topic || 'general';
-      const existing = topicMap.get(topic) || {
-        memories: [] as MemoryRecord[],
-        tags: new Set<string>(),
-        category: (mem as any).category || 'knowledge',
-        visits: 0,
-      };
-      existing.memories.push(mem);
-      mem.tags.forEach((t) => existing.tags.add(t));
-      existing.visits += mem.accessCount || 0;
-      topicMap.set(topic, existing);
-    });
-
-    // 转换为节点数组，使用稳定的伪随机位置
-    const result: KnowledgeNode[] = Array.from(topicMap.entries()).map(
-      ([topic, data]) => {
-        // 基于主题的 hash 生成稳定的位置
-        const hash = topic.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0);
-        const x = Math.abs(hash % (VIEW_W - 200)) + 100;
-        const y = Math.abs(((hash >> 8) % (VIEW_H - 200)) + 100);
-
-        // 基于访问次数计算半径
-        let r = 20;
-        if (data.visits > 5) r = 32;
-        else if (data.visits > 2) r = 26;
-
-        // 配色方案（棕白金）
-        const colors: Record<string, string> = {
-          knowledge: '#8B7355', // 知识归纳 - 深棕
-          work: '#A0522D', // 工作经验 - 赭石
-          project: '#CD853F', // 项目沉淀 - 秘鲁色
-        };
-
-        return {
-          id: topic,
-          title: formatTopicName(topic),
-          x,
-          y,
-          r,
-          category: data.category,
-          tags: Array.from(data.tags).slice(0, 5),
-          count: data.memories.length,
-          color: colors[data.category] || '#8B7355',
-        };
-      }
-    );
-
-    return result;
-  }, [memories]);
-
-  // 过滤节点
-  const filteredNodes = useMemo(() => {
-    if (!searchQuery.trim()) return nodes;
-    const q = searchQuery.toLowerCase();
-    return nodes.filter(
-      (node) =>
-        node.title.toLowerCase().includes(q) ||
-        node.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  }, [nodes, searchQuery]);
-
-  // 鼠标事件处理
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const factor = e.deltaY > 0 ? 0.92 : 1.08;
-      setView((prev) => ({
-        ...prev,
-        k: clampZoom(prev.k * factor),
-      }));
-    },
-    []
-  );
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      if (e.target === svgRef.current || (e.target as HTMLElement).tagName === 'svg') {
-        isDragging.current = true;
-        dragStart.current = { x: e.clientX - view.x, y: e.clientY - view.y };
-        (e.target as SVGSVGElement).setPointerCapture(e.pointerId);
-      }
-    },
-    [view]
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<SVGSVGElement>) => {
-      if (isDragging.current) {
-        setView((prev) => ({
-          ...prev,
-          x: e.clientX - dragStart.current.x,
-          y: e.clientY - dragStart.current.y,
-        }));
-      }
-    },
-    []
-  );
-
-  const handlePointerUp = useCallback(() => {
-    isDragging.current = false;
-  }, []);
-
-  // 缩放控制
-  const zoomIn = () => setView((v) => ({ ...v, k: clampZoom(v.k * 1.25) }));
-  const zoomOut = () => setView((v) => ({ ...v, k: clampZoom(v.k * 0.8) }));
-  const resetView = () => setView({ x: 0, y: 0, k: 1 });
-
-  // 点击节点跳转
-  const handleNodeClick = (nodeId: string) => {
-    router.push(memoryTopicHref(nodeId));
-  };
-
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center" style={{ background: '#FAF8F5' }}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A227] mx-auto mb-4" />
-          <p style={{ color: '#5D4E37' }}>加载知识图谱...</p>
-        </div>
-      </div>
-    );
-  }
-
+function LoadingState({ label }: { label: string }) {
   return (
-    <div className="relative h-screen overflow-hidden" style={{ background: '#FAF8F5' }}>
-      {/* 动态粒子背景 */}
-      <div className="absolute inset-0 z-0">
-        <HeroCanvas />
-      </div>
-
-      {/* 顶部导航栏 */}
-      <div className="absolute top-0 left-0 right-0 z-30 px-6 py-4 flex items-center justify-between bg-gradient-to-b from-white/80 to-transparent backdrop-blur-sm">
-        <div>
-          <h1 className="text-xl font-bold font-mono tracking-tight" style={{ color: '#3E3224' }}>
-            知识图谱
-          </h1>
-          <p className="text-sm mt-0.5" style={{ color: '#8B7355' }}>
-            {filteredNodes.length} 个知识节点 · {memories.length} 条记忆
-          </p>
+    <div className="flex min-h-[280px] items-center justify-center">
+      <div className="text-center">
+        <div className="loading-dots mb-4">
+          <span />
+          <span />
+          <span />
         </div>
-
-        <div className="flex items-center gap-4">
-          {/* 搜索框 */}
-          <input
-            type="text"
-            placeholder="搜索知识点..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-[#E8DCC8] bg-white/90 text-sm focus:outline-none focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/20 transition-all"
-            style={{
-              width: '240px',
-              color: '#3E3224',
-              fontFamily: 'monospace',
-            }}
-          />
-
-          {/* 返回首页按钮 */}
-          <Link
-            href="/"
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-[#C9A227] hover:text-white"
-            style={{
-              background: '#3E3224',
-              color: '#FAF8F5',
-              fontFamily: 'monospace',
-            }}
-          >
-            返回首页
-          </Link>
-        </div>
-      </div>
-
-      {/* SVG 地图层 */}
-      <svg
-        ref={svgRef}
-        className="absolute inset-0 z-10 cursor-grab active:cursor-grabbing"
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        onWheel={handleWheel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        style={{
-          transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`,
-          transformOrigin: '0 0',
-        }}
-      >
-        {/* 连线 */}
-        <g className="pointer-events-none">
-          {filteredNodes.map((node, i) =>
-            filteredNodes.slice(i + 1).map((other) => {
-              // 如果有共同标签，绘制连线
-              const sharedTags = node.tags.filter((t) => other.tags.includes(t));
-              if (sharedTags.length === 0) return null;
-
-              const dist = Math.sqrt(Math.pow(node.x - other.x, 2) + Math.pow(node.y - other.y, 2));
-              if (dist > 300) return null;
-
-              const opacity = Math.max(0.08, 0.25 * (1 - dist / 300));
-
-              return (
-                <line
-                  key={`${node.id}-${other.id}`}
-                  x1={node.x}
-                  y1={node.y}
-                  x2={other.x}
-                  y2={other.y}
-                stroke="#C9A227"
-                strokeWidth={Math.max(0.5, sharedTags.length * 0.8)}
-                opacity={
-                  hoveredNode === node.id || hoveredNode === other.id ? opacity * 2.5 : opacity
-                }
-              />
-              );
-            })
-          )}
-        </g>
-
-        {/* 节点 */}
-        {filteredNodes.map((node) => {
-          const isHovered = hoveredNode === node.id;
-          const scale = isHovered ? 1.25 : 1;
-
-          return (
-            <g
-              key={node.id}
-              transform={`translate(${node.x}, ${node.y}) scale(${scale})`}
-              onClick={() => handleNodeClick(node.id)}
-              onMouseEnter={() => setHoveredNode(node.id)}
-              onMouseLeave={() => setHoveredNode(null)}
-              className="cursor-pointer transition-transform duration-200"
-              style={{ transformOrigin: `${node.x}px ${node.y}px` }}
-            >
-              {/* 外发光效果（悬停时） */}
-              {isHovered && (
-                <circle
-                  r={node.r + 10}
-                  fill={node.color}
-                  opacity={0.15}
-                  className="animate-pulse"
-                />
-              )}
-
-              {/* 主圆 */}
-              <circle
-                r={node.r}
-                fill={node.color}
-                stroke="#C9A227"
-                strokeWidth={isHovered ? 2.5 : 1.5}
-                opacity={isHovered ? 1 : 0.85}
-                className="transition-all duration-200"
-              />
-
-              {/* 标签文字 */}
-              <text
-                textAnchor="middle"
-                dominantBaseline="central"
-                y={node.labelDy || 0}
-                fontSize={12}
-                fontWeight={600}
-                fill="#FFFFFF"
-                pointerEvents="none"
-                className="select-none drop-shadow-sm"
-              >
-                {node.title.length > 6 ? node.title.slice(0, 5) + '..' : node.title}
-              </text>
-
-              {/* 计数徽章 */}
-              {node.count > 1 && (
-                <>
-                  <circle cx={node.r - 4} cy={-node.r + 4} r={10} fill="#C9A227" />
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    x={node.r - 4}
-                    y={-node.r + 4}
-                    fontSize={9}
-                    fontWeight={700}
-                    fill="#3E3224"
-                    pointerEvents="none"
-                  >
-                    {node.count}
-                  </text>
-                </>
-              )}
-
-              {/* 悬停提示 */}
-              {isHovered && (
-                <g transform={`translate(0, ${-node.r - 20})`}>
-                  <rect
-                    x={-80}
-                    y={-16}
-                    width={160}
-                    height={32}
-                    rx={6}
-                    fill="#3E3224"
-                    opacity={0.95}
-                  />
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    y={0}
-                    fontSize={11}
-                    fill="#FAF8F5"
-                    pointerEvents="none"
-                    fontFamily="monospace"
-                  >
-                    点击查看详情 →
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* 右下角缩放控制 */}
-      <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-2">
-        <button
-          onClick={zoomIn}
-          className="w-10 h-10 rounded-lg bg-white/90 shadow-lg flex items-center justify-center text-lg font-bold hover:bg-[#C9A227] hover:text-white transition-all"
-          style={{ color: '#3E3224' }}
-        >
-          ⊕
-        </button>
-        <button
-          onClick={zoomOut}
-          className="w-10 h-10 rounded-lg bg-white/90 shadow-lg flex items-center justify-center text-lg font-bold hover:bg-[#C9A227] hover:text-white transition-all"
-          style={{ color: '#3E3224' }}
-        >
-          ⊖
-        </button>
-        <button
-          onClick={resetView}
-          className="w-10 h-10 rounded-lg bg-white/90 shadow-lg flex items-center justify-center text-sm font-bold hover:bg-[#C9A227] hover:text-white transition-all"
-          style={{ color: '#3E3224' }}
-        >
-          ↺
-        </button>
-      </div>
-
-      {/* 左下角图例 */}
-      <div className="absolute bottom-6 left-6 z-30 p-4 rounded-xl bg-white/90 shadow-lg backdrop-blur-sm max-w-xs">
-        <h3 className="font-mono font-bold text-sm mb-2" style={{ color: '#3E3224' }}>
-          图例说明
-        </h3>
-        <div className="space-y-2 text-xs" style={{ color: '#5D4E37' }}>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full" style={{ background: '#8B7355' }} />
-            <span>知识归纳</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full" style={{ background: '#A0522D' }} />
-            <span>工作经验</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full" style={{ background: '#CD853F' }} />
-            <span>项目沉淀</span>
-          </div>
-          <hr className="my-1 border-[#E8DCC8]" />
-          <p className="opacity-70">节点大小反映活跃度</p>
-          <p className="opacity-70">连线表示关联强度</p>
-        </div>
+        <p className="text-sm text-text-secondary">{label}</p>
       </div>
     </div>
   );
 }
 
-// 辅助函数：格式化主题名称
-function formatTopicName(topic: string): string {
-  // URL 解码
-  try {
-    const decoded = decodeURIComponent(topic);
-    if (decoded !== topic) return decoded;
-  } catch {
-    // 无法解码时继续使用原始 topic。
-  }
+export default function MemoryLibraryPage() {
+  const [memories, setMemories] = useState<MemoryRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [activeTopic, setActiveTopic] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchMode, setSearchMode] = useState(false);
+  const [retrievalMode, setRetrievalMode] = useState<'vector' | 'keyword' | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
 
-  // 常见映射
-  const nameMap: Record<string, string> = {
-    general: '通用知识',
-    'ai-coding': 'AI 编程助手',
-    'daily-notes': '日常笔记',
-    'work-log': '工作日志',
-    'project-summary': '项目总结',
-    learning: '学习笔记',
-    ideas: '灵感创意',
+  useEffect(() => {
+    if (searchMode) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+
+    listMemoriesClient(PAGE_SIZE, page, activeTopic === 'all' ? undefined : activeTopic)
+      .then((data) => {
+        if (cancelled) return;
+        setMemories(data.items);
+        setTotal(data.total);
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setMemories([]);
+        setTotal(0);
+        setError(loadError instanceof Error ? loadError.message : '记忆列表加载失败');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTopic, page, reloadToken, searchMode]);
+
+  const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = searchInput.trim();
+    if (!query) return;
+
+    setSearchMode(true);
+    setLoading(true);
+    setError('');
+    setRetrievalMode(null);
+
+    try {
+      const data = await searchMemoriesClient(query, SEARCH_LIMIT);
+      setMemories(data.results);
+      setTotal(data.total);
+      setRetrievalMode(data.retrievalMode);
+    } catch (searchError) {
+      setMemories([]);
+      setTotal(0);
+      setError(searchError instanceof Error ? searchError.message : '记忆搜索失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (nameMap[topic]) return nameMap[topic];
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchMode(false);
+    setRetrievalMode(null);
+    setPage(1);
+    setReloadToken((token) => token + 1);
+  };
 
-  // 清理特殊字符
-  const cleaned = topic.replace(/[-_]/g, ' ').replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s]/g, '');
+  const handleTopicChange = (topic: string) => {
+    setActiveTopic(topic);
+    setPage(1);
+    setSearchInput('');
+    setSearchMode(false);
+    setRetrievalMode(null);
+  };
 
-  // 如果是纯英文，首字母大写
-  if (/^[a-zA-Z\s]+$/.test(cleaned)) {
-    return cleaned
-      .split(' ')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const topicOptions = Object.entries(defaultTopicLabels);
 
-  // 回退到原始字符串（截断过长）
-  return cleaned.length > 15 ? cleaned.slice(0, 15) + '...' : cleaned || '未命名';
-}
+  return (
+    <div className="min-h-full px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-8 flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-tertiary">
+              Memory Archive
+            </p>
+            <h1 className="font-mono text-3xl font-bold tracking-tight text-text-primary">记忆检索库</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+              搜索、筛选和浏览已经通过审计写入的记忆，点击卡片查看完整内容。
+            </p>
+          </div>
+          <Link href="/memory/map" className="btn shrink-0">
+            查看知识图谱 →
+          </Link>
+        </header>
 
-function clampZoom(k: number): number {
-  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, k));
+        <section className="card mb-8 p-4 sm:p-5" aria-label="记忆搜索和筛选">
+          <form onSubmit={handleSearch} className="flex flex-col gap-3 md:flex-row">
+            <label className="sr-only" htmlFor="memory-search-input">
+              搜索记忆
+            </label>
+            <input
+              id="memory-search-input"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="搜索标题、摘要、正文或标签..."
+              className="input min-h-11 flex-1"
+            />
+            <button type="submit" className="btn min-h-11 md:px-7" disabled={loading && searchMode}>
+              {loading && searchMode ? '搜索中...' : '搜索记忆'}
+            </button>
+            {searchMode ? (
+              <button type="button" className="btn-secondary min-h-11" onClick={clearSearch}>
+                返回列表
+              </button>
+            ) : null}
+          </form>
+
+          {!searchMode ? (
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label htmlFor="memory-topic-filter" className="text-sm font-medium text-text-secondary">
+                话题筛选
+              </label>
+              <select
+                id="memory-topic-filter"
+                value={activeTopic}
+                onChange={(event) => handleTopicChange(event.target.value)}
+                className="input min-h-10 max-w-xs"
+              >
+                <option value="all">全部话题</option>
+                {topicOptions.map(([topic, label]) => (
+                  <option key={topic} value={topic}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+        </section>
+
+        {retrievalMode === 'keyword' ? (
+          <div role="status" className="mb-6 rounded-xl border border-warning-bg bg-warning-bg/70 px-4 py-3 text-sm text-warning">
+            当前处于降级模式：Embedding 不可用，搜索已自动切换为关键词匹配。
+          </div>
+        ) : null}
+
+        {error ? (
+          <div role="alert" className="mb-6 flex flex-col gap-3 rounded-xl border border-error/20 bg-error-bg px-4 py-4 text-sm text-error sm:flex-row sm:items-center sm:justify-between">
+            <span>{error}</span>
+            <button type="button" className="btn-secondary shrink-0" onClick={() => setReloadToken((token) => token + 1)}>
+              重试
+            </button>
+          </div>
+        ) : null}
+
+        {loading ? (
+          <LoadingState label={searchMode ? '正在搜索记忆...' : '正在加载记忆库...'} />
+        ) : memories.length === 0 ? (
+          <EmptyState
+            title={searchMode ? '没有找到匹配的记忆' : '暂无记忆'}
+            description={searchMode ? '尝试更换关键词或检查拼写。' : '先开始一段对话或导入内容，记忆会出现在这里。'}
+          />
+        ) : (
+          <>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-mono text-lg font-semibold text-text-primary">
+                {searchMode ? `搜索结果（${total}）` : `全部记忆（${total}）`}
+              </h2>
+              {!searchMode ? <span className="text-sm text-text-tertiary">第 {page} / {totalPages} 页</span> : null}
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {memories.map((memory) => (
+                <MemoryLibraryItem key={memory.id} memory={memory} />
+              ))}
+            </div>
+
+            {!searchMode && totalPages > 1 ? (
+              <nav className="mt-8 flex items-center justify-center gap-3" aria-label="记忆列表分页">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  上一页
+                </button>
+                <span className="min-w-20 text-center text-sm text-text-secondary">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  下一页
+                </button>
+              </nav>
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
 }

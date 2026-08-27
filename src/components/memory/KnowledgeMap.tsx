@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { MemoryRecord } from '@/types/memory';
+import React from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { memoryTopicHref } from '@/lib/memory-api-client';
+import type { MemoryRecord } from '@/types/memory';
 
 /* ── 常量与类型 ── */
 
@@ -11,15 +13,13 @@ const VIEW_H = 900;
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 6;
 
-const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
-
 interface ViewState {
   x: number;
   y: number;
   k: number;
 }
 
-interface KnowledgeNode {
+export interface KnowledgeNode {
   id: string;
   label: string;
   x: number;
@@ -79,7 +79,7 @@ const categoryRegions: CategoryRegion[] = [
 ];
 
 /* ── 将记忆数据转换为节点 ── */
-function buildKnowledgeGraph(memories: MemoryRecord[]): { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] } {
+export function buildKnowledgeGraph(memories: MemoryRecord[]): { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] } {
   const topicMap = new Map<
     string,
     { memories: MemoryRecord[]; keywords: Set<string>; category: 'knowledge' | 'work' | 'project' }
@@ -602,7 +602,7 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
             )}
 
             <Link
-              href={`/memory?mode=section&topic=${node.id}`}
+              href={memoryTopicHref(node.id)}
               className="cta-btn w-full block text-center py-2.5 rounded-xl font-semibold text-sm"
             >
               查看详情 →

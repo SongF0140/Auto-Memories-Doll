@@ -14,11 +14,19 @@ export function memoryTopicHref(topic: string): string {
   return `/memory/topic/${encodeURIComponent(topic)}`;
 }
 
-export async function listMemoriesClient(pageSize = 100): Promise<MemoryListResponse> {
+export async function listMemoriesClient(
+  pageSize = 100,
+  page = 1,
+  topic?: string,
+): Promise<MemoryListResponse> {
   const safePageSize = Math.min(100, Math.max(1, Math.trunc(pageSize)));
-  const response = await requestApi<MemoryListResponse>(
-    `/api/memory?pageSize=${safePageSize}`,
-  );
+  const safePage = Math.max(1, Math.trunc(page));
+  const params = new URLSearchParams();
+  if (safePage > 1) params.set("page", String(safePage));
+  params.set("pageSize", String(safePageSize));
+  if (topic?.trim()) params.set("topic", topic.trim());
+
+  const response = await requestApi<MemoryListResponse>(`/api/memory?${params.toString()}`);
   return response.data;
 }
 

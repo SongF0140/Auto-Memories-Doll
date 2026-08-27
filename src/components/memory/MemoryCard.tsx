@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { MemoryRecord } from "../../types/memory";
 import Badge from "../common/Badge";
 import { getTopicLabelClient } from "../../config/topics-data";

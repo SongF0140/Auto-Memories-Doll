@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20")));
   const tag = searchParams.get("tag")?.trim() || undefined;
+  const topic = searchParams.get("topic")?.trim() || undefined;
   const rawSortBy = searchParams.get("sortBy") || "updatedAt";
   const sortBy = SORTABLE_FIELDS.has(rawSortBy) ? rawSortBy : "updatedAt";
   const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
@@ -32,8 +33,9 @@ export async function GET(request: NextRequest) {
       sortBy,
       sortOrder: sortOrder as "asc" | "desc",
       tag,
+      topic,
     });
-    const total = service.count(tag);
+    const total = service.count({ tag, topic });
 
     return NextResponse.json(apiResponse({ items, total, page, pageSize }));
   } catch (error) {

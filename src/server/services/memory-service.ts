@@ -333,6 +333,7 @@ export class MemoryService {
     sortBy?: string;
     sortOrder?: "asc" | "desc";
     tag?: string;
+    topic?: string;
   }): MemoryRecord[] {
     const limit = opts?.limit ?? -1;
     const offset = opts?.offset ?? 0;
@@ -340,13 +341,19 @@ export class MemoryService {
       opts?.sortBy && MemoryService.SORTABLE_FIELDS.has(opts.sortBy) ? opts.sortBy : "updatedAt";
     const sortOrder = opts?.sortOrder === "asc" ? "ASC" : "DESC";
     const tag = opts?.tag?.trim() || undefined;
+    const topic = opts?.topic?.trim() || undefined;
 
     const params: unknown[] = [];
-    let whereClause = "";
+    const conditions: string[] = [];
     if (tag) {
-      whereClause = "WHERE EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)";
+      conditions.push("EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)");
       params.push(tag);
     }
+    if (topic) {
+      conditions.push("topic = ?");
+      params.push(topic);
+    }
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     let sql = `SELECT * FROM memories ${whereClause} ORDER BY ${sortBy} ${sortOrder}`;
     if (limit > 0) {
@@ -377,15 +384,23 @@ export class MemoryService {
   }
 
   /** 资料库记忆总量（用于去重样本不足时发出警告），可选 tag 过滤 */
-  count(tag?: string): number {
+  count(tagOrFilter?: string | { tag?: string; topic?: string }): number {
+    const filter = typeof tagOrFilter === "string" ? { tag: tagOrFilter } : tagOrFilter;
+    const tagFilter = filter?.tag?.trim();
+    const topicFilter = filter?.topic?.trim();
     let sql = "SELECT COUNT(*) as cnt FROM memories";
-    const tagFilter = tag?.trim();
+    const conditions: string[] = [];
+    const params: string[] = [];
     if (tagFilter) {
-      sql += " WHERE EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)";
-      const row = this.db.prepare(sql).get(tagFilter) as any;
-      return row?.cnt ?? 0;
+      conditions.push("EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)");
+      params.push(tagFilter);
     }
-    const row = this.db.prepare(sql).get() as any;
+    if (topicFilter) {
+      conditions.push("topic = ?");
+      params.push(topicFilter);
+    }
+    if (conditions.length > 0) sql += ` WHERE ${conditions.join(" AND ")}`;
+    const row = (params.length > 0 ? this.db.prepare(sql).get(...params) : this.db.prepare(sql).get()) as any;
     return row?.cnt ?? 0;
   }
 

@@ -53,6 +53,23 @@ describe("memory browser API client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/memory?pageSize=100", undefined);
   });
 
+  it("keeps pagination and topic filters in the list query", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { items: [memory], total: 1, page: 2, pageSize: 12 },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listMemoriesClient(12, 2, "ai-coding");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/memory?page=2&pageSize=12&topic=ai-coding",
+      undefined,
+    );
+  });
+
   it("reads semantic search results from data.results and uses the limit contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -74,6 +91,14 @@ describe("memory browser API client", () => {
       "/api/memory/search?q=%E6%B5%8B%E8%AF%95%20%E6%9F%A5%E8%AF%A2&limit=10",
       undefined,
     );
+  });
+
+  it("does not issue a request for an empty search", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(searchMemoriesClient("   ")).rejects.toThrow("搜索内容不能为空");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps memory ids and topics on separate route namespaces", () => {
