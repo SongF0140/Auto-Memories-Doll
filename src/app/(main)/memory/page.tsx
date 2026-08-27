@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { MemoryRecord } from '@/types/memory';
+import { listMemoriesClient, memoryTopicHref } from '@/lib/memory-api-client';
 
 // 动态导入 HeroCanvas（避免 SSR 问题）
 const HeroCanvas = dynamic(
@@ -57,11 +58,8 @@ export default function MemoryMapPage() {
   useEffect(() => {
     async function loadMemories() {
       try {
-        const res = await fetch('/api/memory');
-        if (res.ok) {
-          const data = await res.json();
-          setMemories(data.memories || []);
-        }
+        const data = await listMemoriesClient();
+        setMemories(data.items);
       } catch (error) {
         console.error('Failed to load memories:', error);
       } finally {
@@ -99,7 +97,7 @@ export default function MemoryMapPage() {
 
     // 转换为节点数组，使用稳定的伪随机位置
     const result: KnowledgeNode[] = Array.from(topicMap.entries()).map(
-      ([topic, data], index) => {
+      ([topic, data]) => {
         // 基于主题的 hash 生成稳定的位置
         const hash = topic.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0);
         const x = Math.abs(hash % (VIEW_W - 200)) + 100;
@@ -193,7 +191,7 @@ export default function MemoryMapPage() {
 
   // 点击节点跳转
   const handleNodeClick = (nodeId: string) => {
-    router.push(`/memory/${encodeURIComponent(nodeId)}`);
+    router.push(memoryTopicHref(nodeId));
   };
 
   if (loading) {
@@ -456,7 +454,9 @@ function formatTopicName(topic: string): string {
   try {
     const decoded = decodeURIComponent(topic);
     if (decoded !== topic) return decoded;
-  } catch {}
+  } catch {
+    // 无法解码时继续使用原始 topic。
+  }
 
   // 常见映射
   const nameMap: Record<string, string> = {

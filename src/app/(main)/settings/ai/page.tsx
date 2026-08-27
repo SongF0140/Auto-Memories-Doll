@@ -86,7 +86,9 @@ export default function AiSettingsPage() {
       if (saved) {
         try {
           return { ...defaultConfig, ...JSON.parse(saved) };
-        } catch {}
+        } catch {
+          // 本地配置损坏时回退到默认值。
+        }
       }
     }
     return defaultConfig;

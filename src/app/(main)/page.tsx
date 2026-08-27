@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { requestApi } from '@/lib/api-client';
+import { memoryDetailHref, searchMemoriesClient } from '@/lib/memory-api-client';
 import { HeroCanvas } from '@/components/ui/HeroCanvas';
 
 type SearchMode = 'all' | 'notes' | 'conversations' | 'images';
@@ -107,10 +107,8 @@ export default function DashboardPage() {
       setShowResults(true);
 
       try {
-        const res = await requestApi<{ items: SearchResult[]; total: number }>(
-          `/api/memory/search?q=${encodeURIComponent(query.trim())}&pageSize=10`
-        );
-        setResults(res.data.items || []);
+        const data = await searchMemoriesClient(query, 10);
+        setResults(data.results);
 
         // 保存搜索历史
         const updated = [query.trim(), ...recentQueries.filter((q) => q !== query.trim())].slice(0, 10);
@@ -319,7 +317,7 @@ export default function DashboardPage() {
                 {results.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => router.push(`/memory/${item.id}`)}
+                    onClick={() => router.push(memoryDetailHref(item.id))}
                     className="w-full text-left p-5 rounded-xl transition-all duration-200 block bg-white border border-[#E8E0D4] hover:border-[#D4B84A] hover:shadow-md group/item"
                   >
                     {/* 标题 */}

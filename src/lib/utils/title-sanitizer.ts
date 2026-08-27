@@ -6,6 +6,7 @@
  */
 
 /** 需要移除的非法字符模式 */
+// eslint-disable-next-line no-control-regex
 const ILLEGAL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
 
 /** 常见无意义符号前缀/后缀（连续重复） */

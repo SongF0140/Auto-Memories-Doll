@@ -803,6 +803,7 @@ export type ConflictRecord = {
 | 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：34 个测试文件，346 passed / 0 skipped，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路、配置 API 请求体验证、提供商目录、上下文压缩和首个 React 设置表单 SSR 测试 | ~~P2~~ |
 | 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
 | 会话系统提示快照 | 持久化 system 消息 | 已修复：`ChatSessionService.appendSnapshot` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
+| 聊天 UI 与记忆页面契约回归 | Phase 2 要求多会话 UI 已接入；第 4.9 节要求前端可检索并进入记忆详情 | 已修复：恢复 `/chat`、`ChatInterface` 与 `useChatSession`，但按既有 UI 设计保持顶部导航仅“首页 / 检索库 / 设置”三项；首页搜索统一读取 `data.results`，检索库统一读取 `data.items`；`/memory/[id]` 专用于记忆 ID，话题聚合迁至 `/memory/topic/[topic]` | ~~P0~~ |
 | 提供商配置 | AI 配置仅前端表单 | 已修复：`src/config/providers.json` 声明式目录经 `provider-loader.ts` 做 Zod 校验和读写，`/api/config/ai` 返回 `providerCatalog`，设置页模型/供应商选项由目录驱动并有单测覆盖 | ~~P2~~ |
 | docs 目录未纳入版本控制 | 第 2 节要求文档跟随实现，差异有记录 | 已修复：`.gitignore` 不再忽略 `docs-zh/`，仅继续忽略 `docs-zh/.obsidian/workspace.json` 这类个人编辑器状态；项目文档可进入版本控制 | ~~P2~~ |
 | 降级状态恢复 | 第 4.11 节描述降级但未提恢复 | 已修复：`ModelAdapter.startHealthCheck()` 周期性轮询，恢复后自动退出降级；scheduler setInterval 类型修复 | ~~P1~~ |
@@ -912,4 +913,7 @@ Phase 5 — 检索与质量收口
 - 已完成 GitHub Actions CI：`.github/workflows/ci.yml`（typecheck + lint + test + eval，ubuntu/windows）
 - usearch 移至 `optionalDependencies`：CI 不装原生 usearch，向量检索走 JS 精确后端
 - 新增/更新测试：`chat-system-prompt.test.ts`、`audit-report-writer.test.ts`、`vector-backend.test.ts`、`provider-loader.test.ts`、`api-route-contracts.test.ts`、`conversation-compressor.test.ts`、`ai-config-form.test.tsx`、`query-rewriter.test.ts`、`query-expansion.test.ts`、`memory-correction.test.ts`、`eval-metrics.test.ts`、`retrieval-eval.test.ts`
-- 当前测试总量：40 个测试文件，383 passed / 0 skipped（共 383 用例）
+- 已恢复聊天与多会话能力：`/chat`、`ChatInterface`、`useChatSession`、消息输入/展示/模式选择组件重新接入现有 Agent 事件流与 JSONL 会话 API；顶部导航按既有 UI 设计继续保持“首页 / 检索库 / 设置”三项，不展示对话入口
+- 已修复记忆浏览契约与路由语义：新增 `memory-api-client.ts` 统一消费 `data.items` / `data.results`；单条记忆使用 `/memory/[id]`，话题聚合使用 `/memory/topic/[topic]`
+- 新增回归测试：`memory-api-client.test.ts`、`chat-ui-restoration.test.tsx`
+- 当前测试总量：42 个测试文件，389 passed / 0 skipped（共 389 用例）
