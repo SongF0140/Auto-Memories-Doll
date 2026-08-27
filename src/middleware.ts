@@ -1,8 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ErrorCode } from "./lib/api-errors";
+import { apiError } from "./lib/api-response";
 
 const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
+
+function normalizeHostname(hostname: string): string {
+  return hostname.trim().replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
+}
+
+function hostnameFromHostHeader(hostHeader: string): string | null {
+  const value = hostHeader.trim();
+  if (!value || /[/?#@]/.test(value)) return null;
+
+  try {
+    const parsed = new URL(`http://${value}`);
+    if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+      return null;
+    }
+    return normalizeHostname(parsed.hostname);
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackRequest(request: NextRequest): boolean {
+  const hostHeader = request.headers.get("host");
+  const hostname = hostHeader === null ? normalizeHostname(request.nextUrl.hostname) : hostnameFromHostHeader(hostHeader);
+  return hostname !== null && LOOPBACK_HOSTNAMES.has(hostname);
+}
 
 export function middleware(request: NextRequest) {
+  if (!isLoopbackRequest(request)) {
+    return NextResponse.json(apiError(ErrorCode.VALIDATION_FAILED, "仅允许通过本机地址访问 API"), { status: 403 });
+  }
+
   const method = request.method;
 
   if (method === "POST" || method === "PUT" || method === "PATCH") {
