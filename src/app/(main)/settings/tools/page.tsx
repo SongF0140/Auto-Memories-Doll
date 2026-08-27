@@ -13,6 +13,7 @@ export default function ToolSourcesPage() {
   const [presets, setPresets] = useState<Record<string, Preset>>({});
 
   useEffect(() => {
+    document.title = "工具监听 | Auto-Memories-Doll";
     fetch(`${API_BASE}/tool-sources`)
       .then((r) => r.json())
       .then((d) => {

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { memoryDetailHref, searchMemoriesClient } from '@/lib/memory-api-client';
 import { HeroCanvas } from '@/components/ui/HeroCanvas';
 
@@ -18,7 +19,7 @@ interface SearchResult {
   score?: number;
 }
 
-type QuickAccessIconName = 'library' | 'settings' | 'profile' | 'audit';
+type QuickAccessIconName = 'chat' | 'library' | 'settings' | 'profile' | 'audit';
 
 const QuickAccessIcon = ({ name }: { name: QuickAccessIconName }) => {
   const iconProps = {
@@ -34,6 +35,13 @@ const QuickAccessIcon = ({ name }: { name: QuickAccessIconName }) => {
   };
 
   switch (name) {
+    case 'chat':
+      return (
+        <svg {...iconProps}>
+          <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3h9A2.5 2.5 0 0 1 19 5.5v6a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4.5A2.5 2.5 0 0 1 5 11.5v-6Z" />
+          <path d="M8.5 7.5h7M8.5 10.5h4" />
+        </svg>
+      );
     case 'library':
       return (
         <svg {...iconProps}>
@@ -421,14 +429,15 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 sm:mt-10">
               {[
+                { label: '开始对话', href: '/chat', icon: 'chat' as const },
                 { label: '浏览全部记忆', href: '/memory', icon: 'library' as const },
                 { label: '配置 AI 模型', href: '/settings/ai', icon: 'settings' as const },
                 { label: '查看用户画像', href: '/profile', icon: 'profile' as const },
                 { label: '审计日志', href: '/audit', icon: 'audit' as const },
               ].map((item) => (
-                <button
+                <Link
                   key={item.href}
-                  onClick={() => router.push(item.href)}
+                  href={item.href}
                   className="quick-link p-5 rounded-xl"
                   style={{ color: 'var(--foreground)' }}
                 >
@@ -439,7 +448,7 @@ export default function DashboardPage() {
                     <span className="font-sans font-semibold text-sm">{item.label}</span>
                   </span>
                   <span className="quick-link__hint">点击进入 →</span>
-                </button>
+                </Link>
               ))}
             </div>
           </div>

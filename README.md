@@ -78,7 +78,7 @@ FLAGSHIP_MODEL=deepseek-chat
 
 | 来源 | 怎么接 | 说明 |
 |------|--------|------|
-| 内置对话 | 直接在网页聊 | 带记忆检索的 AI 对话 |
+| 内置对话 | 首页点击「开始对话」 | 带记忆检索的 AI 对话 |
 | Trae IDE / 浏览器 AI | `POST /api/listen` | 对话完成后自动推送 |
 | Cursor / Codex / Claude Code | 设置里添加目录监听 | 自动解析会话文件 |
 | 本地 Markdown 文件 | 放入 `memory-root/` | 文件变化自动导入 |
