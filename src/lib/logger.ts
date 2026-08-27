@@ -1,3 +1,5 @@
+/* eslint-disable no-console -- 日志适配层的职责就是将结构化日志写入控制台。 */
+
 /** 日志级别 */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -31,16 +33,19 @@ export function createLogger(module: string) {
   return {
     debug: (message: string, extra?: Record<string, unknown>) =>
       log(module, "debug", message, extra),
-    info: (message: string, extra?: Record<string, unknown>) =>
-      log(module, "info", message, extra),
-    warn: (message: string, extra?: Record<string, unknown>) =>
-      log(module, "warn", message, extra),
+    info: (message: string, extra?: Record<string, unknown>) => log(module, "info", message, extra),
+    warn: (message: string, extra?: Record<string, unknown>) => log(module, "warn", message, extra),
     error: (message: string, extra?: Record<string, unknown>) =>
       log(module, "error", message, extra),
   };
 }
 
-function log(module: string, level: LogLevel, message: string, extra?: Record<string, unknown>): void {
+function log(
+  module: string,
+  level: LogLevel,
+  message: string,
+  extra?: Record<string, unknown>,
+): void {
   if (LEVEL_MAP[level] < LEVEL_MAP[config.level]) return;
 
   const entry: LogEntry = {

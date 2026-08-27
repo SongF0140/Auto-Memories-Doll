@@ -1,5 +1,8 @@
 "use client";
 
+/* eslint-disable no-console -- 记忆列表请求失败需要保留浏览器端诊断信息。 */
+
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
@@ -51,9 +54,7 @@ export default function MemoryList() {
       });
 
       setImportContent("");
-      setImportMessage(
-        `导入任务已提交（${response.data.status}），处理完成后会出现在记忆列表中。`,
-      );
+      setImportMessage(`导入任务已提交（${response.data.status}），处理完成后会出现在记忆列表中。`);
       await fetchMemoryList();
     } catch (error) {
       const errMsg = (error as Error).message;
@@ -103,9 +104,11 @@ export default function MemoryList() {
               </div>
             </div>
             <div className="relative min-h-[260px] overflow-hidden lg:min-h-full">
-              <img
+              <Image
                 src={memoryGardenImage}
                 alt="记忆花园中的信纸与打字机"
+                fill
+                sizes="(min-width: 1024px) 50vw, 100vw"
                 className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-l from-transparent via-brand-blue/5 to-brand-blue/20 lg:bg-gradient-to-r" />

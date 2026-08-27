@@ -71,7 +71,8 @@ describe("MemoryCorrectionService.correct", () => {
     const memory = makeMemory();
     const { memoryService, retriever } = makeDeps(memory);
     mocks.generate.mockResolvedValue({
-      content: '{"title": "项目名记录", "summary": "项目名记录", "content": "项目名是 Auto-Memories-Doll"}',
+      content:
+        '{"title": "项目名记录", "summary": "项目名记录", "content": "项目名是 Auto-Memories-Doll"}',
       finishReason: "stop",
       model: "budget",
       timestamp: "2026-08-23T00:00:00.000Z",
@@ -102,7 +103,8 @@ describe("MemoryCorrectionService.correct", () => {
     const memory = makeMemory();
     const { memoryService, retriever } = makeDeps(memory);
     mocks.generate.mockResolvedValue({
-      content: '{"title": "改过的标题", "summary": "项目名记录", "content": "项目名是 Auto-Memories-Doll"}',
+      content:
+        '{"title": "改过的标题", "summary": "项目名记录", "content": "项目名是 Auto-Memories-Doll"}',
       finishReason: "stop",
       model: "budget",
       timestamp: "2026-08-23T00:00:00.000Z",
@@ -193,7 +195,8 @@ describe("MemoryCorrectionService.correct", () => {
     const memory = makeMemory({ tags: ["项目", CORRECTED_TAG] });
     const { memoryService, retriever } = makeDeps(memory);
     mocks.generate.mockResolvedValue({
-      content: '{"title": "项目名记录", "summary": "新摘要", "content": "项目名是 Auto-Memories-Doll"}',
+      content:
+        '{"title": "项目名记录", "summary": "新摘要", "content": "项目名是 Auto-Memories-Doll"}',
       finishReason: "stop",
       model: "budget",
       timestamp: "2026-08-23T00:00:00.000Z",

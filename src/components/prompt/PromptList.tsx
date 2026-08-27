@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-console -- 提示词请求失败需要保留浏览器端诊断信息。 */
+
 import { useState, useEffect } from "react";
 import { PromptTemplate } from "../../lib/prompt/template-manager";
 import PromptEditor from "./PromptEditor";
@@ -20,7 +22,7 @@ export default function PromptList() {
     try {
       const response = await fetch("/api/prompt");
       const data = await response.json();
-      const templates = Array.isArray(data) ? data : (data.data || []);
+      const templates = Array.isArray(data) ? data : data.data || [];
       setTemplates(Array.isArray(templates) ? templates : []);
     } catch (error) {
       console.error("获取模板失败:", error);
@@ -151,10 +153,10 @@ export default function PromptList() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-baseline justify-between mb-6">
           <div>
-          <h2 className="text-xl font-semibold tracking-tight">提示词</h2>
-          <p className="text-xs text-text-tertiary mt-1">{templates.length} 个模板</p>
-        </div>
-        <button onClick={() => setEditing("new")} className="btn h-10 px-5 text-sm">
+            <h2 className="text-xl font-semibold tracking-tight">提示词</h2>
+            <p className="text-xs text-text-tertiary mt-1">{templates.length} 个模板</p>
+          </div>
+          <button onClick={() => setEditing("new")} className="btn h-10 px-5 text-sm">
             新建模板
           </button>
         </div>

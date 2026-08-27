@@ -165,13 +165,11 @@ export class Orchestrator {
       );
 
       // 队列处理完成后生成可读 Markdown 审计报告，对应《架构检查文档.md》4.7
-      await this.auditReportWriter
-        .write()
-        .catch((err) =>
-          logger.audit.error("Markdown audit report generation failed", {
-            error: (err as Error).message,
-          }),
-        );
+      await this.auditReportWriter.write().catch((err) =>
+        logger.audit.error("Markdown audit report generation failed", {
+          error: (err as Error).message,
+        }),
+      );
     }
   }
 
@@ -425,7 +423,10 @@ export class Orchestrator {
     return this.memoryService.getPendingEvents(opts);
   }
 
-  private detectDuplicateContent(formattedContent: string): { isDuplicate: boolean; similarity: number } {
+  private detectDuplicateContent(formattedContent: string): {
+    isDuplicate: boolean;
+    similarity: number;
+  } {
     let offset = 0;
 
     while (true) {

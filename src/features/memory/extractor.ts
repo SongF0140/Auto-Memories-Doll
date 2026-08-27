@@ -2,7 +2,7 @@ import { MemoryRecord } from "../../types/memory";
 import { buildMemoryRecord } from "../../lib/memory/builder";
 import { formatSummary } from "../../server/pipelines/formatter";
 import { extractTags } from "../../server/pipelines/json-pipeline";
-import { classifyTopic, classifyTopicWithRules, TopicRule } from "../../config/topics.config";
+import { classifyTopicWithRules, TopicRule } from "../../config/topics.config";
 import { generateZhFields } from "../../lib/memory/translator";
 import { extractCleanTitle, sanitizeTitle, sanitizeTags } from "../../lib/utils/title-sanitizer";
 

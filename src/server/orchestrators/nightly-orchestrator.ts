@@ -62,14 +62,20 @@ export class NightlyOrchestrator {
 
     // 获取当日记忆
     const todaysMemories = this.getTodaysMemories();
-    const allMemories = this.memoryService.listMemories({ sortBy: "updatedAt", sortOrder: "desc", limit: 200 });
+    const allMemories = this.memoryService.listMemories({
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+      limit: 200,
+    });
     logger.nightly.info(`当日记忆: ${todaysMemories.length}，全量: ${allMemories.length}`);
 
     // ── 1. 知识矛盾检测 ──
     let contradiction: ContradictionReport | null = null;
     try {
       contradiction = await this.contradictionDetector.detect(todaysMemories, allMemories);
-      logger.nightly.info("矛盾检测完成", { contradictionsFound: contradiction.contradictions.length });
+      logger.nightly.info("矛盾检测完成", {
+        contradictionsFound: contradiction.contradictions.length,
+      });
     } catch (e) {
       const msg = `矛盾检测失败: ${(e as Error).message}`;
       logger.nightly.error(msg);
@@ -103,9 +109,9 @@ export class NightlyOrchestrator {
       logger.nightly.info("模型降级中，跳过旗舰模型画像更新");
     } else {
       try {
-      logger.nightly.info("开始旗舰模型画像更新");
-      await ProfileUpdater.getInstance().runAnalysisWithFlagship();
-      logger.nightly.info("画像更新完成");
+        logger.nightly.info("开始旗舰模型画像更新");
+        await ProfileUpdater.getInstance().runAnalysisWithFlagship();
+        logger.nightly.info("画像更新完成");
       } catch (e) {
         const msg = `画像更新失败: ${(e as Error).message}`;
         logger.nightly.error(msg);
@@ -136,14 +142,21 @@ export class NightlyOrchestrator {
       errors.push(msg);
     }
 
-    logger.nightly.info("深夜督查完成", { allSucceeded: errors.length === 0, errorCount: errors.length });
+    logger.nightly.info("深夜督查完成", {
+      allSucceeded: errors.length === 0,
+      errorCount: errors.length,
+    });
     return report;
   }
 
   /** 获取当日创建或更新的记忆 */
   private getTodaysMemories(): MemoryRecord[] {
     const today = new Date().toISOString().split("T")[0];
-    const all = this.memoryService.listMemories({ sortBy: "updatedAt", sortOrder: "desc", limit: 500 });
+    const all = this.memoryService.listMemories({
+      sortBy: "updatedAt",
+      sortOrder: "desc",
+      limit: 500,
+    });
 
     // 过滤当日更新或创建的记忆
     return all.filter((m) => {

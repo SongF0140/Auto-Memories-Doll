@@ -3,7 +3,6 @@ import { z } from "zod";
 import { ProfileUpdater } from "../../../server/services/profile-updater";
 import { ModelAdapter } from "../../../lib/ai/model-adapter";
 
-
 const analyzeRequestSchema = z.object({
   memoryIds: z.array(z.string().min(1).max(128)).max(50).optional(),
 });
@@ -53,9 +52,6 @@ export async function POST(request: NextRequest) {
       changelog,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: `分析失败: ${(error as Error).message}` },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: `分析失败: ${(error as Error).message}` }, { status: 500 });
   }
 }

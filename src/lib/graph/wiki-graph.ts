@@ -134,7 +134,7 @@ export class WikiGraph {
   private async updateIndex(
     changed: string[],
     deleted: string[],
-    allFiles: string[],
+    _allFiles: string[],
   ): Promise<Map<string, string[]>> {
     const index = new Map(this.cachedIndex!);
 

@@ -11,7 +11,11 @@ describe("conversation compressor", () => {
     const compressed = compressConversation(messages);
 
     expect(compressed.length).toBeLessThan(messages.length);
-    expect(compressed.some((message) => message.role === "system" && message.content.includes("压缩摘要"))).toBe(true);
+    expect(
+      compressed.some(
+        (message) => message.role === "system" && message.content.includes("压缩摘要"),
+      ),
+    ).toBe(true);
     expect(compressed.at(-1)?.content).toContain("message 30");
   });
 });

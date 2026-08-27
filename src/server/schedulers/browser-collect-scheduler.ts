@@ -1,4 +1,7 @@
-import { collectBrowserHistory, collectBrowserBookmarks } from "../../lib/browser/history-collector";
+import {
+  collectBrowserHistory,
+  collectBrowserBookmarks,
+} from "../../lib/browser/history-collector";
 import { MemoryService } from "../services/memory-service";
 import { logger } from "../../lib/logger";
 
@@ -23,7 +26,9 @@ export class BrowserCollectScheduler {
 
   start(): void {
     if (process.env.BROWSER_COLLECT_ENABLED !== "true") {
-      logger.ingest.info("[BrowserScheduler] 浏览器采集未启用（设置 BROWSER_COLLECT_ENABLED=true 启用）");
+      logger.ingest.info(
+        "[BrowserScheduler] 浏览器采集未启用（设置 BROWSER_COLLECT_ENABLED=true 启用）",
+      );
       return;
     }
 
@@ -31,14 +36,8 @@ export class BrowserCollectScheduler {
     setTimeout(() => this.collectHistory(), 60_000);
     setTimeout(() => this.collectBookmarks(), 90_000);
 
-    this.historyTimer = setInterval(
-      () => this.collectHistory(),
-      this.HISTORY_INTERVAL_MS,
-    );
-    this.bookmarkTimer = setInterval(
-      () => this.collectBookmarks(),
-      this.BOOKMARK_INTERVAL_MS,
-    );
+    this.historyTimer = setInterval(() => this.collectHistory(), this.HISTORY_INTERVAL_MS);
+    this.bookmarkTimer = setInterval(() => this.collectBookmarks(), this.BOOKMARK_INTERVAL_MS);
 
     logger.ingest.info("[BrowserScheduler] 已启动，历史采集间隔 30min，书签采集间隔 6h");
   }

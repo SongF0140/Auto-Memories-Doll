@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Test (node ${{ matrix.node }} / ${{ matrix.os }})
+  checks:
+    name: Checks (node ${{ matrix.node }} / ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,24 +26,22 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
-      # 不能加 --omit=optional：rollup 的平台二进制（@rollup/rollup-*-*) 也是
-      # optionalDependencies，vitest 运行必需。usearch 在 optionalDependencies 中，
-      # 原生安装失败时 npm 会自动跳过，代码侧降级到纯 JS HNSW shim（见
-      # src/lib/vector/backend.ts 的 loadUsearch 降级逻辑）。
       - name: Install dependencies
         run: npm ci
+
+      - name: Format check
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run format:check
 
       - name: Type check
         run: npm run typecheck
 
-      - name: Lint
+      - name: Strict lint
         run: npm run lint
 
       - name: Unit & integration tests
         run: npm run test
 
-      # 检索评测：无 MODEL_API_KEY 时走确定性本地 embedding 与关键词保底，
-      # 生成 Recall@k / MRR 报告并作为产物上传，便于回归对比。
       - name: Retrieval eval
         run: npm run eval
 
@@ -53,4 +51,70 @@ jobs:
         with:
           name: retrieval-eval-report-${{ matrix.os }}-node${{ matrix.node }}
           path: evals/reports/
+          if-no-files-found: ignore
+
+  coverage-build:
+    name: Coverage and production build
+    needs: checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test coverage
+        run: npm run test:coverage
+
+      - name: Production build
+        run: npm run build
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: ignore
+
+  e2e:
+    name: Playwright E2E
+    needs: checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser E2E
+        run: npm run test:e2e
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
           if-no-files-found: ignore

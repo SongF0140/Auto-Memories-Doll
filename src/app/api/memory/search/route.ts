@@ -6,7 +6,6 @@ import { ErrorCode } from "../../../../lib/api-errors";
 import { logger } from "../../../../lib/logger";
 import type { RetrievalMode } from "../../../../lib/vector/retriever";
 
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q");

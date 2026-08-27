@@ -42,7 +42,9 @@ describe("API route contracts", () => {
   });
 
   it("does not register stale route contracts", () => {
-    const routePaths = new Set(routeFiles.map((file) => relative(process.cwd(), file).replace(/\\/g, "/")));
+    const routePaths = new Set(
+      routeFiles.map((file) => relative(process.cwd(), file).replace(/\\/g, "/")),
+    );
     const stale = Object.keys(apiRouteContracts).filter((routePath) => !routePaths.has(routePath));
 
     expect(stale).toEqual([]);

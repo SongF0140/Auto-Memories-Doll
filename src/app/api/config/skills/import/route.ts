@@ -12,10 +12,7 @@ export async function POST(request: NextRequest) {
     const { url } = body;
 
     if (!url) {
-      return NextResponse.json(
-        { success: false, error: "URL 不能为空" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "URL 不能为空" }, { status: 400 });
     }
 
     // 验证 URL 格式
@@ -23,18 +20,12 @@ export async function POST(request: NextRequest) {
     try {
       parsedUrl = new URL(url);
     } catch {
-      return NextResponse.json(
-        { success: false, error: "无效的 URL 格式" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "无效的 URL 格式" }, { status: 400 });
     }
 
     // 只允许 http/https
     if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      return NextResponse.json(
-        { success: false, error: "只支持 HTTP/HTTPS URL" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "只支持 HTTP/HTTPS URL" }, { status: 400 });
     }
 
     // 获取远程内容（设置超时）
@@ -45,28 +36,25 @@ export async function POST(request: NextRequest) {
     try {
       response = await fetch(url, {
         signal: controller.signal,
-        headers: { "Accept": "application/json" },
+        headers: { Accept: "application/json" },
         redirect: "follow",
       });
     } catch (fetchError: unknown) {
       clearTimeout(timeout);
       const err = fetchError as Error;
       if (err.name === "AbortError") {
-        return NextResponse.json(
-          { success: false, error: "请求超时（15秒），请检查 URL 是否可访问" }
-        );
+        return NextResponse.json({
+          success: false,
+          error: "请求超时（15秒），请检查 URL 是否可访问",
+        });
       }
-      return NextResponse.json(
-        { success: false, error: `网络错误: ${err.message}` }
-      );
+      return NextResponse.json({ success: false, error: `网络错误: ${err.message}` });
     }
 
     clearTimeout(timeout);
 
     if (!response.ok) {
-      return NextResponse.json(
-        { success: false, error: `HTTP ${response.status}: 无法获取资源` }
-      );
+      return NextResponse.json({ success: false, error: `HTTP ${response.status}: 无法获取资源` });
     }
 
     // 解析 JSON
@@ -80,9 +68,7 @@ export async function POST(request: NextRequest) {
       try {
         data = JSON.parse(text);
       } catch {
-        return NextResponse.json(
-          { success: false, error: "远程内容不是有效的 JSON 格式" }
-        );
+        return NextResponse.json({ success: false, error: "远程内容不是有效的 JSON 格式" });
       }
     }
 
@@ -125,10 +111,7 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
       message: `成功导入 ${imported} 个技能`,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: "服务器内部错误" },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ success: false, error: "服务器内部错误" }, { status: 500 });
   }
 }

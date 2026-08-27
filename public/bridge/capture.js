@@ -27,7 +27,6 @@
 
   // ====== 消息提取器（不同平台） ======
   function extractMessages() {
-    const platform = detectPlatform();
     const messages = [];
 
     // ChatGPT 风格

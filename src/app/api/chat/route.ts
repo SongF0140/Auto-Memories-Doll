@@ -7,7 +7,6 @@ import { ErrorCode } from "../../../lib/api-errors";
 import { ChatSessionService } from "../../../server/services/chat-session-service";
 import { logger } from "../../../lib/logger";
 
-
 /**
  * POST /api/chat
  * 薄适配层：Zod 校验 → 调度 → 事件流 / JSON 响应

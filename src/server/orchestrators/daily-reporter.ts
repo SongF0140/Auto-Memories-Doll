@@ -86,7 +86,9 @@ export class DailyReporter {
         "",
       );
       for (const s of r.routing.suggestions) {
-        sections.push(`- \`${s.taskCategory}\`: ${s.currentModel} → **${s.suggestedModel}** — ${s.reason}`);
+        sections.push(
+          `- \`${s.taskCategory}\`: ${s.currentModel} → **${s.suggestedModel}** — ${s.reason}`,
+        );
       }
     } else {
       sections.push("- 当前路由表无需调整", "");

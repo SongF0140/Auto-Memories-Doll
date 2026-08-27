@@ -57,7 +57,9 @@ export class ModelPool {
 
     const acquired = await pool.acquire(effectiveTimeout);
     if (!acquired) {
-      logger.api.warn(`[ModelPool] ${slot} 排队超时 (${effectiveTimeout}ms)，active=${pool.activeCount} waiting=${pool.waitingCount}`);
+      logger.api.warn(
+        `[ModelPool] ${slot} 排队超时 (${effectiveTimeout}ms)，active=${pool.activeCount} waiting=${pool.waitingCount}`,
+      );
       throw new ConcurrencyTimeoutError(slot, effectiveTimeout);
     }
 

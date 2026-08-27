@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-console -- 工具监听操作失败需要保留浏览器端诊断信息。 */
+
 import { useState } from "react";
 import { ToolWatchSource, ToolType } from "../../types/config";
 
@@ -74,7 +76,14 @@ export default function ToolSourceList({ sources, presets, onChange }: ToolSourc
       if (res.ok) {
         onChange([data, ...sources]);
         setShowAdd(false);
-        setForm({ name: "", toolType: "codex", path: "", filePattern: "*.jsonl", topic: "", description: "" });
+        setForm({
+          name: "",
+          toolType: "codex",
+          path: "",
+          filePattern: "*.jsonl",
+          topic: "",
+          description: "",
+        });
       } else {
         setError(data.error || "创建失败");
       }
@@ -130,7 +139,14 @@ export default function ToolSourceList({ sources, presets, onChange }: ToolSourc
           ))}
           <button
             onClick={() => {
-              setForm({ name: "", toolType: "markdown", path: "", filePattern: "*.md", topic: "", description: "" });
+              setForm({
+                name: "",
+                toolType: "markdown",
+                path: "",
+                filePattern: "*.md",
+                topic: "",
+                description: "",
+              });
               setShowAdd(true);
             }}
             className="px-3 py-1.5 rounded-lg border border-border bg-surface text-xs text-text-secondary hover:border-accent hover:text-accent transition-colors"
@@ -192,7 +208,9 @@ export default function ToolSourceList({ sources, presets, onChange }: ToolSourc
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">归类话题（可选）</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1">
+                归类话题（可选）
+              </label>
               <input
                 type="text"
                 value={form.topic}

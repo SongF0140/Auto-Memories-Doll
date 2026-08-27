@@ -3,7 +3,6 @@ import { ConfigService } from "../../../../server/services/config-service";
 import { aiConfigSchema } from "../../../../lib/validation";
 import { loadProviderCatalog } from "../../../../config/provider-loader";
 
-
 export async function GET() {
   const service = new ConfigService();
   try {

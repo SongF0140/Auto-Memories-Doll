@@ -1,11 +1,15 @@
-import { CHAT_CONTEXT_COMPRESSION_MAX_MESSAGES, CHAT_CONTEXT_SUMMARY_MAX_CHARS } from "../../config/constants";
+import {
+  CHAT_CONTEXT_COMPRESSION_MAX_MESSAGES,
+  CHAT_CONTEXT_SUMMARY_MAX_CHARS,
+} from "../../config/constants";
 import { ChatMessage } from "../../types/api";
 
 function summarizeMessage(message: ChatMessage): string {
   const content = message.content.replace(/\s+/g, " ").trim();
-  const clipped = content.length > CHAT_CONTEXT_SUMMARY_MAX_CHARS
-    ? `${content.slice(0, CHAT_CONTEXT_SUMMARY_MAX_CHARS - 1)}…`
-    : content;
+  const clipped =
+    content.length > CHAT_CONTEXT_SUMMARY_MAX_CHARS
+      ? `${content.slice(0, CHAT_CONTEXT_SUMMARY_MAX_CHARS - 1)}…`
+      : content;
   return `${message.role}: ${clipped}`;
 }
 

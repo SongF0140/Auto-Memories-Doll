@@ -41,9 +41,8 @@ export const getMemoryRoot = (): string => {
   // 尝试从 db 读取用户配置的笔记路径
   try {
     const db = getDatabase();
-    const row = db
-      .prepare("SELECT value FROM config WHERE key = 'storage'")
-      .get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM config WHERE key = 'storage'").get() as
+      { value: string } | undefined;
 
     if (row) {
       const config = JSON.parse(row.value) as { notesPath?: string };

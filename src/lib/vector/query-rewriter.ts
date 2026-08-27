@@ -35,7 +35,7 @@ function buildRewritePrompt(query: string): string {
   return [
     "你是检索查询改写器。把用户查询改写成语义相同但措辞不同的检索短语，帮助召回相关记忆。",
     `要求：最多生成 ${QUERY_REWRITE_MAX_VARIANTS} 个变体；每个变体不超过 ${QUERY_REWRITE_MAX_CHARS} 个字符；保留关键实体与数字；不要回答查询本身。`,
-    "只输出 JSON，格式：{\"variants\": [\"变体1\", \"变体2\"]}",
+    '只输出 JSON，格式：{"variants": ["变体1", "变体2"]}',
     "",
     `用户查询：${query}`,
   ].join("\n");

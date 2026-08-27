@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import React from 'react';
-import MemoryCard from '@/components/memory/MemoryCard';
-import { memoryDetailHref, memoryTopicHref } from '@/lib/memory-api-client';
-import { getTopicLabelClient } from '@/config/topics-data';
-import type { MemoryRecord } from '@/types/memory';
+import Link from "next/link";
+import React from "react";
+import MemoryCard from "@/components/memory/MemoryCard";
+import { memoryDetailHref, memoryTopicHref } from "@/lib/memory-api-client";
+import { getTopicLabelClient } from "@/config/topics-data";
+import type { MemoryRecord } from "@/types/memory";
 
 export default function MemoryLibraryItem({ memory }: { memory: MemoryRecord }) {
   return (

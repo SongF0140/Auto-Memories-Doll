@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-console -- 审计操作失败需要保留浏览器端诊断信息。 */
+
 import { useState, useEffect, useCallback } from "react";
 
 type ConflictRecord = {
@@ -66,10 +68,7 @@ export default function AuditPanel() {
     }
   };
 
-  const handleResolve = async (
-    conflictId: string,
-    resolution: "accept" | "keep" | "manual",
-  ) => {
+  const handleResolve = async (conflictId: string, resolution: "accept" | "keep" | "manual") => {
     setResolvingId(conflictId);
     try {
       const res = await fetch("/api/audit/conflicts", {
@@ -113,7 +112,10 @@ export default function AuditPanel() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-text-primary)" }}>
+            <h2
+              className="text-xl font-semibold tracking-tight"
+              style={{ color: "var(--color-text-primary)" }}
+            >
               审计与冲突
             </h2>
             <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>
@@ -126,7 +128,9 @@ export default function AuditPanel() {
           <button
             onClick={() => setActiveTab("report")}
             className={`text-sm px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "report" ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold" : "hover:bg-[#FAF7F2]"
+              activeTab === "report"
+                ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold"
+                : "hover:bg-[#FAF7F2]"
             }`}
             style={activeTab === "report" ? {} : { color: "#8B7355" }}
           >
@@ -135,7 +139,9 @@ export default function AuditPanel() {
           <button
             onClick={() => setActiveTab("conflicts")}
             className={`text-sm px-4 py-2 rounded-lg transition-colors ${
-              activeTab === "conflicts" ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold" : "hover:bg-[#FAF7F2]"
+              activeTab === "conflicts"
+                ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold"
+                : "hover:bg-[#FAF7F2]"
             }`}
             style={activeTab === "conflicts" ? {} : { color: "#8B7355" }}
           >
@@ -146,30 +152,73 @@ export default function AuditPanel() {
         {activeTab === "report" && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white border rounded-xl p-5 text-center" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
-                <div className="text-3xl font-bold mb-1" style={{ color: "var(--color-brand-blue)" }}>
+              <div
+                className="bg-white border rounded-xl p-5 text-center"
+                style={{
+                  borderColor: "var(--color-border-default)",
+                  boxShadow: "var(--shadow-card)",
+                }}
+              >
+                <div
+                  className="text-3xl font-bold mb-1"
+                  style={{ color: "var(--color-brand-blue)" }}
+                >
                   {report?.totalMemories ?? 0}
                 </div>
-                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>记忆总数</div>
+                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                  记忆总数
+                </div>
               </div>
-              <div className="bg-white border rounded-xl p-5 text-center" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
-                <div className="text-3xl font-bold mb-1" style={{ color: "var(--color-brand-orange)" }}>
+              <div
+                className="bg-white border rounded-xl p-5 text-center"
+                style={{
+                  borderColor: "var(--color-border-default)",
+                  boxShadow: "var(--shadow-card)",
+                }}
+              >
+                <div
+                  className="text-3xl font-bold mb-1"
+                  style={{ color: "var(--color-brand-orange)" }}
+                >
                   {report?.pendingEvents ?? 0}
                 </div>
-                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>待处理事件</div>
+                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                  待处理事件
+                </div>
               </div>
-              <div className="bg-white border rounded-xl p-5 text-center" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
+              <div
+                className="bg-white border rounded-xl p-5 text-center"
+                style={{
+                  borderColor: "var(--color-border-default)",
+                  boxShadow: "var(--shadow-card)",
+                }}
+              >
                 <div className="text-3xl font-bold mb-1 text-red-600">{report?.conflicts ?? 0}</div>
-                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>待解决冲突</div>
+                <div className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                  待解决冲突
+                </div>
               </div>
             </div>
 
-            <div className="bg-white border rounded-xl p-5" style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}>
-              <h3 className="text-base font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>操作</h3>
+            <div
+              className="bg-white border rounded-xl p-5"
+              style={{
+                borderColor: "var(--color-border-default)",
+                boxShadow: "var(--shadow-card)",
+              }}
+            >
+              <h3
+                className="text-base font-semibold mb-3"
+                style={{ color: "var(--color-text-primary)" }}
+              >
+                操作
+              </h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>重放待处理事件</p>
+                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                      重放待处理事件
+                    </p>
                     <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
                       重新处理所有 pending 状态的记忆事件
                     </p>
@@ -199,11 +248,17 @@ export default function AuditPanel() {
                   <div
                     key={conflict.conflictId}
                     className="bg-white border rounded-xl p-5"
-                    style={{ borderColor: "var(--color-border-default)", boxShadow: "var(--shadow-card)" }}
+                    style={{
+                      borderColor: "var(--color-border-default)",
+                      boxShadow: "var(--shadow-card)",
+                    }}
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono" style={{ color: "var(--color-text-tertiary)" }}>
+                        <span
+                          className="text-xs font-mono"
+                          style={{ color: "var(--color-text-tertiary)" }}
+                        >
                           {conflict.conflictId.slice(0, 12)}...
                         </span>
                         <span className="tag">字段: {conflict.field}</span>
@@ -216,19 +271,35 @@ export default function AuditPanel() {
 
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       <div>
-                        <p className="text-xs font-medium mb-1" style={{ color: "var(--color-text-tertiary)" }}>现有值</p>
+                        <p
+                          className="text-xs font-medium mb-1"
+                          style={{ color: "var(--color-text-tertiary)" }}
+                        >
+                          现有值
+                        </p>
                         <div
                           className="rounded-lg p-3 text-sm font-mono whitespace-pre-wrap"
-                          style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}
+                          style={{
+                            background: "var(--color-bg-secondary)",
+                            color: "var(--color-text-secondary)",
+                          }}
                         >
                           {conflict.existingValue}
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-medium mb-1" style={{ color: "var(--color-text-tertiary)" }}>候选值</p>
+                        <p
+                          className="text-xs font-medium mb-1"
+                          style={{ color: "var(--color-text-tertiary)" }}
+                        >
+                          候选值
+                        </p>
                         <div
                           className="rounded-lg p-3 text-sm font-mono whitespace-pre-wrap"
-                          style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}
+                          style={{
+                            background: "var(--color-bg-secondary)",
+                            color: "var(--color-text-secondary)",
+                          }}
                         >
                           {conflict.candidateValue}
                         </div>
@@ -236,7 +307,10 @@ export default function AuditPanel() {
                     </div>
 
                     <label className="block mb-3">
-                      <span className="block text-xs font-medium mb-1" style={{ color: "var(--color-text-tertiary)" }}>
+                      <span
+                        className="block text-xs font-medium mb-1"
+                        style={{ color: "var(--color-text-tertiary)" }}
+                      >
                         手动编辑值（字符串可直接输入；数组或对象请使用 JSON）
                       </span>
                       <textarea
@@ -253,7 +327,10 @@ export default function AuditPanel() {
                       />
                     </label>
 
-                    <div className="flex gap-2 pt-3 border-t" style={{ borderColor: "var(--color-border-default)" }}>
+                    <div
+                      className="flex gap-2 pt-3 border-t"
+                      style={{ borderColor: "var(--color-border-default)" }}
+                    >
                       <button
                         onClick={() => handleResolve(conflict.conflictId, "accept")}
                         disabled={resolvingId === conflict.conflictId}

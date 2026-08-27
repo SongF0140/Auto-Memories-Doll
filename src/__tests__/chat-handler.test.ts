@@ -165,17 +165,17 @@ describe("ChatHandler", () => {
 
       const events = await drainStream(stream);
       expect(events.map((e) => e.type)).toEqual([
-        "text_start", "text_delta", "text_delta", "text_end", "done",
+        "text_start",
+        "text_delta",
+        "text_delta",
+        "text_end",
+        "done",
       ]);
       expect(mocks.modelAdapter.generateStream).toHaveBeenCalledOnce();
     });
 
     it("chat 模式：不检索记忆（mode !== 'memory' 短路）", async () => {
-      await handler.streamResponse(
-        [{ role: "user", content: "随便聊聊" }],
-        "chat",
-        "sess-1",
-      );
+      await handler.streamResponse([{ role: "user", content: "随便聊聊" }], "chat", "sess-1");
 
       expect(mocks.searchWithExpansion).not.toHaveBeenCalled();
       expect(mocks.memoryService.getMemoriesByIds).not.toHaveBeenCalled();
@@ -183,8 +183,13 @@ describe("ChatHandler", () => {
 
     it("memory 模式：调用多路召回，记忆内容注入 system message", async () => {
       const memory = {
-        id: "m1", title: "T1", summary: "S1", tags: ["a"],
-        titleZh: "", summaryZh: "", tagsZh: [],
+        id: "m1",
+        title: "T1",
+        summary: "S1",
+        tags: ["a"],
+        titleZh: "",
+        summaryZh: "",
+        tagsZh: [],
       };
       mocks.searchWithExpansion.mockResolvedValue([{ memoryId: "m1", similarity: 0.9 }]);
       mocks.memoryService.getMemoriesByIds.mockReturnValue([memory]);
@@ -217,11 +222,7 @@ describe("ChatHandler", () => {
         { serverId: "s1", tools: [{ name: "mcp_tool", description: "d", inputSchema: {} }] },
       ]);
 
-      await handler.streamResponse(
-        [{ role: "user", content: "保存这个" }],
-        "memory",
-        "sess-1",
-      );
+      await handler.streamResponse([{ role: "user", content: "保存这个" }], "memory", "sess-1");
 
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       expect(callArgs.readonly).toBe(false);
@@ -238,11 +239,7 @@ describe("ChatHandler", () => {
         { serverId: "s1", tools: [{ name: "mcp_read", description: "d", inputSchema: {} }] },
       ]);
 
-      await handler.streamResponse(
-        [{ role: "user", content: "hi" }],
-        "chat",
-        "sess-1",
-      );
+      await handler.streamResponse([{ role: "user", content: "hi" }], "chat", "sess-1");
 
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       expect(callArgs.readonly).toBe(true);
@@ -258,7 +255,10 @@ describe("ChatHandler", () => {
         matchedKeywords: ["记住"],
       });
       mocks.classifier.extractMemoryEntity.mockResolvedValue({
-        title: "标题", content: "内容", tags: ["t1"], topic: "ai",
+        title: "标题",
+        content: "内容",
+        tags: ["t1"],
+        topic: "ai",
       });
 
       await handler.streamResponse(
@@ -277,7 +277,10 @@ describe("ChatHandler", () => {
 
     it("extractMemoryEntity 抛异常时不影响主流程", async () => {
       mocks.classifier.classifyAsync.mockResolvedValue({
-        type: "memory_create", confidence: 0.9, entities: {}, matchedKeywords: ["记住"],
+        type: "memory_create",
+        confidence: 0.9,
+        entities: {},
+        matchedKeywords: ["记住"],
       });
       mocks.classifier.extractMemoryEntity.mockRejectedValue(new Error("LLM down"));
 
@@ -295,11 +298,7 @@ describe("ChatHandler", () => {
       mocks.skillManager.matchSkill.mockReturnValue({ name: "translate" });
       mocks.skillManager.applySkill.mockReturnValue("翻译后的内容");
 
-      await handler.streamResponse(
-        [{ role: "user", content: "原始内容" }],
-        "chat",
-        "sess-1",
-      );
+      await handler.streamResponse([{ role: "user", content: "原始内容" }], "chat", "sess-1");
 
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       const userMsg = callArgs.messages.find((m: any) => m.role === "user");
@@ -337,11 +336,7 @@ describe("ChatHandler", () => {
     });
 
     it("无用户消息时不入队画像分析也不分类", async () => {
-      await handler.streamResponse(
-        [{ role: "assistant", content: "只有助手" }],
-        "chat",
-        "sess-1",
-      );
+      await handler.streamResponse([{ role: "assistant", content: "只有助手" }], "chat", "sess-1");
 
       expect(mocks.profileUpdater.enqueueAnalysis).not.toHaveBeenCalled();
       expect(mocks.classifier.classifyAsync).not.toHaveBeenCalled();
@@ -362,7 +357,9 @@ describe("ChatHandler", () => {
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       expect(callArgs.messages.length).toBeLessThan(longConversation.length + 2);
       expect(callArgs.messages[0].content).toContain("SYS-PREFIX");
-      expect(callArgs.messages.some((message: any) => message.content?.includes("压缩摘要"))).toBe(true);
+      expect(callArgs.messages.some((message: any) => message.content?.includes("压缩摘要"))).toBe(
+        true,
+      );
     });
   });
 
@@ -382,19 +379,20 @@ describe("ChatHandler", () => {
 
     it("memory 模式注入记忆到 system message", async () => {
       const memory = {
-        id: "m1", title: "知识A", summary: "摘要A", tags: ["x"],
-        titleZh: "", summaryZh: "", tagsZh: [],
+        id: "m1",
+        title: "知识A",
+        summary: "摘要A",
+        tags: ["x"],
+        titleZh: "",
+        summaryZh: "",
+        tagsZh: [],
       };
       mocks.searchWithExpansion.mockResolvedValue([{ memoryId: "m1", similarity: 0.9 }]);
       mocks.memoryService.getMemoriesByIds.mockReturnValue([memory]);
       mocks.ranker.rankWithMMR.mockReturnValue([{ memoryId: "m1" }]);
       mocks.wikiGraph.getNeighbors.mockResolvedValue([]);
 
-      await handler.generateResponse(
-        [{ role: "user", content: "查记忆" }],
-        "memory",
-        "sess-1",
-      );
+      await handler.generateResponse([{ role: "user", content: "查记忆" }], "memory", "sess-1");
 
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       expect(callArgs.readonly).toBe(true);

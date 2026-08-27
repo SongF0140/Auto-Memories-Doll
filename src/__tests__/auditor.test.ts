@@ -51,7 +51,11 @@ function makeMemory(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
   };
 }
 
-function makeEvent(memoryId: string, candidate: MemoryRecord, changedFields: string[]): PendingEvent {
+function makeEvent(
+  memoryId: string,
+  candidate: MemoryRecord,
+  changedFields: string[],
+): PendingEvent {
   return {
     eventId: `evt-${memoryId}-${Math.random().toString(36).slice(2, 6)}`,
     memoryId,
@@ -167,9 +171,7 @@ describe("Auditor.process — 三种分流", () => {
 
     expect(result!.status).toBe("conflict");
     if (result!.resolution!.action === "manual_decision") {
-      expect(result!.resolution!.conflicts.map((conflict) => conflict.field)).toEqual([
-        "content",
-      ]);
+      expect(result!.resolution!.conflicts.map((conflict) => conflict.field)).toEqual(["content"]);
     }
   });
 
@@ -204,9 +206,9 @@ describe("Auditor.process — 三种分流", () => {
     await auditor.process("m1");
 
     // VersionManager 应在内存 db 中创建快照
-    const snapshotRow = dbRef.current!.prepare(
-      "SELECT * FROM memory_snapshots WHERE memoryId = ?",
-    ).get("m1") as any;
+    const snapshotRow = dbRef
+      .current!.prepare("SELECT * FROM memory_snapshots WHERE memoryId = ?")
+      .get("m1") as any;
     expect(snapshotRow).toBeTruthy();
     expect(snapshotRow.version).toBe(5);
     const snapshotData = JSON.parse(snapshotRow.data);

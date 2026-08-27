@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-console -- 聊天网络异常需要保留浏览器端诊断信息。 */
+
 import React from "react";
 import { useState, useCallback, useEffect } from "react";
 import { ChatMessage, MemoryListResponse } from "../../types/api";
@@ -103,10 +105,7 @@ export default function ChatInterface() {
           if (response.ok) {
             const assistantContent =
               typeof result.content === "string" ? result.content : "请求已处理。";
-            setMessages((prev) => [
-              ...prev,
-              { role: "assistant", content: assistantContent },
-            ]);
+            setMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
 
             const memoryReferences = result.memoryReferences ?? [];
             if (mode === "memory" && memoryReferences.length > 0) {
@@ -118,13 +117,8 @@ export default function ChatInterface() {
             }
           } else {
             const errorMessage =
-              typeof result.error === "string"
-                ? result.error
-                : result.error?.message || "未知错误";
-            setMessages((prev) => [
-              ...prev,
-              { role: "system", content: `错误: ${errorMessage}` },
-            ]);
+              typeof result.error === "string" ? result.error : result.error?.message || "未知错误";
+            setMessages((prev) => [...prev, { role: "system", content: `错误: ${errorMessage}` }]);
           }
           setLoading(false);
           return;
@@ -257,9 +251,7 @@ export default function ChatInterface() {
 
   const fetchRelatedMemories = async (ids: string[]) => {
     try {
-      const memories = await Promise.all(
-        ids.map((id) => getMemoryClient(id).catch(() => null)),
-      );
+      const memories = await Promise.all(ids.map((id) => getMemoryClient(id).catch(() => null)));
       setRelatedMemories(memories.filter(Boolean) as MemoryRecord[]);
     } catch (error) {
       console.error("Failed to fetch related memories:", error);
@@ -281,7 +273,10 @@ export default function ChatInterface() {
             <div className="flex items-center justify-between gap-6 p-5">
               <div className="flex items-center gap-4">
                 <div>
-                  <h2 className="text-xl font-semibold tracking-tight" style={{ color: "var(--color-text-primary)" }}>
+                  <h2
+                    className="text-xl font-semibold tracking-tight"
+                    style={{ color: "var(--color-text-primary)" }}
+                  >
                     对话
                   </h2>
                   <p className="text-sm mt-1" style={{ color: "var(--color-text-tertiary)" }}>
@@ -415,8 +410,14 @@ export default function ChatInterface() {
             className="w-80 lg:w-96 bg-gray-50 border-l flex flex-col"
             style={{ borderColor: "var(--color-border-default)" }}
           >
-            <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border-default)" }}>
-              <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--color-text-primary)" }}>
+            <div
+              className="px-5 py-4 border-b"
+              style={{ borderColor: "var(--color-border-default)" }}
+            >
+              <h3
+                className="text-sm font-semibold flex items-center gap-2"
+                style={{ color: "var(--color-text-primary)" }}
+              >
                 选择记忆
                 {selectedMemoryIds.size > 0 && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[rgba(166,124,0,0.10)] text-[#A67C00] border border-[rgba(166,124,0,0.25)]">
@@ -433,8 +434,12 @@ export default function ChatInterface() {
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {availableMemories.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>暂无记忆</p>
-                  <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>切换到记忆页面导入内容</p>
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                    暂无记忆
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>
+                    切换到记忆页面导入内容
+                  </p>
                 </div>
               ) : (
                 availableMemories.map((memory) => {
@@ -458,7 +463,15 @@ export default function ChatInterface() {
                           }`}
                         >
                           {isSelected && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-white">
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="w-3 h-3 text-white"
+                            >
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
                           )}
@@ -480,10 +493,16 @@ export default function ChatInterface() {
                           className="sr-only"
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                          <p
+                            className="text-sm font-medium truncate"
+                            style={{ color: "var(--color-text-primary)" }}
+                          >
                             {display(memory).title}
                           </p>
-                          <p className="text-xs mt-0.5 line-clamp-2" style={{ color: "var(--color-text-tertiary)" }}>
+                          <p
+                            className="text-xs mt-0.5 line-clamp-2"
+                            style={{ color: "var(--color-text-tertiary)" }}
+                          >
                             {memory.summaryZh || memory.summary}
                           </p>
                           <div className="flex flex-wrap gap-1 mt-1.5">

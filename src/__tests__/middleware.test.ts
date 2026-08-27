@@ -30,7 +30,9 @@ describe("middleware — 本机 Host 安全边界", () => {
   });
 
   it("拒绝非本机 Host，并返回统一错误结构", async () => {
-    const req = createRequest("GET", undefined, "http://localhost/api/health", { host: "example.com:3000" });
+    const req = createRequest("GET", undefined, "http://localhost/api/health", {
+      host: "example.com:3000",
+    });
     const res = middleware(req);
     const body = await res.json();
 
@@ -42,6 +44,16 @@ describe("middleware — 本机 Host 安全边界", () => {
         message: "仅允许通过本机地址访问 API",
       },
     });
+  });
+
+  it.each([
+    ["空 Host", ""],
+    ["畸形 Host", "[::1"],
+  ])("拒绝%s", (_name, host) => {
+    const req = createRequest("GET", undefined, "http://localhost/api/health", { host });
+    const res = middleware(req);
+
+    expect(res.status).toBe(403);
   });
 
   it("不因外部 Origin 阻止本机工具的 POST 请求", () => {

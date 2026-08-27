@@ -150,7 +150,7 @@ function buildCorrectionPrompt(memory: MemoryRecord, instruction: string): strin
   return [
     "你是记忆库纠错器。下面是一条已保存的记忆和用户提出的纠错指令。",
     "请根据纠错指令修订记忆内容，只修正指令涉及的部分，保留其余信息。",
-    "只输出 JSON，格式：{\"title\": \"...\", \"summary\": \"...\", \"content\": \"...\"}",
+    '只输出 JSON，格式：{"title": "...", "summary": "...", "content": "..."}',
     "不需要修改的字段保持原值输出。不要添加解释性文字。",
     "",
     `当前记忆：`,

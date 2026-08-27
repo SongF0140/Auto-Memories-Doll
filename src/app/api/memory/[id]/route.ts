@@ -3,7 +3,6 @@ import { z } from "zod";
 import { MemoryService } from "../../../../server/services/memory-service";
 import { memoryUpdateSchema } from "../../../../lib/validation";
 
-
 const idSchema = z.string().min(1).max(128);
 
 function validateId(params: { id: string }) {
@@ -50,7 +49,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     service.stageUpdateMemory(params.id, parsed.data);
-    return NextResponse.json({ ...service.getMemory(params.id), ...parsed.data, status: "pending_audit" });
+    return NextResponse.json({
+      ...service.getMemory(params.id),
+      ...parsed.data,
+      status: "pending_audit",
+    });
   } finally {
     service.close();
   }

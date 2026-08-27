@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-console -- 记忆操作失败需要保留浏览器端诊断信息。 */
+
 import { useState, useEffect } from "react";
 import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
@@ -125,7 +127,11 @@ export default function MemoryViewer({
           onClick={(e) => e.stopPropagation()}
         >
           <p style={{ color: "var(--color-text-secondary)" }}>记忆未找到</p>
-          <button onClick={onClose} className="mt-4 text-sm underline" style={{ color: "var(--color-brand-blue)" }}>
+          <button
+            onClick={onClose}
+            className="mt-4 text-sm underline"
+            style={{ color: "var(--color-brand-blue)" }}
+          >
             关闭
           </button>
         </div>
@@ -186,11 +192,7 @@ export default function MemoryViewer({
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="btn h-10 px-6 text-sm"
-                >
+                <button onClick={handleSave} disabled={saving} className="btn h-10 px-6 text-sm">
                   {saving ? "保存中..." : "保存"}
                 </button>
                 <button
@@ -245,10 +247,7 @@ export default function MemoryViewer({
               </div>
 
               <div className="mt-6 flex gap-3 pt-4 border-t border-border">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="btn h-10 px-6 text-sm"
-                >
+                <button onClick={() => setEditing(true)} className="btn h-10 px-6 text-sm">
                   编辑
                 </button>
                 <button onClick={handleDelete} className="btn-danger h-10 px-6 text-sm">

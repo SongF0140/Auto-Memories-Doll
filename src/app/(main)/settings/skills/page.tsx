@@ -27,9 +27,7 @@ export default function SkillsSettingsPage() {
     <div className="max-w-3xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-[#3E3224] mb-2 font-mono">技能配置</h1>
-        <p className="text-sm text-[#8B7D6B]">
-          管理触发式技能和自动化规则，扩展系统能力
-        </p>
+        <p className="text-sm text-[#8B7D6B]">管理触发式技能和自动化规则，扩展系统能力</p>
       </div>
       <div className="card p-6">
         <SkillList skills={skills} onChange={handleChange} />

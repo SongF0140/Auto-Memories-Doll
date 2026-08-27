@@ -115,12 +115,7 @@ export class AuditService {
       UPDATE conflict_records SET status = ?, resolution = ?, resolvedAt = ?
       WHERE conflictId = ? AND status = 'pending'
     `);
-    const result = stmt.run(
-      statusMap[resolution],
-      manualValue ?? "",
-      getCurrentTime(),
-      conflictId,
-    );
+    const result = stmt.run(statusMap[resolution], manualValue ?? "", getCurrentTime(), conflictId);
     if (result.changes === 0) {
       throw new Error(`冲突不存在或已解决: ${conflictId}`);
     }

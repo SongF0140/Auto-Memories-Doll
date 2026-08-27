@@ -27,14 +27,19 @@ vi.mock("../lib/ai/model-adapter", () => ({
       if (mockGenerate.shouldFail) {
         throw new Error("mock budget failure");
       }
-      return { content: mockGenerate.content, model: "gpt-4o-mini", timestamp: "2026-01-01", finishReason: "stop" };
+      return {
+        content: mockGenerate.content,
+        model: "gpt-4o-mini",
+        timestamp: "2026-01-01",
+        finishReason: "stop",
+      };
     },
     generateStream: vi.fn(),
     isDegradedMode: false,
   },
 }));
 
-import { ChatClassifier, IntentResult, ExtractedMemoryEntity } from "../features/chat/classifier";
+import { ChatClassifier } from "../features/chat/classifier";
 
 // intent 描述文本 → embedding 向量（模拟语义接近度）
 // memory_create 的描述和 "创建新记忆" 的向量应该高度相似
@@ -46,15 +51,17 @@ function setupMockEmbeddings() {
   const createVec = [0.9, 0.8, 0.1, 0.1, 0.1];
   const updateVec = [0.1, 0.1, 0.9, 0.8, 0.1];
   const deleteVec = [0.1, 0.1, 0.1, 0.1, 0.9];
-  const queryVec =  [0.5, 0.1, 0.1, 0.1, 0.3];
+  const queryVec = [0.5, 0.1, 0.1, 0.1, 0.3];
   const promptVec = [0.1, 0.5, 0.1, 0.1, 0.3];
 
   // 先注册意图描述的向量
   const descKeys = Object.entries({
-    memory_create: "创建、保存、记录新的记忆或知识，例如记住某个信息、存储内容、创建备忘录、留存笔记",
+    memory_create:
+      "创建、保存、记录新的记忆或知识，例如记住某个信息、存储内容、创建备忘录、留存笔记",
     memory_update: "修改、更新、编辑已有的记忆，例如改一下、变更内容、修正信息、调整记录",
     memory_delete: "删除、移除、清除记忆或知识，例如删掉、去掉、清理不需要的内容、擦除记录",
-    memory_query: "查询、搜索、查找、回忆已有的记忆，例如找一下之前的内容、看看保存的知识、搜索信息",
+    memory_query:
+      "查询、搜索、查找、回忆已有的记忆，例如找一下之前的内容、看看保存的知识、搜索信息",
     prompt_edit: "修改提示词、prompt、系统模板、AI 指令，例如改提示词、调整系统设定",
   });
   const vecs = [createVec, updateVec, deleteVec, queryVec, promptVec];
@@ -181,7 +188,8 @@ describe("ChatClassifier — Layer 2 embedding 语义回退", () => {
 
 describe("ChatClassifier — Layer 3 实体提取", () => {
   it("提取记忆结构化字段", async () => {
-    mockGenerate.content = '{"title":"React 性能优化","content":"使用 memo 和 useCallback 优化渲染","tags":["react","性能"],"topic":"前端"}';
+    mockGenerate.content =
+      '{"title":"React 性能优化","content":"使用 memo 和 useCallback 优化渲染","tags":["react","性能"],"topic":"前端"}';
     const c = new ChatClassifier();
     const entity = await c.extractMemoryEntity("记住 React 怎么做性能优化");
     expect(entity).not.toBeNull();

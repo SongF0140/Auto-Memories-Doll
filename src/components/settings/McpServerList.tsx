@@ -107,9 +107,7 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
     <div className="space-y-4">
       {/* 操作栏 */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-text-tertiary">
-          已配置 {servers.length} 个 MCP 服务
-        </p>
+        <p className="text-xs text-text-tertiary">已配置 {servers.length} 个 MCP 服务</p>
         <div className="flex gap-2">
           <button
             onClick={() => setShowImport(true)}
@@ -141,7 +139,7 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
             className="rounded-lg p-3 text-xs font-mono overflow-x-auto"
             style={{ background: "#FAF8F5", border: "1px dashed #E8E0D4", color: "#8B7355" }}
           >
-{`[
+            {`[
   {
     "name": "filesystem",
     "command": "npx",
@@ -164,9 +162,7 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
             className="input min-h-[140px] font-mono text-xs"
           />
 
-          {importError && (
-            <p className="text-sm text-error">{importError}</p>
-          )}
+          {importError && <p className="text-sm text-error">{importError}</p>}
 
           <div className="flex justify-end gap-2">
             <button
@@ -238,11 +234,10 @@ export default function McpServerList({ servers, onChange }: McpServerListProps)
       {servers.length === 0 && !editing && !showImport && (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E8E0D4]">
           <p className="text-text-secondary mb-2">尚未配置 MCP 服务</p>
-          <p className="text-xs text-text-tertiary mb-4">通过 JSON 导入或手动添加来连接外部工具服务</p>
-          <button
-            onClick={() => setShowImport(true)}
-            className="btn btn-secondary text-sm"
-          >
+          <p className="text-xs text-text-tertiary mb-4">
+            通过 JSON 导入或手动添加来连接外部工具服务
+          </p>
+          <button onClick={() => setShowImport(true)} className="btn btn-secondary text-sm">
             导入配置
           </button>
         </div>

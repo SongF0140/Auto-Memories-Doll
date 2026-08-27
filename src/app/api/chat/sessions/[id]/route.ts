@@ -4,7 +4,6 @@ import { ErrorCode } from "../../../../../lib/api-errors";
 import { chatSessionIdSchema, chatSessionWriteSchema } from "../../../../../lib/validation";
 import { ChatSessionService } from "../../../../../server/services/chat-session-service";
 
-
 type RouteContext = { params: { id: string } };
 
 function parseSessionId(params: RouteContext["params"]) {

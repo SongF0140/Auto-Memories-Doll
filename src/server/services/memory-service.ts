@@ -285,7 +285,9 @@ export class MemoryService {
       .prepare(`SELECT * FROM memories WHERE id IN (${placeholders})`)
       .all(...ids) as any[];
     const byId = new Map(rows.map((row) => [row.id, this.mapMemoryRow(row)]));
-    return ids.map((id) => byId.get(id)).filter((memory): memory is MemoryRecord => Boolean(memory));
+    return ids
+      .map((id) => byId.get(id))
+      .filter((memory): memory is MemoryRecord => Boolean(memory));
   }
 
   private mapMemoryRow(row: any): MemoryRecord {
@@ -377,9 +379,9 @@ export class MemoryService {
       params.push(limit, offset);
     }
 
-    const rows = (params.length > 0
-      ? this.db.prepare(sql).all(...params)
-      : this.db.prepare(sql).all()) as Array<{ content: string }>;
+    const rows = (
+      params.length > 0 ? this.db.prepare(sql).all(...params) : this.db.prepare(sql).all()
+    ) as Array<{ content: string }>;
     return rows.map((row) => row.content);
   }
 
@@ -400,7 +402,9 @@ export class MemoryService {
       params.push(topicFilter);
     }
     if (conditions.length > 0) sql += ` WHERE ${conditions.join(" AND ")}`;
-    const row = (params.length > 0 ? this.db.prepare(sql).get(...params) : this.db.prepare(sql).get()) as any;
+    const row = (
+      params.length > 0 ? this.db.prepare(sql).get(...params) : this.db.prepare(sql).get()
+    ) as any;
     return row?.cnt ?? 0;
   }
 

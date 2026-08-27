@@ -205,7 +205,7 @@ export async function collectBrowserHistory(hours = 2): Promise<
     domainCount: number;
     visitCount: number;
   }>
->{
+> {
   const browsers = getBrowserPaths();
   if (browsers.length === 0) return [];
 
@@ -229,9 +229,7 @@ export async function collectBrowserHistory(hours = 2): Promise<
     ];
 
     // 按访问次数排序域名
-    const sortedDomains = [...grouped.entries()].sort(
-      (a, b) => b[1].length - a[1].length,
-    );
+    const sortedDomains = [...grouped.entries()].sort((a, b) => b[1].length - a[1].length);
 
     for (const [domain, domainEntries] of sortedDomains.slice(0, 20)) {
       lines.push(`## ${domain}（${domainEntries.length} 次访问）`);
@@ -264,7 +262,7 @@ export async function collectBrowserBookmarks(): Promise<
     content: string;
     bookmarkCount: number;
   }>
->{
+> {
   const browsers = getBrowserPaths();
   if (browsers.length === 0) return [];
 

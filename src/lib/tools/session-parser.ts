@@ -26,7 +26,7 @@ type RawMessage = { role: string; content: string };
 /**
  * 把对话消息数组渲染成 markdown。
  */
-function renderMessages(messages: RawMessage[], source: ToolType): string {
+function renderMessages(messages: RawMessage[], _source: ToolType): string {
   const lines: string[] = [];
   for (const msg of messages) {
     const role = msg.role === "assistant" ? "AI" : msg.role === "user" ? "我" : msg.role;

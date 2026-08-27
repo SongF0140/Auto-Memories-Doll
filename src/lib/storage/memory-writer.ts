@@ -17,10 +17,7 @@ export async function writeMemoryMarkdown(record: MemoryRecord): Promise<void> {
  * 更新某话题的 Agent.md（短时记忆要点）。
  * 内容包含该话题下所有记忆的标题、摘要与最近更新时间。
  */
-export async function updateAgentMarkdown(
-  topic: string,
-  memories: MemoryRecord[],
-): Promise<void> {
+export async function updateAgentMarkdown(topic: string, memories: MemoryRecord[]): Promise<void> {
   const topicMemories = memories
     .filter((m) => m.topic === topic)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

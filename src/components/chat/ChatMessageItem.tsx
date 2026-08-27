@@ -10,7 +10,15 @@ interface ChatMessageItemProps {
 
 /** 18x18 系统错误图标 */
 const AlertIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="w-4 h-4 shrink-0"
+  >
     <circle cx="12" cy="12" r="10" />
     <line x1="12" y1="8" x2="12" y2="12" />
     <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -34,7 +42,11 @@ export default function ChatMessageItem({ message }: ChatMessageItemProps) {
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""} animate-fade-in`}>
-      <Avatar name={isUser ? "You" : "AI"} size="md" className={isUser ? "ring-2 ring-accent/20" : "ring-2 ring-brand-blue/20"} />
+      <Avatar
+        name={isUser ? "You" : "AI"}
+        size="md"
+        className={isUser ? "ring-2 ring-accent/20" : "ring-2 ring-brand-blue/20"}
+      />
       <div className={`max-w-[80%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
         <div
           className={`relative px-5 py-3.5 rounded-2xl text-base leading-relaxed transition-shadow duration-300 ${
@@ -48,7 +60,9 @@ export default function ChatMessageItem({ message }: ChatMessageItemProps) {
           )}
           <p className="whitespace-pre-wrap relative z-10">{message.content}</p>
         </div>
-        <span className="text-[11px] text-text-tertiary px-1 font-medium">{isUser ? "你" : "助手"}</span>
+        <span className="text-[11px] text-text-tertiary px-1 font-medium">
+          {isUser ? "你" : "助手"}
+        </span>
       </div>
     </div>
   );

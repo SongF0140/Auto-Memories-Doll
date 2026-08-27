@@ -8,10 +8,7 @@ import { MemoryService } from "../../server/services/memory-service";
 import { VectorRetriever } from "../../lib/vector/retriever";
 import { searchWithExpansion } from "../../lib/vector/query-expansion";
 import { Ranker } from "../../lib/vector/ranker";
-import {
-  RETRIEVAL_CANDIDATE_LIMIT,
-  RETRIEVAL_MAX_INJECTED_MEMORIES,
-} from "../../config/constants";
+import { RETRIEVAL_CANDIDATE_LIMIT, RETRIEVAL_MAX_INJECTED_MEMORIES } from "../../config/constants";
 import { readProfileTags } from "../../lib/storage/index-writer";
 import { SkillManager } from "../../lib/skills/manager";
 import { McpManager } from "../../lib/mcp/manager";
@@ -26,9 +23,6 @@ import { compressConversation } from "../../lib/chat/conversation-compressor";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
-/** Agent 循环最大工具迭代轮次 */
-const MAX_AGENT_ROUNDS = 5;
-
 export class ChatHandler {
   private templateManager: TemplateManager;
   private memoryService: MemoryService;
@@ -70,7 +64,10 @@ export class ChatHandler {
 
     const apiMessages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
       { role: "system", content: systemMessage },
-      ...processedMessages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ...processedMessages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
     ];
 
     const response = await ModelAdapter.generateStream({
@@ -128,7 +125,11 @@ export class ChatHandler {
 
     // Layer 3: 若意图为记忆创建/更新，用 budget LLM 提取结构化实体
     let extractedEntity: ExtractedMemoryEntity | null = null;
-    if (intent && (intent.type === "memory_create" || intent.type === "memory_update") && lastUserMsg) {
+    if (
+      intent &&
+      (intent.type === "memory_create" || intent.type === "memory_update") &&
+      lastUserMsg
+    ) {
       try {
         extractedEntity = await this.classifier.extractMemoryEntity(lastUserMsg.content);
       } catch {
@@ -254,9 +255,11 @@ export class ChatHandler {
       if (extractedEntity) {
         parts.push(`\n已提取实体:`);
         if (extractedEntity.title) parts.push(`- 标题: ${extractedEntity.title}`);
-        if (extractedEntity.tags.length > 0) parts.push(`- 标签: ${extractedEntity.tags.join(", ")}`);
+        if (extractedEntity.tags.length > 0)
+          parts.push(`- 标签: ${extractedEntity.tags.join(", ")}`);
         if (extractedEntity.topic) parts.push(`- 主题: ${extractedEntity.topic}`);
-        if (extractedEntity.content) parts.push(`- 内容摘要: ${extractedEntity.content.substring(0, 200)}`);
+        if (extractedEntity.content)
+          parts.push(`- 内容摘要: ${extractedEntity.content.substring(0, 200)}`);
       }
       intentBlock = parts.join("\n");
     }

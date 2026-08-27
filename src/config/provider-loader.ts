@@ -67,10 +67,7 @@ export function getProviderModels(providerName: string): ProviderEntry | undefin
 }
 
 /** 查找指定类型的第一个模型名（chat 或 embedding） */
-export function findModelByType(
-  providerName: string,
-  type: ProviderModelType,
-): string | undefined {
+export function findModelByType(providerName: string, type: ProviderModelType): string | undefined {
   const provider = getProviderModels(providerName);
   if (!provider) return undefined;
   for (const [name, entry] of Object.entries(provider.models)) {

@@ -800,10 +800,10 @@ export type ConflictRecord = {
 | memory/search 性能 | 无约束 | 已修复：`listMemories()` 调用处统一加 limit 约束（handler: 500, tool-registry: 200, orchestrator: 500） | ~~P1~~ |
 | 文件锁实现 | 未描述实现细节 | 已修复：`fs.open(path, O_WRONLY \| O_CREAT \| O_EXCL)` 原子操作 | ~~P2~~ |
 | 日志系统 | 未提及 | 已修复：核心链路（model-adapter, memory-service, orchestrator）迁移到 `logger` | ~~P3~~ |
-| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：34 个测试文件，346 passed / 0 skipped，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路、配置 API 请求体验证、提供商目录、上下文压缩和首个 React 设置表单 SSR 测试 | ~~P2~~ |
+| 测试覆盖 | 第 10 节定义了完整测试策略 | 已修复：44 个测试文件，413 passed / 0 skipped，覆盖 builder/validator/differ/conflict-resolver/VectorIndex/Ranker/MemoryService 队列/Auditor、Agent 循环、降级路径、聊天入队到审计写回集成链路、配置 API 请求体验证、提供商目录、上下文压缩、React 设置表单 SSR、记忆检索库/图谱路由和 listen 错误契约测试 | ~~P2~~ |
 | 工具结果分层 | 未定义 | 已修复：`ToolResult` 新增 `content` 字段（给模型读的自然语言），`data` 保持不变（给 UI/日志） | ~~P3~~ |
 | 会话系统提示快照 | 持久化 system 消息 | 已修复：`ChatSessionService.appendSnapshot` 过滤 system 角色消息，恢复时由 Handler 重建 | ~~P2~~ |
-| 聊天 UI 与记忆页面契约回归 | Phase 2 要求多会话 UI 已接入；第 4.9 节要求前端可检索并进入记忆详情 | 已修复：恢复 `/chat`、`ChatInterface` 与 `useChatSession`，但按既有 UI 设计保持顶部导航仅“首页 / 检索库 / 设置”三项；首页搜索统一读取 `data.results`，检索库统一读取 `data.items`；`/memory/[id]` 专用于记忆 ID，话题聚合迁至 `/memory/topic/[topic]` | ~~P0~~ |
+| 聊天 UI 与记忆页面契约回归 | Phase 2 要求多会话 UI 已接入；第 4.9 节要求前端可检索并进入记忆详情 | 已修复：恢复 `/chat`、`ChatInterface` 与 `useChatSession`，首页快捷入口提供“开始对话”并保留顶部导航仅“首页 / 检索库 / 设置”三项；首页搜索统一读取 `data.results`，检索库统一读取 `data.items`；`/memory/[id]` 专用于记忆 ID，话题聚合迁至 `/memory/topic/[topic]` | ~~P0~~ |
 | 提供商配置 | AI 配置仅前端表单 | 已修复：`src/config/providers.json` 声明式目录经 `provider-loader.ts` 做 Zod 校验和读写，`/api/config/ai` 返回 `providerCatalog`，设置页模型/供应商选项由目录驱动并有单测覆盖 | ~~P2~~ |
 | docs 目录未纳入版本控制 | 第 2 节要求文档跟随实现，差异有记录 | 已修复：`.gitignore` 不再忽略 `docs-zh/`，仅继续忽略 `docs-zh/.obsidian/workspace.json` 这类个人编辑器状态；项目文档可进入版本控制 | ~~P2~~ |
 | 降级状态恢复 | 第 4.11 节描述降级但未提恢复 | 已修复：`ModelAdapter.startHealthCheck()` 周期性轮询，恢复后自动退出降级；scheduler setInterval 类型修复 | ~~P1~~ |
@@ -832,6 +832,10 @@ export type ConflictRecord = {
 | 用户画像无演化可视化 | 第 4.8 节"profile.md 由审计持久化层更新"但用户无法感知画像变化 | 已修复：`ProfileUpdater` 新增"学习中的领域"区块 + `profile-changelog.jsonl` 变更历史记录 + `getChangelog` 方法 + `/api/profile` API（GET 画像+历史 / POST 手动分析）+ `ProfilePanel` 前端组件（分区块展示 + 演化时间线）+ Navbar 加画像 tab | ~~P2~~ |
 | 浏览器历史未采集 | 第 4.6 节外部能力接入未覆盖浏览器历史 | 已修复：新增 `history-collector.ts`（Chrome/Edge History SQLite copy+读取+Chrome 时间戳转换+域名分组 / Bookmarks JSON 解析+文件夹分组）+ `BrowserCollectScheduler`（历史 30min / 书签 6h，默认 `BROWSER_COLLECT_ENABLED=false` 关闭）+ instrumentation 启动 | ~~P3~~ |
 | 文件监听与 `/api/listen` 重复写入 | 第 4.8 节要求候选先入待审计队列、最终文件只由审计持久化层写入 | 已修复：`/api/listen` 移除提前 Markdown 落盘，仅调用 `stageCreateMemory()`；审计新建沿用队列 `memoryId`；FileWatcher 按稳定 ID 区分 add/create 与 change/update，并增加外部文件修改集成测试 | ~~P0~~ |
+| 本地服务监听安全 | 纯本地单机部署，不应默认暴露所有网卡 | 已修复：`dev`/`start` 显式绑定 `127.0.0.1`；API middleware 允许 localhost、IPv4/IPv6 loopback 与端口，拒绝非本机 Host 并返回统一错误结构；跨 Origin 的本机工具调用保持可用 | ~~P0~~ |
+| 检索库与图谱路由语义 | `/memory` 应承担检索库职责，图谱应有唯一入口 | 已修复：`/memory` 提供列表、搜索、话题筛选、分页和详情/话题/图谱链接；`/memory/map` 统一由 `KnowledgeMap` + `MemoryMapViewport` 渲染，删除重复路由实现 | ~~P0~~ |
+| `/api/listen` 错误响应契约 | 错误应使用 `{ success:false, error:{ code, message } }` | 已修复：非法 JSON、Zod 校验、大小超限和内部异常统一使用 `apiError`；内部异常客户端消息稳定且详细信息仅写 logger；桥接脚本兼容对象错误 | ~~P1~~ |
+| 工程门禁与真实浏览器流程 | CI 仅覆盖 typecheck/lint/test/eval，缺少格式、覆盖率、构建和真实 E2E | 已修复：严格 Lint、Prettier、覆盖率阈值、production build、Playwright Chromium E2E 和隔离测试数据接入 CI；E2E 覆盖首页→聊天、检索库→详情、检索库→图谱、设置→工具监听和 listen 错误契约 | ~~P1~~ |
 
 ### 11.2 渐进式路线图
 
@@ -890,7 +894,11 @@ Phase 5 — 检索与质量收口
   [x] 注入改为 getMemoriesByIds 精确加载，移除 500 条全量拉取
   [x] 记忆纠错闭环（MemoryCorrectionService + correct_memory 工具 + memory_update 意图路由 + 记错/纠正关键词）
   [x] 检索评测集与指标（src/eval，Recall@k / MRR，npm run eval 出报告）
-  [x] GitHub Actions CI（ubuntu + windows，typecheck + lint + test + eval）
+  [x] GitHub Actions CI（ubuntu + windows 基础检查；Ubuntu 独立 coverage/build/E2E job）
+  [x] Prettier 格式门禁与 ESLint 0 warning
+  [x] Lines 30% / Branches 70% / Functions 50% 覆盖率回退阈值
+  [x] Playwright Chromium 真实 E2E（隔离 memory root/database）
+  [x] usearch 字面量加载，生产构建无 Critical dependency warning
   [x] usearch 移至 optionalDependencies（CI 走 JS 精确后端）
 ```
 
@@ -916,4 +924,9 @@ Phase 5 — 检索与质量收口
 - 已恢复聊天与多会话能力：`/chat`、`ChatInterface`、`useChatSession`、消息输入/展示/模式选择组件重新接入现有 Agent 事件流与 JSONL 会话 API；顶部导航按既有 UI 设计继续保持“首页 / 检索库 / 设置”三项，不展示对话入口
 - 已修复记忆浏览契约与路由语义：新增 `memory-api-client.ts` 统一消费 `data.items` / `data.results`；单条记忆使用 `/memory/[id]`，话题聚合使用 `/memory/topic/[topic]`
 - 新增回归测试：`memory-api-client.test.ts`、`chat-ui-restoration.test.tsx`
-- 当前测试总量：42 个测试文件，389 passed / 0 skipped（共 389 用例）
+- 已收紧本地安全边界：默认 `dev`/`start` 绑定 `127.0.0.1`，middleware 拒绝非本机 Host；本机跨 Origin 工具调用保持可用
+- 已恢复检索库语义：`/memory` 提供列表/搜索/话题筛选/分页，`/memory/map` 使用唯一的 `KnowledgeMap` 实现
+- 已补齐用户入口：首页快捷入口“开始对话”指向 `/chat`，设置侧栏新增“工具监听”指向 `/settings/tools`
+- 已统一 `/api/listen` 错误契约，并让 `public/bridge/capture.js` 读取对象错误中的 `message`
+- 已加入 Vitest 临时 memory root、覆盖率阈值和 Playwright 隔离 seed；真实浏览器覆盖 5 条关键流程
+- 当前测试总量：44 个测试文件，413 passed / 0 skipped（共 413 用例）

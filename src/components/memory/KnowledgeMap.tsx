@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import React from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { memoryTopicHref } from '@/lib/memory-api-client';
-import type { MemoryRecord } from '@/types/memory';
+import Link from "next/link";
+import React from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { memoryTopicHref } from "@/lib/memory-api-client";
+import type { MemoryRecord } from "@/types/memory";
 
 /* ── 常量与类型 ── */
 
@@ -24,11 +24,11 @@ export interface KnowledgeNode {
   label: string;
   x: number;
   y: number;
-  category: 'knowledge' | 'work' | 'project';
+  category: "knowledge" | "work" | "project";
   count: number;
   keywords: string[];
   memoryIds: string[];
-  status: 'active' | 'normal' | 'small';
+  status: "active" | "normal" | "small";
 }
 
 interface KnowledgeEdge {
@@ -50,50 +50,53 @@ interface CategoryRegion {
 /* ── 分类区域配置（棕白金配色） ── */
 const categoryRegions: CategoryRegion[] = [
   {
-    id: 'knowledge',
-    label: '知识归纳',
+    id: "knowledge",
+    label: "知识归纳",
     x: 100,
     y: 80,
     w: 480,
     h: 360,
-    color: 'rgba(166, 124, 0, 0.08)',
+    color: "rgba(166, 124, 0, 0.08)",
   },
   {
-    id: 'work',
-    label: '工作经验',
+    id: "work",
+    label: "工作经验",
     x: 620,
     y: 80,
     w: 480,
     h: 360,
-    color: 'rgba(201, 162, 39, 0.08)',
+    color: "rgba(201, 162, 39, 0.08)",
   },
   {
-    id: 'project',
-    label: '项目沉淀',
+    id: "project",
+    label: "项目沉淀",
     x: 360,
     y: 480,
     w: 480,
     h: 340,
-    color: 'rgba(160, 120, 60, 0.08)',
+    color: "rgba(160, 120, 60, 0.08)",
   },
 ];
 
 /* ── 将记忆数据转换为节点 ── */
-export function buildKnowledgeGraph(memories: MemoryRecord[]): { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] } {
+export function buildKnowledgeGraph(memories: MemoryRecord[]): {
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+} {
   const topicMap = new Map<
     string,
-    { memories: MemoryRecord[]; keywords: Set<string>; category: 'knowledge' | 'work' | 'project' }
+    { memories: MemoryRecord[]; keywords: Set<string>; category: "knowledge" | "work" | "project" }
   >();
 
   // 聚合记忆到主题
   memories.forEach((mem: MemoryRecord) => {
-    const topic = mem.topic || 'general';
+    const topic = mem.topic || "general";
     let existing = topicMap.get(topic);
     if (!existing) {
       existing = {
         memories: [],
         keywords: new Set<string>(),
-        category: 'knowledge',
+        category: "knowledge",
       };
       topicMap.set(topic, existing);
     }
@@ -105,9 +108,10 @@ export function buildKnowledgeGraph(memories: MemoryRecord[]): { nodes: Knowledg
   const nodes: KnowledgeNode[] = Array.from(topicMap.entries()).map(([name, data], index) => {
     const region = categoryRegions.find((r) => r.id === data.category) || categoryRegions[0];
     const offsetX = ((index * 137) % (region.w - 100)) + 50;
-    const offsetY = (((index * 97) % (region.h - 80)) + 40);
+    const offsetY = ((index * 97) % (region.h - 80)) + 40;
 
-    const status: KnowledgeNode['status'] = data.memories.length > 5 ? 'active' : data.memories.length > 2 ? 'normal' : 'small';
+    const status: KnowledgeNode["status"] =
+      data.memories.length > 5 ? "active" : data.memories.length > 2 ? "normal" : "small";
 
     return {
       id: name,
@@ -141,25 +145,17 @@ export function buildKnowledgeGraph(memories: MemoryRecord[]): { nodes: Knowledg
 }
 
 /* ── 节点大小配置 ── */
-const nodeRadius: Record<KnowledgeNode['status'], number> = {
+const nodeRadius: Record<KnowledgeNode["status"], number> = {
   active: 28,
   normal: 22,
   small: 16,
 };
 
-const fontSize: Record<KnowledgeNode['status'], number> = {
+const fontSize: Record<KnowledgeNode["status"], number> = {
   active: 13,
   normal: 11,
   small: 10,
 };
-
-/* ── 辅助函数 ── */
-function clientToView(svg: SVGSVGElement, clientX: number, clientY: number) {
-  const ctm = svg.getScreenCTM();
-  if (!ctm) return { x: 0, y: 0 };
-  const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
-  return { x: p.x, y: p.y };
-}
 
 function clampZoom(k: number) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, k));
@@ -179,7 +175,7 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
   const [selected, setSelected] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   const { nodes, edges } = useMemo(() => buildKnowledgeGraph(memories), [memories]);
@@ -322,7 +318,10 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
   const transform = `translate(${view.x}, ${view.y}) scale(${view.k})`;
 
   return (
-    <div className="relative w-full h-full overflow-hidden" style={{ background: 'var(--background-warm)' }}>
+    <div
+      className="relative w-full h-full overflow-hidden"
+      style={{ background: "var(--background-warm)" }}
+    >
       {/* SVG 地图 */}
       <svg
         ref={svgRef}
@@ -332,7 +331,7 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: "none" }}
       >
         <g transform={transform}>
           {/* ── 区域背景 ── */}
@@ -376,7 +375,9 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
             if (relatedNodes && !isHighlighted) return null;
 
             const opacity = isHighlighted ? 0.6 : 0.12;
-            const strokeWidth = isHighlighted ? (edge.strength || 1) * 1.5 : (edge.strength || 1) * 0.8;
+            const strokeWidth = isHighlighted
+              ? (edge.strength || 1) * 1.5
+              : (edge.strength || 1) * 0.8;
 
             return (
               <line
@@ -416,7 +417,7 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
                 onMouseEnter={() => handleNodeEnter(node.id)}
                 onMouseLeave={handleNodeLeave}
                 className="cursor-pointer"
-                style={{ transition: 'transform 0.2s ease' }}
+                style={{ transition: "transform 0.2s ease" }}
               >
                 {/* 外发光效果（选中/悬停时） */}
                 {(isHovered || isSelected) && (
@@ -434,11 +435,11 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
                   cx={node.x}
                   cy={node.y}
                   r={displayR}
-                  fill={isSelected ? '#D4B84A' : isHovered ? '#C9A227' : '#3E3224'}
-                  stroke={isSelected ? '#F5F0E8' : '#A67C00'}
+                  fill={isSelected ? "#D4B84A" : isHovered ? "#C9A227" : "#3E3224"}
+                  stroke={isSelected ? "#F5F0E8" : "#A67C00"}
                   strokeWidth={isSelected ? 2.5 : 1.5}
                   opacity={opacity}
-                  style={{ transition: 'all 0.2s ease' }}
+                  style={{ transition: "all 0.2s ease" }}
                 />
 
                 {/* 节点标签 */}
@@ -450,16 +451,22 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
                   className="font-mono pointer-events-none"
                   fontSize={fontSize[node.status]}
                   fontWeight={isSelected || isHovered ? 700 : 500}
-                  fill={isSelected || isHovered ? '#3E3224' : '#F5F0E8'}
+                  fill={isSelected || isHovered ? "#3E3224" : "#F5F0E8"}
                   opacity={opacity}
                 >
-                  {node.label.length > 10 ? node.label.slice(0, 9) + '…' : node.label}
+                  {node.label.length > 10 ? node.label.slice(0, 9) + "…" : node.label}
                 </text>
 
                 {/* 计数徽章 */}
                 {node.count > 1 && (
                   <g>
-                    <circle cx={node.x + displayR - 4} cy={node.y - displayR + 4} r={10} fill="#C9A227" opacity={opacity} />
+                    <circle
+                      cx={node.x + displayR - 4}
+                      cy={node.y - displayR + 4}
+                      r={10}
+                      fill="#C9A227"
+                      opacity={opacity}
+                    />
                     <text
                       textAnchor="middle"
                       dominantBaseline="central"
@@ -513,8 +520,8 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
                 onClick={() => setActiveFilter(activeFilter === cat.id ? null : cat.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   activeFilter === cat.id
-                    ? 'bg-[#A67C00] text-white'
-                    : 'bg-[#FAF8F5] text-[#5D4E37] hover:bg-[#F0EBE1]'
+                    ? "bg-[#A67C00] text-white"
+                    : "bg-[#FAF8F5] text-[#5D4E37] hover:bg-[#F0EBE1]"
                 }`}
               >
                 {cat.label}
@@ -531,7 +538,14 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
           className="w-10 h-10 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-[#E8E0D4] flex items-center justify-center hover:bg-[#FAF8F5] transition-colors text-[#3E3224]"
           title="放大"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35M11 8v6M8 11h6" />
           </svg>
@@ -541,7 +555,14 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
           className="w-10 h-10 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-[#E8E0D4] flex items-center justify-center hover:bg-[#FAF8F5] transition-colors text-[#3E3224]"
           title="缩小"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35M8 11h6" />
           </svg>
@@ -551,7 +572,14 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
           className="w-10 h-10 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-[#E8E0D4] flex items-center justify-center hover:bg-[#FAF8F5] transition-colors text-[#3E3224]"
           title="重置视图"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
             <path d="M3 3v5h5" />
           </svg>
@@ -559,63 +587,73 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
       </div>
 
       {/* 节点详情面板（悬停/选中时显示） */}
-      {(hovered || selected) && (() => {
-        const nodeId = selected || hovered;
-        const node = nodeById.get(nodeId!);
-        if (!node) return null;
+      {(hovered || selected) &&
+        (() => {
+          const nodeId = selected || hovered;
+          const node = nodeById.get(nodeId!);
+          if (!node) return null;
 
-        return (
-          <div
-            className="absolute bottom-6 left-6 z-10 bg-white/98 backdrop-blur-sm rounded-2xl shadow-2xl border border-[#E8E0D4] p-5 max-w-sm animate-fade-in"
-            style={{ animationDuration: '0.2s' }}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="text-lg font-bold text-[#3E3224] font-mono">{node.label}</h3>
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                  node.category === 'knowledge'
-                    ? 'bg-blue-50 text-blue-700'
-                    : node.category === 'work'
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-purple-50 text-purple-700'
-                }`}
-              >
-                {categoryRegions.find((r) => r.id === node.category)?.label}
-              </span>
-            </div>
-
-            <p className="text-sm text-[#5D4E37] mb-3">
-              包含 <span className="font-bold text-[#A67C00]">{node.count}</span> 条记忆
-            </p>
-
-            {node.keywords.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs font-medium text-[#8B7D6B] mb-2">关键词</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {node.keywords.map((kw) => (
-                    <span key={kw} className="px-2 py-1 bg-[#FAF8F5] rounded-md text-xs text-[#5D4E37]">
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <Link
-              href={memoryTopicHref(node.id)}
-              className="cta-btn w-full block text-center py-2.5 rounded-xl font-semibold text-sm"
+          return (
+            <div
+              className="absolute bottom-6 left-6 z-10 bg-white/98 backdrop-blur-sm rounded-2xl shadow-2xl border border-[#E8E0D4] p-5 max-w-sm animate-fade-in"
+              style={{ animationDuration: "0.2s" }}
             >
-              查看详情 →
-            </Link>
-          </div>
-        );
-      })()}
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="text-lg font-bold text-[#3E3224] font-mono">{node.label}</h3>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    node.category === "knowledge"
+                      ? "bg-blue-50 text-blue-700"
+                      : node.category === "work"
+                        ? "bg-green-50 text-green-700"
+                        : "bg-purple-50 text-purple-700"
+                  }`}
+                >
+                  {categoryRegions.find((r) => r.id === node.category)?.label}
+                </span>
+              </div>
+
+              <p className="text-sm text-[#5D4E37] mb-3">
+                包含 <span className="font-bold text-[#A67C00]">{node.count}</span> 条记忆
+              </p>
+
+              {node.keywords.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-[#8B7D6B] mb-2">关键词</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {node.keywords.map((kw) => (
+                      <span
+                        key={kw}
+                        className="px-2 py-1 bg-[#FAF8F5] rounded-md text-xs text-[#5D4E37]"
+                      >
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Link
+                href={memoryTopicHref(node.id)}
+                className="cta-btn w-full block text-center py-2.5 rounded-xl font-semibold text-sm"
+              >
+                查看详情 →
+              </Link>
+            </div>
+          );
+        })()}
 
       {/* 统计信息 */}
       <div className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur-sm rounded-xl px-4 py-2.5 shadow-md border border-[#E8E0D4]">
         <p className="text-xs text-[#8B7D6B] font-mono">
-          <span className="font-bold text-[#A67C00]">{filteredNodes.length}</span> / {nodes.length} 个节点
-          {edges.length > 0 && <> · <span className="font-bold text-[#A67C00]">{edges.length}</span> 条连线</>}
+          <span className="font-bold text-[#A67C00]">{filteredNodes.length}</span> / {nodes.length}{" "}
+          个节点
+          {edges.length > 0 && (
+            <>
+              {" "}
+              · <span className="font-bold text-[#A67C00]">{edges.length}</span> 条连线
+            </>
+          )}
         </p>
       </div>
     </div>

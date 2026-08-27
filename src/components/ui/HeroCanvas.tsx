@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Node {
   x: number;
@@ -13,7 +13,7 @@ interface Node {
 
 const MOBILE_BREAKPOINT = 768;
 
-type RenderMode = 'pending' | 'static' | 'mobile' | 'canvas';
+type RenderMode = "pending" | "static" | "mobile" | "canvas";
 
 interface AnimationConfig {
   nodeCount: number;
@@ -85,10 +85,33 @@ function StaticNodePattern() {
         <pattern id="node-dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
           <circle cx="20" cy="20" r="1.5" fill="currentColor" opacity="0.35" />
         </pattern>
-        <pattern id="node-dots-large" x="10" y="10" width="120" height="120" patternUnits="userSpaceOnUse">
+        <pattern
+          id="node-dots-large"
+          x="10"
+          y="10"
+          width="120"
+          height="120"
+          patternUnits="userSpaceOnUse"
+        >
           <circle cx="60" cy="60" r="2.5" fill="currentColor" opacity="0.2" />
-          <line x1="0" y1="60" x2="120" y2="60" stroke="currentColor" strokeWidth="0.5" opacity="0.08" />
-          <line x1="60" y1="0" x2="60" y2="120" stroke="currentColor" strokeWidth="0.5" opacity="0.08" />
+          <line
+            x1="0"
+            y1="60"
+            x2="120"
+            y2="60"
+            stroke="currentColor"
+            strokeWidth="0.5"
+            opacity="0.08"
+          />
+          <line
+            x1="60"
+            y1="0"
+            x2="60"
+            y2="120"
+            stroke="currentColor"
+            strokeWidth="0.5"
+            opacity="0.08"
+          />
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill="url(#node-dots)" />
@@ -117,37 +140,65 @@ function MobileNodePattern() {
       `}</style>
 
       <g className="mobile-node-cluster-a" fill="none" stroke="currentColor" strokeWidth="0.8">
-        <path d="M18 112L64 92L112 130L146 66L202 104L226 150L170 172L112 130L74 214L30 188" opacity="0.13" />
-        <path d="M64 92L146 66M112 130L132 190L170 172M202 104L226 150L170 172M74 214L138 250L170 172M30 188L74 214L138 250" opacity="0.09" />
+        <path
+          d="M18 112L64 92L112 130L146 66L202 104L226 150L170 172L112 130L74 214L30 188"
+          opacity="0.13"
+        />
+        <path
+          d="M64 92L146 66M112 130L132 190L170 172M202 104L226 150L170 172M74 214L138 250L170 172M30 188L74 214L138 250"
+          opacity="0.09"
+        />
         <g fill="currentColor" stroke="none" opacity="0.48">
-          <circle cx="18" cy="112" r="3.5" /><circle cx="64" cy="92" r="4.2" className="mobile-node-pulse" />
-          <circle cx="112" cy="130" r="3.2" /><circle cx="132" cy="190" r="3" />
-          <circle cx="146" cy="66" r="4.6" /><circle cx="202" cy="104" r="3.8" />
-          <circle cx="226" cy="150" r="3.1" /><circle cx="170" cy="172" r="4.1" className="mobile-node-pulse" />
-          <circle cx="74" cy="214" r="3.4" /><circle cx="30" cy="188" r="3.1" /><circle cx="138" cy="250" r="4.3" />
+          <circle cx="18" cy="112" r="3.5" />
+          <circle cx="64" cy="92" r="4.2" className="mobile-node-pulse" />
+          <circle cx="112" cy="130" r="3.2" />
+          <circle cx="132" cy="190" r="3" />
+          <circle cx="146" cy="66" r="4.6" />
+          <circle cx="202" cy="104" r="3.8" />
+          <circle cx="226" cy="150" r="3.1" />
+          <circle cx="170" cy="172" r="4.1" className="mobile-node-pulse" />
+          <circle cx="74" cy="214" r="3.4" />
+          <circle cx="30" cy="188" r="3.1" />
+          <circle cx="138" cy="250" r="4.3" />
         </g>
       </g>
 
       <g className="mobile-node-cluster-b" fill="none" stroke="currentColor" strokeWidth="0.8">
         <path d="M246 250L300 214L354 260L368 318L326 332L262 356L226 304L246 250" opacity="0.12" />
-        <path d="M300 214L326 332M354 260L368 318L326 332M246 250L286 286L326 332M226 304L262 356L326 332L354 260" opacity="0.08" />
+        <path
+          d="M300 214L326 332M354 260L368 318L326 332M246 250L286 286L326 332M226 304L262 356L326 332L354 260"
+          opacity="0.08"
+        />
         <path d="M88 410L146 374L204 420L190 462L162 492L104 468L88 410" opacity="0.11" />
-        <path d="M146 374L162 492M204 420L190 462L162 492M88 410L128 438L204 420M104 468L128 438L162 492" opacity="0.075" />
+        <path
+          d="M146 374L162 492M204 420L190 462L162 492M88 410L128 438L204 420M104 468L128 438L162 492"
+          opacity="0.075"
+        />
         <g fill="currentColor" stroke="none" opacity="0.46">
-          <circle cx="246" cy="250" r="3.3" /><circle cx="286" cy="286" r="3" />
-          <circle cx="300" cy="214" r="4" /><circle cx="354" cy="260" r="3.5" className="mobile-node-pulse" />
-          <circle cx="368" cy="318" r="3.2" /><circle cx="326" cy="332" r="4.4" />
-          <circle cx="262" cy="356" r="3.7" /><circle cx="226" cy="304" r="3.2" />
-          <circle cx="88" cy="410" r="3.3" /><circle cx="128" cy="438" r="3.1" />
-          <circle cx="146" cy="374" r="4.5" className="mobile-node-pulse" /><circle cx="204" cy="420" r="3.8" />
-          <circle cx="190" cy="462" r="3.2" /><circle cx="162" cy="492" r="4.1" /><circle cx="104" cy="468" r="3.6" />
+          <circle cx="246" cy="250" r="3.3" />
+          <circle cx="286" cy="286" r="3" />
+          <circle cx="300" cy="214" r="4" />
+          <circle cx="354" cy="260" r="3.5" className="mobile-node-pulse" />
+          <circle cx="368" cy="318" r="3.2" />
+          <circle cx="326" cy="332" r="4.4" />
+          <circle cx="262" cy="356" r="3.7" />
+          <circle cx="226" cy="304" r="3.2" />
+          <circle cx="88" cy="410" r="3.3" />
+          <circle cx="128" cy="438" r="3.1" />
+          <circle cx="146" cy="374" r="4.5" className="mobile-node-pulse" />
+          <circle cx="204" cy="420" r="3.8" />
+          <circle cx="190" cy="462" r="3.2" />
+          <circle cx="162" cy="492" r="4.1" />
+          <circle cx="104" cy="468" r="3.6" />
         </g>
       </g>
 
       <g fill="currentColor" opacity="0.22">
         <circle cx="354" cy="88" r="2.2" className="mobile-node-pulse" />
-        <circle cx="28" cy="316" r="2.5" /><circle cx="320" cy="498" r="2.1" />
-        <circle cx="54" cy="526" r="2.3" /><circle cx="376" cy="438" r="2" />
+        <circle cx="28" cy="316" r="2.5" />
+        <circle cx="320" cy="498" r="2.1" />
+        <circle cx="54" cy="526" r="2.3" />
+        <circle cx="376" cy="438" r="2" />
       </g>
     </svg>
   );
@@ -163,9 +214,9 @@ export function HeroCanvas() {
   const nodesRef = useRef<Node[]>([]);
   const pointerRef = useRef({ x: -9999, y: -9999, speed: 0 });
   // 棕白金配色：使用深棕色作为粒子颜色 (RGB: 62, 50, 36 = #3E3224)
-  const fgColorRef = useRef('62, 50, 36');
+  const fgColorRef = useRef("62, 50, 36");
   const lastFrameTimeRef = useRef(0);
-  const [renderMode, setRenderMode] = useState<RenderMode>('pending');
+  const [renderMode, setRenderMode] = useState<RenderMode>("pending");
 
   const pad = 10;
   const resizeDebounceMs = 120;
@@ -179,7 +230,7 @@ export function HeroCanvas() {
 
   const getFgColor = useCallback((): string => {
     // 返回棕白金配色的前景色 RGB 值
-    return '62, 50, 36'; // #3E3224 - 深棕色
+    return "62, 50, 36"; // #3E3224 - 深棕色
   }, []);
 
   const getAnimationConfig = useCallback((width: number): AnimationConfig => {
@@ -233,7 +284,7 @@ export function HeroCanvas() {
       if (!canvas) return;
 
       const config = getAnimationConfig(dimensionsRef.current.w);
-      if (!config.enablePointer || e.pointerType === 'touch') return;
+      if (!config.enablePointer || e.pointerType === "touch") return;
 
       const rect = canvas.getBoundingClientRect();
       const newX = e.clientX - rect.left;
@@ -258,7 +309,7 @@ export function HeroCanvas() {
   // 核心绘制函数 - 网络连线动态效果
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
+    const ctx = canvas?.getContext("2d");
 
     if (!canvas || !ctx) {
       frameRef.current = null;
@@ -409,9 +460,7 @@ export function HeroCanvas() {
 
     for (const n of nodes) {
       // 脉冲缩放效果（仅移动端）
-      const pulse = config.pulseScale
-        ? Math.sin(elapsed * 1.5 + n.phase) * config.pulseScale
-        : 0;
+      const pulse = config.pulseScale ? Math.sin(elapsed * 1.5 + n.phase) * config.pulseScale : 0;
 
       // 绘制圆形节点
       ctx.beginPath();
@@ -432,21 +481,21 @@ export function HeroCanvas() {
 
   // 检测渲染模式（桌面/移动/静态）
   const updateRenderMode = useCallback(() => {
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isMobile = window.innerWidth < MOBILE_BREAKPOINT;
 
     if (prefersReducedMotion) {
-      setRenderMode('static');
+      setRenderMode("static");
       return;
     }
 
-    setRenderMode(isMobile ? 'mobile' : 'canvas');
+    setRenderMode(isMobile ? "mobile" : "canvas");
   }, []);
 
   useEffect(() => {
     const initialFrame = window.requestAnimationFrame(updateRenderMode);
 
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const handleViewportChange = () => {
       if (modeResizeTimeoutRef.current !== null) {
         window.clearTimeout(modeResizeTimeoutRef.current);
@@ -461,13 +510,13 @@ export function HeroCanvas() {
       updateRenderMode();
     };
 
-    window.addEventListener('resize', handleViewportChange);
-    mediaQuery.addEventListener('change', handleMotionChange);
+    window.addEventListener("resize", handleViewportChange);
+    mediaQuery.addEventListener("change", handleMotionChange);
 
     return () => {
       window.cancelAnimationFrame(initialFrame);
-      window.removeEventListener('resize', handleViewportChange);
-      mediaQuery.removeEventListener('change', handleMotionChange);
+      window.removeEventListener("resize", handleViewportChange);
+      mediaQuery.removeEventListener("change", handleMotionChange);
 
       if (modeResizeTimeoutRef.current !== null) {
         window.clearTimeout(modeResizeTimeoutRef.current);
@@ -478,7 +527,7 @@ export function HeroCanvas() {
 
   // Canvas 动画初始化和生命周期管理
   useEffect(() => {
-    if (renderMode !== 'canvas') {
+    if (renderMode !== "canvas") {
       cancelFrame();
       return;
     }
@@ -489,7 +538,7 @@ export function HeroCanvas() {
 
     const canvas = canvasRef.current;
     const parent = canvas?.parentElement;
-    const hasFinePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const hasFinePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
     const startAnimation = () => {
       if (frameRef.current !== null) return;
@@ -530,9 +579,9 @@ export function HeroCanvas() {
       hasFinePointer && getAnimationConfig(dimensionsRef.current.w).enablePointer;
 
     if (shouldTrackPointer) {
-      parent?.addEventListener('pointermove', onPointerMove, { passive: true });
-      parent?.addEventListener('pointerleave', onPointerLeave);
-      parent?.addEventListener('pointercancel', onPointerLeave);
+      parent?.addEventListener("pointermove", onPointerMove, { passive: true });
+      parent?.addEventListener("pointerleave", onPointerLeave);
+      parent?.addEventListener("pointercancel", onPointerLeave);
     }
 
     // 可见性观察器（离开视口时暂停动画）
@@ -545,25 +594,25 @@ export function HeroCanvas() {
               stopAnimation();
             }
           },
-          { rootMargin: '160px 0px' },
+          { rootMargin: "160px 0px" },
         )
       : null;
 
     if (parent) observer?.observe(parent);
 
-    window.addEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
 
     return () => {
       cancelFrame();
       observer?.disconnect();
 
       if (shouldTrackPointer) {
-        parent?.removeEventListener('pointermove', onPointerMove);
-        parent?.removeEventListener('pointerleave', onPointerLeave);
-        parent?.removeEventListener('pointercancel', onPointerLeave);
+        parent?.removeEventListener("pointermove", onPointerMove);
+        parent?.removeEventListener("pointerleave", onPointerLeave);
+        parent?.removeEventListener("pointercancel", onPointerLeave);
       }
 
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
 
       if (canvasResizeTimeoutRef.current !== null) {
         window.clearTimeout(canvasResizeTimeoutRef.current);
@@ -583,9 +632,9 @@ export function HeroCanvas() {
   ]);
 
   // 根据渲染模式返回不同的 UI
-  if (renderMode === 'pending') return null;
-  if (renderMode === 'static') return <StaticNodePattern />;
-  if (renderMode === 'mobile') return <MobileNodePattern />;
+  if (renderMode === "pending") return null;
+  if (renderMode === "static") return <StaticNodePattern />;
+  if (renderMode === "mobile") return <MobileNodePattern />;
 
   return (
     <canvas

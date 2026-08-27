@@ -139,9 +139,7 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
     <div className="space-y-4">
       {/* 操作栏 */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-text-tertiary">
-          已配置 {skills.length} 个技能
-        </p>
+        <p className="text-xs text-text-tertiary">已配置 {skills.length} 个技能</p>
         <div className="flex gap-2">
           <button
             onClick={() => setShowImport(true)}
@@ -163,9 +161,7 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
         <div className="card p-5 space-y-4">
           <div>
             <h4 className="text-sm font-semibold text-text-primary mb-1">导入技能包</h4>
-            <p className="text-xs text-text-secondary">
-              通过 JSON 配置或 URL 链接导入技能
-            </p>
+            <p className="text-xs text-text-secondary">通过 JSON 配置或 URL 链接导入技能</p>
           </div>
 
           {/* 导入模式切换 */}
@@ -199,7 +195,7 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
                 className="rounded-lg p-3 text-xs font-mono overflow-x-auto"
                 style={{ background: "#FAF8F5", border: "1px dashed #E8E0D4", color: "#8B7355" }}
               >
-{`[
+                {`[
   {
     "name": "代码审查",
     "trigger": "review|审查|code review",
@@ -231,15 +227,11 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
                 placeholder="https://example.com/skill-pack.json"
                 className="input"
               />
-              <p className="text-xs text-text-tertiary">
-                支持 JSON 文件或 GitHub Raw 链接
-              </p>
+              <p className="text-xs text-text-tertiary">支持 JSON 文件或 GitHub Raw 链接</p>
             </div>
           )}
 
-          {importError && (
-            <p className="text-sm text-error">{importError}</p>
-          )}
+          {importError && <p className="text-sm text-error">{importError}</p>}
 
           <div className="flex justify-end gap-2">
             <button
@@ -256,8 +248,7 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
             <button
               onClick={importMode === "json" ? handleJsonImport : handleUrlImport}
               disabled={
-                importing ||
-                (importMode === "json" ? !importText.trim() : !importUrl.trim())
+                importing || (importMode === "json" ? !importText.trim() : !importUrl.trim())
               }
               className="btn disabled:opacity-50"
             >
@@ -314,11 +305,10 @@ export default function SkillList({ skills, onChange }: SkillListProps) {
       {skills.length === 0 && !editing && !showImport && (
         <div className="text-center py-12 bg-white rounded-xl border border-dashed border-[#E8E0D4]">
           <p className="text-text-secondary mb-2">尚未配置任何技能</p>
-          <p className="text-xs text-text-tertiary mb-4">通过导入或手动添加来创建对话前置处理规则</p>
-          <button
-            onClick={() => setShowImport(true)}
-            className="btn btn-secondary text-sm"
-          >
+          <p className="text-xs text-text-tertiary mb-4">
+            通过导入或手动添加来创建对话前置处理规则
+          </p>
+          <button onClick={() => setShowImport(true)} className="btn btn-secondary text-sm">
             导入技能包
           </button>
         </div>

@@ -70,7 +70,14 @@ import { DailyReporter } from "../server/orchestrators/daily-reporter";
 import { ProfileUpdater } from "../server/services/profile-updater";
 import { MemoryRecord } from "../types/memory";
 
-function makeMemory(id: string, title: string, topic: string, summary: string, tags: string[], date?: string): MemoryRecord {
+function makeMemory(
+  id: string,
+  title: string,
+  topic: string,
+  summary: string,
+  tags: string[],
+  date?: string,
+): MemoryRecord {
   const d = date || "2026-08-06";
   return {
     id,
@@ -206,12 +213,28 @@ describe("ContradictionDetector", () => {
 
   it("should compare same-topic memories", async () => {
     (ModelAdapter.generate as any).mockResolvedValue({
-      content: JSON.stringify([{ pairIndex: 1, hasContradiction: true, description: "新信息与旧信息冲突", severity: "medium", suggestion: "需要人工审核" }]),
+      content: JSON.stringify([
+        {
+          pairIndex: 1,
+          hasContradiction: true,
+          description: "新信息与旧信息冲突",
+          severity: "medium",
+          suggestion: "需要人工审核",
+        },
+      ]),
     });
 
     const detector = new ContradictionDetector();
-    const newMem = makeMemory("1", "React 19 features", "frontend", "React 19 uses Server Components", ["react"]);
-    const oldMem = makeMemory("2", "React 18 basics", "frontend", "React 18 uses useEffect", ["react"]);
+    const newMem = makeMemory(
+      "1",
+      "React 19 features",
+      "frontend",
+      "React 19 uses Server Components",
+      ["react"],
+    );
+    const oldMem = makeMemory("2", "React 18 basics", "frontend", "React 18 uses useEffect", [
+      "react",
+    ]);
     const result = await detector.detect([newMem], [oldMem]);
 
     expect(result.totalCompared).toBe(1);
@@ -226,7 +249,13 @@ describe("ContradictionDetector", () => {
 
     const detector = new ContradictionDetector();
     const newMem = makeMemory("1", "React hooks", "frontend", "useState and useEffect", ["react"]);
-    const oldMem = makeMemory("2", "React components", "frontend", "Class components vs functional", ["react"]);
+    const oldMem = makeMemory(
+      "2",
+      "React components",
+      "frontend",
+      "Class components vs functional",
+      ["react"],
+    );
     const result = await detector.detect([newMem], [oldMem]);
 
     expect(result.contradictions).toEqual([]);
@@ -291,7 +320,10 @@ describe("LinkSupplementer", () => {
 
     const supplementer = new LinkSupplementer();
     const oldMem = makeMemory("1", "Vue basics", "frontend", "Vue reactivity", ["vue"]);
-    const newMem = makeMemory("2", "React vs Vue", "frontend", "Comparing reactivity", ["react", "vue"]);
+    const newMem = makeMemory("2", "React vs Vue", "frontend", "Comparing reactivity", [
+      "react",
+      "vue",
+    ]);
     const result = await supplementer.supplement([newMem], [newMem, oldMem]);
 
     expect(result.suggestions.length).toBeGreaterThanOrEqual(0);
@@ -316,7 +348,10 @@ describe("LinkSupplementer", () => {
 
     const supplementer = new LinkSupplementer();
     const oldMem = makeMemory("1", "Vue basics", "frontend", "Vue reactivity", ["vue"]);
-    const newMem = makeMemory("2", "React vs Vue", "frontend", "Comparing reactivity", ["react", "vue"]);
+    const newMem = makeMemory("2", "React vs Vue", "frontend", "Comparing reactivity", [
+      "react",
+      "vue",
+    ]);
     const result = await supplementer.supplement([newMem], [newMem, oldMem]);
 
     expect(result).toEqual({ suggestions: [], addedCount: 0, failedCount: 0 });
@@ -350,8 +385,18 @@ describe("RouteOptimizer", () => {
   it("should apply AI-suggested routing changes", async () => {
     (ModelAdapter.generate as any).mockResolvedValue({
       content: JSON.stringify([
-        { taskCategory: "summarization", currentModel: "budget", suggestedModel: "standard", reason: "今日摘要质量要求高" },
-        { taskCategory: "translation", currentModel: "budget", suggestedModel: "standard", reason: "翻译任务增多" },
+        {
+          taskCategory: "summarization",
+          currentModel: "budget",
+          suggestedModel: "standard",
+          reason: "今日摘要质量要求高",
+        },
+        {
+          taskCategory: "translation",
+          currentModel: "budget",
+          suggestedModel: "standard",
+          reason: "翻译任务增多",
+        },
       ]),
     });
 
@@ -369,7 +414,12 @@ describe("RouteOptimizer", () => {
   it("should ignore invalid task categories", async () => {
     (ModelAdapter.generate as any).mockResolvedValue({
       content: JSON.stringify([
-        { taskCategory: "invalid_task", currentModel: "budget", suggestedModel: "flagship", reason: "测试" },
+        {
+          taskCategory: "invalid_task",
+          currentModel: "budget",
+          suggestedModel: "flagship",
+          reason: "测试",
+        },
       ]),
     });
 
@@ -384,7 +434,12 @@ describe("RouteOptimizer", () => {
   it("should ignore invalid model types", async () => {
     (ModelAdapter.generate as any).mockResolvedValue({
       content: JSON.stringify([
-        { taskCategory: "summarization", currentModel: "budget", suggestedModel: "super_model", reason: "测试" },
+        {
+          taskCategory: "summarization",
+          currentModel: "budget",
+          suggestedModel: "super_model",
+          reason: "测试",
+        },
       ]),
     });
 
@@ -453,14 +508,23 @@ describe("DailyReporter", () => {
       },
       links: {
         suggestions: [
-          { from: { id: "1", title: "React" }, to: { id: "2", title: "Next.js" }, reason: "关联框架" },
+          {
+            from: { id: "1", title: "React" },
+            to: { id: "2", title: "Next.js" },
+            reason: "关联框架",
+          },
         ],
         addedCount: 1,
         failedCount: 0,
       },
       routing: {
         suggestions: [
-          { taskCategory: "summarization" as any, currentModel: "budget" as any, suggestedModel: "standard" as any, reason: "质量提升" },
+          {
+            taskCategory: "summarization" as any,
+            currentModel: "budget" as any,
+            suggestedModel: "standard" as any,
+            reason: "质量提升",
+          },
         ],
         appliedCount: 1,
       },

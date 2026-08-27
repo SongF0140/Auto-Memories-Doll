@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { AiConfig, AiProvider, ModelSlot, ModelTierConfig, EmbeddingConfig } from "../../types/config";
-import type { ProviderCatalog } from "../../config/provider-loader";
 import {
-  buildProviderOptions,
-  buildProviderSelectionPatch,
-} from "./ai-config-options";
+  AiConfig,
+  AiProvider,
+  ModelSlot,
+  ModelTierConfig,
+  EmbeddingConfig,
+} from "../../types/config";
+import type { ProviderCatalog } from "../../config/provider-loader";
+import { buildProviderOptions, buildProviderSelectionPatch } from "./ai-config-options";
 
 type ChatSlot = Exclude<ModelSlot, "embedding">;
 
@@ -23,16 +26,57 @@ const tierLabels: Record<ChatSlot, { title: string; desc: string }> = {
   budget: { title: "廉价模型", desc: "测试生成、摘要、简单提取 — 低成本优先" },
 };
 
-const tierFields: { key: keyof ModelTierConfig; label: string; type: string; step?: string; min?: number; max?: number; placeholder: string }[] = [
+const tierFields: {
+  key: keyof ModelTierConfig;
+  label: string;
+  type: string;
+  step?: string;
+  min?: number;
+  max?: number;
+  placeholder: string;
+}[] = [
   { key: "model", label: "模型名", type: "text", placeholder: "gpt-4o" },
-  { key: "maxTokens", label: "Max Tokens", type: "number", min: 1, max: 131072, placeholder: "8192" },
-  { key: "temperature", label: "Temperature", type: "number", step: "0.1", min: 0, max: 2, placeholder: "0.3" },
-  { key: "timeout", label: "Timeout (ms)", type: "number", min: 1000, max: 120000, placeholder: "60000" },
+  {
+    key: "maxTokens",
+    label: "Max Tokens",
+    type: "number",
+    min: 1,
+    max: 131072,
+    placeholder: "8192",
+  },
+  {
+    key: "temperature",
+    label: "Temperature",
+    type: "number",
+    step: "0.1",
+    min: 0,
+    max: 2,
+    placeholder: "0.3",
+  },
+  {
+    key: "timeout",
+    label: "Timeout (ms)",
+    type: "number",
+    min: 1000,
+    max: 120000,
+    placeholder: "60000",
+  },
   { key: "maxRetries", label: "Max Retries", type: "number", min: 0, max: 10, placeholder: "3" },
 ];
 
-const tierDefaults: ModelTierConfig = { model: "", maxTokens: 8192, temperature: 0.3, timeout: 60000, maxRetries: 3 };
-const embeddingDefaults: EmbeddingConfig = { model: "", dimensions: 1536, maxConcurrency: 8, queueTimeoutMs: 30000 };
+const tierDefaults: ModelTierConfig = {
+  model: "",
+  maxTokens: 8192,
+  temperature: 0.3,
+  timeout: 60000,
+  maxRetries: 3,
+};
+const embeddingDefaults: EmbeddingConfig = {
+  model: "",
+  dimensions: 1536,
+  maxConcurrency: 8,
+  queueTimeoutMs: 30000,
+};
 
 function ensureSlots(config: AiConfig): AiConfig {
   return {
@@ -44,7 +88,12 @@ function ensureSlots(config: AiConfig): AiConfig {
   };
 }
 
-export default function AiConfigForm({ config, providerCatalog, onSave, saving }: AiConfigFormProps) {
+export default function AiConfigForm({
+  config,
+  providerCatalog,
+  onSave,
+  saving,
+}: AiConfigFormProps) {
   const [form, setForm] = useState<AiConfig>(() => ensureSlots(config));
   const providers = buildProviderOptions(providerCatalog, form.provider);
   const [testing, setTesting] = useState(false);
@@ -134,7 +183,9 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
             };
             return (
               <div key={`${slot}-${f.key}`}>
-                <label className="block text-xs font-medium text-text-secondary mb-1">{f.label}</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  {f.label}
+                </label>
                 <input
                   type={f.type}
                   step={f.step}
@@ -216,7 +267,9 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
       <div className="border border-border-subtle rounded-lg p-4 space-y-3">
         <div>
           <h4 className="text-sm font-semibold text-text-primary">Embedding 模型</h4>
-          <p className="text-xs text-text-secondary mt-0.5">向量生成与检索 — 批量处理场景，建议高并发</p>
+          <p className="text-xs text-text-secondary mt-0.5">
+            向量生成与检索 — 批量处理场景，建议高并发
+          </p>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
@@ -241,7 +294,9 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">Max Concurrency</label>
+            <label className="block text-xs font-medium text-text-secondary mb-1">
+              Max Concurrency
+            </label>
             <input
               type="number"
               min={1}
@@ -253,7 +308,9 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">Queue Timeout (ms)</label>
+            <label className="block text-xs font-medium text-text-secondary mb-1">
+              Queue Timeout (ms)
+            </label>
             <input
               type="number"
               min={1000}
@@ -268,7 +325,10 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
       </div>
 
       {/* 连接测试区域 */}
-      <div className="rounded-lg p-4 space-y-3" style={{ background: "#FAF8F5", border: "1px solid #E8E0D4" }}>
+      <div
+        className="rounded-lg p-4 space-y-3"
+        style={{ background: "#FAF8F5", border: "1px solid #E8E0D4" }}
+      >
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-sm font-semibold text-text-primary">连接测试</h4>
@@ -282,7 +342,13 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
           >
             {testing ? (
               <span className="flex items-center gap-2">
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="animate-spin w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <circle cx="12" cy="12" r="10" opacity="0.3" />
                   <path d="M12 2a10 10 0 0 1 10 10" />
                 </svg>
@@ -302,11 +368,25 @@ export default function AiConfigForm({ config, providerCatalog, onSave, saving }
             }`}
           >
             {testResult.ok ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
                 <path d="M20 6L9 17l-5-5" />
               </svg>
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <path d="M15 9l-6 6M9 9l6 6" />
               </svg>

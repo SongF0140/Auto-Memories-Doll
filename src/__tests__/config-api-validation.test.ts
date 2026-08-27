@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import {
-  GET as getAiConfig,
-  POST as updateAiConfig,
-} from "../app/api/config/ai/route";
+import { GET as getAiConfig, POST as updateAiConfig } from "../app/api/config/ai/route";
 import {
   PATCH as previewStorageMigration,
   POST as updateStorageConfig,

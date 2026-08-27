@@ -40,6 +40,23 @@ describe("memory map viewport", () => {
     expect(html).toContain("暂无知识图谱");
   });
 
+  it("renders an explicit loading state", () => {
+    const html = renderToStaticMarkup(
+      <MemoryMapViewport memories={[]} loading={true} error="" onNodeClick={vi.fn()} />,
+    );
+
+    expect(html).toContain("正在加载知识图谱");
+  });
+
+  it("renders an explicit error state", () => {
+    const html = renderToStaticMarkup(
+      <MemoryMapViewport memories={[]} loading={false} error="请求失败" onNodeClick={vi.fn()} />,
+    );
+
+    expect(html).toContain("知识图谱加载失败");
+    expect(html).toContain("请求失败");
+  });
+
   it("renders the shared graph component when data is available", () => {
     const html = renderToStaticMarkup(
       <MemoryMapViewport memories={[memory]} loading={false} error="" onNodeClick={vi.fn()} />,

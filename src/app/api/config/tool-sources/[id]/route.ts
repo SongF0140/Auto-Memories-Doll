@@ -5,7 +5,6 @@ import { restartToolDirWatcher } from "../../../../../server/watchers/tool-dir-w
 import { logger } from "../../../../../lib/logger";
 import { toolSourceUpdateSchema } from "../../../../../lib/validation";
 
-
 const idSchema = z.string().min(1).max(128);
 
 function validateId(params: { id: string }) {

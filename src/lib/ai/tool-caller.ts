@@ -77,9 +77,7 @@ export class ToolCaller {
       // 工具结果分层：content 给模型读（自然语言），data 给 UI/日志（结构化）
       const resultObj = result as Record<string, unknown> | undefined;
       const content =
-        resultObj?.content != null
-          ? String(resultObj.content)
-          : JSON.stringify(result);
+        resultObj?.content != null ? String(resultObj.content) : JSON.stringify(result);
       return {
         toolName: toolCall.toolName,
         success: true,

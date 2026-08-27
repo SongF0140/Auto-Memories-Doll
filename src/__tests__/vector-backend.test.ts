@@ -23,19 +23,17 @@ function createVectorTable(db: Database.Database): void {
   `);
 }
 
-function writeVector(
-  db: Database.Database,
-  memoryId: string,
-  embedding: number[],
-): void {
-  db.prepare(`
+function writeVector(db: Database.Database, memoryId: string, embedding: number[]): void {
+  db.prepare(
+    `
     INSERT INTO vector_records (memoryId, embedding, model, dimensions, updatedAt)
     VALUES (?, ?, 'test-model', ?, '2026-01-01')
     ON CONFLICT(memoryId) DO UPDATE SET
       embedding = excluded.embedding,
       dimensions = excluded.dimensions,
       updatedAt = excluded.updatedAt
-  `).run(memoryId, JSON.stringify(embedding), embedding.length);
+  `,
+  ).run(memoryId, JSON.stringify(embedding), embedding.length);
 }
 
 describe("vector search backends", () => {

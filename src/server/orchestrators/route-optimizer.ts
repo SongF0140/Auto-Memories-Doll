@@ -31,7 +31,7 @@ export interface RouteOptimizationReport {
 export class RouteOptimizer {
   async optimize(
     todaysMemories: MemoryRecord[],
-    allMemories: MemoryRecord[],
+    _allMemories: MemoryRecord[],
   ): Promise<RouteOptimizationReport> {
     if (todaysMemories.length === 0) {
       return { suggestions: [], appliedCount: 0 };
@@ -114,7 +114,10 @@ ${memorySample}
 
     try {
       const response = await ModelAdapter.generate(prompt, "flagship");
-      const jsonStr = response.content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+      const jsonStr = response.content
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
 
       const analyzed = JSON.parse(jsonStr);
       if (!Array.isArray(analyzed) || analyzed.length === 0) {
@@ -132,7 +135,8 @@ ${memorySample}
 
         suggestions.push({
           taskCategory: item.taskCategory as TaskCategory,
-          currentModel: (item.currentModel || currentRouting[item.taskCategory as TaskCategory]) as ModelType,
+          currentModel: (item.currentModel ||
+            currentRouting[item.taskCategory as TaskCategory]) as ModelType,
           suggestedModel: item.suggestedModel as ModelType,
           reason: item.reason || "旗舰模型建议调整",
         });
@@ -150,7 +154,10 @@ ${memorySample}
           });
           appliedCount++;
         } catch (e) {
-          logger.nightly.warn("路由覆写失败", { task: s.taskCategory, error: (e as Error).message });
+          logger.nightly.warn("路由覆写失败", {
+            task: s.taskCategory,
+            error: (e as Error).message,
+          });
         }
       }
 

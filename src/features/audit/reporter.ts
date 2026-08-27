@@ -1,6 +1,5 @@
 import { MemoryService } from "../../server/services/memory-service";
 import { AuditService } from "../../server/services/audit-service";
-import { ConflictRecord, MemoryRecord } from "../../types/memory";
 import { getCurrentTime } from "../../lib/utils/date";
 import { logger } from "../../lib/logger";
 
@@ -93,7 +92,10 @@ export class AuditReporter {
       );
     }
 
-    logger.audit.info("Markdown 审计报告已生成", { memories: memories.length, conflicts: conflicts.length });
+    logger.audit.info("Markdown 审计报告已生成", {
+      memories: memories.length,
+      conflicts: conflicts.length,
+    });
     return lines.join("\n");
   }
 

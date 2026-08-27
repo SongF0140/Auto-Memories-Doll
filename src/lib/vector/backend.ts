@@ -120,7 +120,6 @@ const HNSW_EXPANSION_ADD = 128;
 const HNSW_EXPANSION_SEARCH = 64;
 const HNSW_SCHEMA_VERSION = 1;
 const requireFromHere = createRequire(import.meta.url);
-const USEARCH_PACKAGE = "use" + "arch";
 let usearchModule: UsearchModule | undefined;
 
 function loadUsearch(): UsearchModule {
@@ -129,7 +128,7 @@ function loadUsearch(): UsearchModule {
   }
 
   try {
-    usearchModule = requireFromHere(USEARCH_PACKAGE) as UsearchModule;
+    usearchModule = requireFromHere("usearch") as UsearchModule;
     return usearchModule;
   } catch (error) {
     logger.vector.warn("usearch native module unavailable，已切换到本地 HNSW shim", {
@@ -320,9 +319,7 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     if (cached) this.dropState(dimensions);
 
     const persisted = this.db
-      .prepare(
-        "SELECT indexedVersion, recordCount FROM vector_ann_dimensions WHERE dimensions = ?",
-      )
+      .prepare("SELECT indexedVersion, recordCount FROM vector_ann_dimensions WHERE dimensions = ?")
       .get(dimensions) as AnnDimensionRow | undefined;
     const indexPath = this.indexPath(dimensions);
 
@@ -440,20 +437,17 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     }
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO vector_ann_dimensions (dimensions, indexedVersion, recordCount, updatedAt)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(dimensions) DO UPDATE SET
           indexedVersion = excluded.indexedVersion,
           recordCount = excluded.recordCount,
           updatedAt = excluded.updatedAt
-      `)
-      .run(
-        state.dimensions,
-        state.indexedVersion,
-        state.index.size(),
-        new Date().toISOString(),
-      );
+      `,
+      )
+      .run(state.dimensions, state.indexedVersion, state.index.size(), new Date().toISOString());
   }
 
   private removeFromState(state: HnswState, memoryId: string): void {
@@ -462,9 +456,7 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
   }
 
   private keyForMemoryId(memoryId: string): bigint {
-    this.db
-      .prepare("INSERT OR IGNORE INTO vector_ann_keys (memoryId) VALUES (?)")
-      .run(memoryId);
+    this.db.prepare("INSERT OR IGNORE INTO vector_ann_keys (memoryId) VALUES (?)").run(memoryId);
     const key = this.lookupKey(memoryId);
     if (key === null) throw new Error(`无法为向量分配 ANN key: ${memoryId}`);
     return key;

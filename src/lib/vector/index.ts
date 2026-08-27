@@ -2,11 +2,7 @@ import Database from "better-sqlite3";
 import { VectorRecord } from "../../types/memory";
 import { getDatabase } from "../storage/database";
 import { logger } from "../logger";
-import {
-  createVectorSearchBackend,
-  VectorSearchBackend,
-  VectorSearchRow,
-} from "./backend";
+import { createVectorSearchBackend, VectorSearchBackend, VectorSearchRow } from "./backend";
 
 type CachedBackend = {
   kind: string;

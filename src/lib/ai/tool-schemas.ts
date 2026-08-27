@@ -16,10 +16,9 @@ export const toolSchemas = {
 
   update_memory: z.object({
     id: z.string().min(1, "记忆 ID 不能为空"),
-    updates: z.record(z.string(), z.unknown()).refine(
-      (obj) => Object.keys(obj).length > 0,
-      "至少提供一个更新字段",
-    ),
+    updates: z
+      .record(z.string(), z.unknown())
+      .refine((obj) => Object.keys(obj).length > 0, "至少提供一个更新字段"),
   }),
 
   correct_memory: z

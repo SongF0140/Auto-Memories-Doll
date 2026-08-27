@@ -30,7 +30,10 @@ export interface ContradictionReport {
 export class ContradictionDetector {
   private readonly BATCH_SIZE = 10;
 
-  async detect(todaysMemories: MemoryRecord[], allMemories: MemoryRecord[]): Promise<ContradictionReport> {
+  async detect(
+    todaysMemories: MemoryRecord[],
+    allMemories: MemoryRecord[],
+  ): Promise<ContradictionReport> {
     if (todaysMemories.length === 0) {
       return { contradictions: [], totalCompared: 0 };
     }
@@ -103,7 +106,10 @@ ${pairsText}
 只返回 JSON 数组，不要其他文字。`;
 
     const response = await ModelAdapter.generate(prompt, "flagship");
-    const jsonStr = response.content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    const jsonStr = response.content
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
 
     let analyzed: any[];
     try {

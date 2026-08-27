@@ -96,9 +96,27 @@ describe("VectorIndex", () => {
   });
 
   it("search ranks by cosine similarity descending", () => {
-    index.create({ memoryId: "m1", embedding: [1, 0, 0], model: "m", dimensions: 3, updatedAt: "t" });
-    index.create({ memoryId: "m2", embedding: [0, 1, 0], model: "m", dimensions: 3, updatedAt: "t" });
-    index.create({ memoryId: "m3", embedding: [0.7071, 0.7071, 0], model: "m", dimensions: 3, updatedAt: "t" });
+    index.create({
+      memoryId: "m1",
+      embedding: [1, 0, 0],
+      model: "m",
+      dimensions: 3,
+      updatedAt: "t",
+    });
+    index.create({
+      memoryId: "m2",
+      embedding: [0, 1, 0],
+      model: "m",
+      dimensions: 3,
+      updatedAt: "t",
+    });
+    index.create({
+      memoryId: "m3",
+      embedding: [0.7071, 0.7071, 0],
+      model: "m",
+      dimensions: 3,
+      updatedAt: "t",
+    });
 
     const results = index.search([1, 0, 0], 3);
     expect(results[0].memoryId).toBe("m1"); // 完全相同，similarity ≈ 1
@@ -110,8 +128,20 @@ describe("VectorIndex", () => {
 
   it("search respects limit parameter", () => {
     index.create({ memoryId: "m1", embedding: [1, 0], model: "m", dimensions: 2, updatedAt: "t" });
-    index.create({ memoryId: "m2", embedding: [0.9, 0.1], model: "m", dimensions: 2, updatedAt: "t" });
-    index.create({ memoryId: "m3", embedding: [0.8, 0.2], model: "m", dimensions: 2, updatedAt: "t" });
+    index.create({
+      memoryId: "m2",
+      embedding: [0.9, 0.1],
+      model: "m",
+      dimensions: 2,
+      updatedAt: "t",
+    });
+    index.create({
+      memoryId: "m3",
+      embedding: [0.8, 0.2],
+      model: "m",
+      dimensions: 2,
+      updatedAt: "t",
+    });
 
     const results = index.search([1, 0], 2);
     expect(results).toHaveLength(2);

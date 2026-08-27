@@ -386,25 +386,32 @@ describe("Orchestrator", () => {
     it("分页扫描去重候选，不一次性加载全量正文", async () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
       memoryServiceStub.count.mockReturnValue(5);
-      memoryServiceStub.listMemoryContents.mockImplementation((opts?: { limit?: number; offset?: number }) => {
-        if (!opts) {
-          return ["alpha", "beta", "gamma", "raw content", "delta"];
-        }
+      memoryServiceStub.listMemoryContents.mockImplementation(
+        (opts?: { limit?: number; offset?: number }) => {
+          if (!opts) {
+            return ["alpha", "beta", "gamma", "raw content", "delta"];
+          }
 
-        if (opts.offset === 0) return ["alpha", "beta"];
-        if (opts.offset === 2) return ["gamma", "raw content"];
-        return [];
-      });
+          if (opts.offset === 0) return ["alpha", "beta"];
+          if (opts.offset === 2) return ["gamma", "raw content"];
+          return [];
+        },
+      );
 
       await expect(
-        orchestrator.processIngest("test-source", "ingest", "raw content", "My Title", "My Summary", [
-          "tag1",
-        ]),
+        orchestrator.processIngest(
+          "test-source",
+          "ingest",
+          "raw content",
+          "My Title",
+          "My Summary",
+          ["tag1"],
+        ),
       ).rejects.toBeInstanceOf(MemoryValidationError);
 
       expect(
-        memoryServiceStub.listMemoryContents.mock.calls.every(
-          ([arg]) => Boolean(arg && typeof arg.limit === "number" && typeof arg.offset === "number"),
+        memoryServiceStub.listMemoryContents.mock.calls.every(([arg]) =>
+          Boolean(arg && typeof arg.limit === "number" && typeof arg.offset === "number"),
         ),
       ).toBe(true);
       expect(memoryServiceStub.listMemoryContents).toHaveBeenCalledTimes(2);

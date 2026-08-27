@@ -162,7 +162,10 @@ export default function ProfilePanel() {
                 </div>
                 <ul className="space-y-1.5">
                   {section.items.map((item, idx) => (
-                    <li key={idx} className="text-xs text-text-secondary leading-relaxed flex gap-1.5">
+                    <li
+                      key={idx}
+                      className="text-xs text-text-secondary leading-relaxed flex gap-1.5"
+                    >
                       <span className="text-accent/50 shrink-0">·</span>
                       <span>{item}</span>
                     </li>
@@ -219,9 +222,7 @@ export default function ProfilePanel() {
                               key={hidx}
                               className="text-[10px] px-1.5 py-0.5 rounded bg-accent/5 text-accent/80 border border-accent/10"
                             >
-                              {highlight.length > 30
-                                ? `${highlight.slice(0, 30)}...`
-                                : highlight}
+                              {highlight.length > 30 ? `${highlight.slice(0, 30)}...` : highlight}
                             </span>
                           ))}
                         </div>

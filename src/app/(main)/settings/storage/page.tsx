@@ -25,7 +25,9 @@ export default function StorageSettingsPage() {
       .catch((e) => setError(e.message));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const handleChanged = () => {
     setError(null);

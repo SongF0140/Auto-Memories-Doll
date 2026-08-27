@@ -6,7 +6,6 @@ import { ErrorCode } from "../../../lib/api-errors";
 import { apiResponse, apiError } from "../../../lib/api-response";
 import { logger } from "../../../lib/logger";
 
-
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {

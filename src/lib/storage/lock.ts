@@ -13,7 +13,10 @@ async function isPidAlive(pid: number): Promise<boolean> {
   try {
     if (process.platform === "win32") {
       const { execSync } = await import("child_process");
-      const result = execSync(`tasklist /FI "PID eq ${pid}" /NH`, { encoding: "utf-8", timeout: 3000 });
+      const result = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
+        encoding: "utf-8",
+        timeout: 3000,
+      });
       return result.includes(`${pid}`);
     }
     // Unix: kill(pid, 0) 不发送信号，只检查进程是否存在
@@ -49,7 +52,11 @@ export const acquireLock = async (timeout: number = 5000): Promise<boolean> => {
           const stalePid = parseInt(stalePidStr.trim(), 10);
           if (!isNaN(stalePid) && !(await isPidAlive(stalePid))) {
             // PID 已死，删除遗留锁文件
-            try { await fs.unlink(lockPath); } catch { /* 可能已被其他进程清理 */ }
+            try {
+              await fs.unlink(lockPath);
+            } catch {
+              /* 可能已被其他进程清理 */
+            }
             continue;
           }
         } catch {

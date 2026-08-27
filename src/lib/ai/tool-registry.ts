@@ -40,7 +40,10 @@ export const registerDefaultTools = (): void => {
     "create_memory",
     async (args) => {
       const { title, content, tags, summary } = args as {
-        title: string; content: string; tags: string[]; summary?: string;
+        title: string;
+        content: string;
+        tags: string[];
+        summary?: string;
       };
       const service = new MemoryService();
       try {
@@ -64,7 +67,10 @@ export const registerDefaultTools = (): void => {
           graphLinks: [],
         };
         const event = buildPendingEvent(id, "manual", candidate, [
-          "title", "content", "summary", "tags",
+          "title",
+          "content",
+          "summary",
+          "tags",
         ]);
         service.enqueueEvent(event);
         return {
@@ -85,7 +91,8 @@ export const registerDefaultTools = (): void => {
     "update_memory",
     async (args) => {
       const { id, updates } = args as {
-        id: string; updates: Record<string, unknown>;
+        id: string;
+        updates: Record<string, unknown>;
       };
       const service = new MemoryService();
       try {
@@ -93,7 +100,11 @@ export const registerDefaultTools = (): void => {
         if (!existing) {
           return { success: false, error: "Memory not found", id };
         }
-        const candidate = { ...existing, ...updates, updatedAt: new Date().toISOString() } as typeof existing;
+        const candidate = {
+          ...existing,
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        } as typeof existing;
         const changedFields = Object.keys(updates);
         const event = buildPendingEvent(id, "manual", candidate, changedFields);
         service.enqueueEvent(event);

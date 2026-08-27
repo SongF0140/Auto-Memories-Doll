@@ -15,34 +15,34 @@
 
 :root {
   /* ── 色彩系统 (Brown-White-Gold Pop) ── */
-  --background: #2C2416;
-  --background-elevated: #3D3425;
-  --background-warm: #F5F0E8;
+  --background: #2c2416;
+  --background-elevated: #3d3425;
+  --background-warm: #f5f0e8;
 
   /* 前景文字：深棕系 */
-  --foreground: #3E3224;
-  --foreground-dim: #5D4E37;
-  --foreground-subtle: #8B7355;
-  --muted: #A69780;
+  --foreground: #3e3224;
+  --foreground-dim: #5d4e37;
+  --foreground-subtle: #8b7355;
+  --muted: #a69780;
 
   /* 强调色：暗金色系 */
-  --accent: #A67C00;
-  --accent-hover: #C9A227;
-  --accent-light: #D4B84A;
-  --accent-soft: rgba(166, 124, 0, 0.10);
-  --accent-line: rgba(166, 124, 0, 0.30);
+  --accent: #a67c00;
+  --accent-hover: #c9a227;
+  --accent-light: #d4b84a;
+  --accent-soft: rgba(166, 124, 0, 0.1);
+  --accent-line: rgba(166, 124, 0, 0.3);
   --accent-glow: rgba(201, 162, 39, 0.15);
 
   /* 卡片系统：暖白色系 */
-  --card-bg: #FFFDF9;
-  --card-bg-alt: #FAF7F2;
-  --card-border: #E8E0D4;
-  --card-border-hover: #D4C8B5;
+  --card-bg: #fffdf9;
+  --card-bg-alt: #faf7f2;
+  --card-border: #e8e0d4;
+  --card-border-hover: #d4c8b5;
 
   /* 波普点装饰 */
   --pop-dot-color: rgba(166, 124, 0, 0.08);
   --pop-dot-color-alt: rgba(139, 115, 85, 0.06);
-  --strike: #C9BBA8;
+  --strike: #c9bba8;
 
   /* 兼容旧 class 名的映射 */
   --color-bg: var(--background-warm);
@@ -59,9 +59,9 @@
 
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
-  --color-accent-text: #FFFFFF;
+  --color-accent-text: #ffffff;
   --color-surface: var(--card-bg);
-  --color-surface-elevated: #FFFFFF;
+  --color-surface-elevated: #ffffff;
   --color-muted: var(--card-bg-alt);
   --color-border: var(--card-border);
   --color-border-strong: var(--card-border-hover);
@@ -70,13 +70,13 @@
   --color-text-subtle: var(--foreground-subtle);
 
   /* 状态色（适配暖色调） */
-  --color-error: #C0392B;
+  --color-error: #c0392b;
   --color-error-bg: rgba(192, 57, 43, 0.08);
-  --color-success: #6B8E23;
+  --color-success: #6b8e23;
   --color-success-bg: rgba(107, 142, 35, 0.08);
   --color-warning: var(--accent);
   --color-warning-bg: var(--accent-soft);
-  --color-gold: #B8860B;
+  --color-gold: #b8860b;
 
   /* 圆角 */
   --radius-sm: 6px;
@@ -87,7 +87,7 @@
 
   /* 阴影（暖色调柔和阴影） */
   --shadow-card: 0 1px 3px rgba(44, 36, 22, 0.06), 0 1px 2px rgba(44, 36, 22, 0.04);
-  --shadow-card-hover: 0 8px 24px rgba(44, 36, 22, 0.10), 0 2px 6px rgba(44, 36, 22, 0.05);
+  --shadow-card-hover: 0 8px 24px rgba(44, 36, 22, 0.1), 0 2px 6px rgba(44, 36, 22, 0.05);
   --shadow-focus: 0 0 0 3px var(--accent-soft);
   --shadow-sm: 0 1px 2px rgba(44, 36, 22, 0.05);
   --shadow-md: 0 4px 12px rgba(44, 36, 22, 0.08);
@@ -134,8 +134,12 @@ body::before {
   background-image:
     radial-gradient(var(--pop-dot-color) 1.5px, transparent 1.5px),
     radial-gradient(var(--pop-dot-color-alt) 1px, transparent 1px);
-  background-position: 0 0, 24px 24px;
-  background-size: 48px 48px, 48px 48px;
+  background-position:
+    0 0,
+    24px 24px;
+  background-size:
+    48px 48px,
+    48px 48px;
 }
 
 /* ===== Landing Page 样式（rl-handbook 风格）===== */
@@ -149,7 +153,7 @@ body::before {
 
 /* 噪点纹理叠加 */
 .landing-page::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   opacity: 0.03;
@@ -238,7 +242,7 @@ body::before {
 .quick-link:hover .quick-link__icon {
   border-color: var(--accent);
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 .quick-link__hint {
@@ -249,7 +253,7 @@ body::before {
 
 /* Grain overlay（局部噪点） */
 .grain-overlay::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   opacity: 0.03;
@@ -273,7 +277,7 @@ body::before {
 .cta-btn:hover {
   transform: translateY(-2px);
   background-color: var(--accent-hover) !important;
-  color: #FFFFFF !important;
+  color: #ffffff !important;
   box-shadow: 0 8px 20px rgba(166, 124, 0, 0.2);
 }
 .cta-btn:active {
@@ -286,7 +290,10 @@ body::before {
 
 /* Icon links - 悬停动效 */
 .icon-link {
-  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    color 0.15s ease;
 }
 .icon-link:hover {
   opacity: 0.6;
@@ -306,7 +313,7 @@ body::before {
 
 .nav-dark a,
 .nav-dark button {
-  color: rgba(245, 240, 232, 0.70);
+  color: rgba(245, 240, 232, 0.7);
 }
 
 .nav-dark a:hover,
@@ -327,9 +334,18 @@ h6 {
 }
 
 /* 标题字体（rl-handbook 风格：Monospace 等宽） */
-h1 { font-size: clamp(2.2rem, 5vw, 4rem); font-weight: 800; }
-h2 { font-size: clamp(1.75rem, 3.5vw, 2.75rem); font-weight: 700; }
-h3 { font-size: clamp(1.25rem, 2.5vw, 1.75rem); font-weight: 600; }
+h1 {
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  font-weight: 800;
+}
+h2 {
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+}
+h3 {
+  font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+  font-weight: 600;
+}
 
 /* 显示字体 */
 .display-font {
@@ -341,7 +357,7 @@ h3 { font-size: clamp(1.25rem, 2.5vw, 1.75rem); font-weight: 600; }
 
 ::selection {
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 *:focus-visible {
@@ -391,62 +407,131 @@ textarea:focus-visible {
 /* ── 动画关键帧 ── */
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes pulseSoft {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 @keyframes breathe {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 0.3; transform: scale(1); }
-  50%      { opacity: 1; transform: scale(1.15); }
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 @keyframes marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-6px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
-  50%      { box-shadow: 0 0 20px 4px var(--accent-glow); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px var(--accent-glow);
+  }
 }
 
 /* 循环 Logo 动画：方形 → 圆形 → 三角形 → 方形 */
 @keyframes logoMorph {
-  0%, 100% { border-radius: 6px; clip-path: polygon(10% 0%, 90% 0%, 100% 30%, 100% 70%, 90% 100%, 10% 100%, 0% 70%, 0% 30%); }
-  25%      { border-radius: 50%; clip-path: circle(50% at 50% 50%); }
-  50%      { border-radius: 6px; clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
-  75%      { border-radius: 6px; clip-path: polygon(10% 0%, 90% 0%, 100% 30%, 100% 70%, 90% 100%, 10% 100%, 0% 70%, 0% 30%); }
+  0%,
+  100% {
+    border-radius: 6px;
+    clip-path: polygon(10% 0%, 90% 0%, 100% 30%, 100% 70%, 90% 100%, 10% 100%, 0% 70%, 0% 30%);
+  }
+  25% {
+    border-radius: 50%;
+    clip-path: circle(50% at 50% 50%);
+  }
+  50% {
+    border-radius: 6px;
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  }
+  75% {
+    border-radius: 6px;
+    clip-path: polygon(10% 0%, 90% 0%, 100% 30%, 100% 70%, 90% 100%, 10% 100%, 0% 70%, 0% 30%);
+  }
 }
 
 /* 波普点跳动动画 */
 @keyframes popDotPulse {
-  0%, 100% { transform: scale(1); opacity: 0.6; }
-  50%      { transform: scale(1.3); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
 }
 
 @layer utilities {
@@ -507,8 +592,12 @@ textarea:focus-visible {
     background-image:
       radial-gradient(var(--pop-dot-color) 1.2px, transparent 1.2px),
       radial-gradient(var(--pop-dot-color-alt) 0.8px, transparent 0.8px);
-    background-position: 0 0, 16px 16px;
-    background-size: 32px 32px, 32px 32px;
+    background-position:
+      0 0,
+      16px 16px;
+    background-size:
+      32px 32px,
+      32px 32px;
     border-radius: inherit;
     z-index: 0;
   }
@@ -558,7 +647,10 @@ textarea:focus-visible {
   .spotlight::before {
     content: "";
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background: radial-gradient(
       circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
       var(--accent-soft) 0%,
@@ -600,17 +692,33 @@ textarea:focus-visible {
     transform: rotate(-4deg);
   }
 
-  .stagger-1 { animation-delay: 40ms; }
-  .stagger-2 { animation-delay: 80ms; }
-  .stagger-3 { animation-delay: 120ms; }
-  .stagger-4 { animation-delay: 160ms; }
-  .stagger-5 { animation-delay: 200ms; }
-  .stagger-6 { animation-delay: 240ms; }
+  .stagger-1 {
+    animation-delay: 40ms;
+  }
+  .stagger-2 {
+    animation-delay: 80ms;
+  }
+  .stagger-3 {
+    animation-delay: 120ms;
+  }
+  .stagger-4 {
+    animation-delay: 160ms;
+  }
+  .stagger-5 {
+    animation-delay: 200ms;
+  }
+  .stagger-6 {
+    animation-delay: 240ms;
+  }
 
   /* ── 网格漂移动画（波普点版） ── */
   @keyframes grid-drift {
-    from { transform: translateY(0); }
-    to { transform: translateY(-32px); }
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-32px);
+    }
   }
 
   .animate-grid-drift {
@@ -626,19 +734,31 @@ textarea:focus-visible {
   }
 
   @media (min-width: 640px) {
-    .container-wide { padding-left: 1.5rem; padding-right: 1.5rem; }
+    .container-wide {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
   }
 
   @media (min-width: 1024px) {
-    .container-wide { padding-left: 2.5rem; padding-right: 2.5rem; }
+    .container-wide {
+      padding-left: 2.5rem;
+      padding-right: 2.5rem;
+    }
   }
 
   @media (min-width: 1440px) {
-    .container-wide { padding-left: 4rem; padding-right: 4rem; }
+    .container-wide {
+      padding-left: 4rem;
+      padding-right: 4rem;
+    }
   }
 
   @media (min-width: 1920px) {
-    .container-wide { padding-left: 5rem; padding-right: 5rem; }
+    .container-wide {
+      padding-left: 5rem;
+      padding-right: 5rem;
+    }
   }
 
   /* ── 全屏区块 ── */
@@ -647,8 +767,12 @@ textarea:focus-visible {
   }
 
   @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .snap-section { min-height: auto; }
+    html {
+      scroll-behavior: auto;
+    }
+    .snap-section {
+      min-height: auto;
+    }
     .animate-fade-in,
     .animate-slide-up,
     .animate-scale-in,

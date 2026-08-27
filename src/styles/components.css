@@ -26,7 +26,7 @@
     border-radius: var(--radius-sm);
     border: none;
     background: var(--accent);
-    color: #FFFFFF;
+    color: #ffffff;
     cursor: pointer;
     transition: all 200ms var(--ease-smooth);
     position: relative;
@@ -83,7 +83,7 @@
   }
 
   .btn-danger:hover:not(:disabled) {
-    background: #A93226;
+    background: #a93226;
   }
 
   /* ── 波普点装饰按钮 (pop-btn) ── */
@@ -99,7 +99,7 @@
     letter-spacing: 0.03em;
     text-transform: uppercase;
     background: var(--accent);
-    color: #FFFFFF;
+    color: #ffffff;
     cursor: pointer;
     border-radius: var(--radius-lg);
     transition: all 200ms var(--ease-smooth);
@@ -112,9 +112,13 @@
     inset: 0;
     background-image:
       radial-gradient(var(--pop-dot-color) 1px, transparent 1px),
-      radial-gradient(rgba(255,255,255,0.15) 0.5px, transparent 0.5px);
-    background-position: 0 0, 12px 12px;
-    background-size: 16px 16px, 16px 16px;
+      radial-gradient(rgba(255, 255, 255, 0.15) 0.5px, transparent 0.5px);
+    background-position:
+      0 0,
+      12px 12px;
+    background-size:
+      16px 16px,
+      16px 16px;
     opacity: 0;
     transition: opacity 300ms var(--ease-smooth);
   }
@@ -140,7 +144,7 @@
     font-size: 0.9375rem;
     line-height: 1.5;
     color: var(--foreground);
-    background-color: #FFFFFF;
+    background-color: #ffffff;
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sm);
     transition: all 200ms var(--ease-smooth);
@@ -154,7 +158,9 @@
   .input:focus {
     border-color: var(--accent);
     outline: none;
-    box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-inner);
+    box-shadow:
+      0 0 0 3px var(--accent-soft),
+      var(--shadow-inner);
   }
 
   .input::placeholder {
@@ -225,8 +231,12 @@
     background-image:
       radial-gradient(var(--pop-dot-color) 1px, transparent 1px),
       radial-gradient(var(--pop-dot-color-alt) 0.7px, transparent 0.7px);
-    background-position: 0 0, 20px 20px;
-    background-size: 40px 40px, 40px 40px;
+    background-position:
+      0 0,
+      20px 20px;
+    background-size:
+      40px 40px,
+      40px 40px;
     opacity: 0;
     transition: opacity 300ms var(--ease-smooth);
   }
@@ -282,10 +292,22 @@
     font-weight: 500;
   }
 
-  .status-tag--pending { background: var(--warning-bg); color: var(--accent); }
-  .status-tag--loading { background: rgba(107, 142, 35, 0.10); color: #6B8E23; }
-  .status-tag--success { background: var(--success-bg); color: var(--color-success); }
-  .status-tag--error   { background: var(--error-bg); color: var(--color-error); }
+  .status-tag--pending {
+    background: var(--warning-bg);
+    color: var(--accent);
+  }
+  .status-tag--loading {
+    background: rgba(107, 142, 35, 0.1);
+    color: #6b8e23;
+  }
+  .status-tag--success {
+    background: var(--success-bg);
+    color: var(--color-success);
+  }
+  .status-tag--error {
+    background: var(--error-bg);
+    color: var(--color-error);
+  }
 
   /* ── 导航 Tab ── */
   .nav-tab {
@@ -323,16 +345,28 @@
     height: 2rem;
     font-size: 0.75rem;
     font-weight: 700;
-    color: #FFFFFF;
+    color: #ffffff;
     background: var(--accent);
     border-radius: 50%;
     flex-shrink: 0;
     box-shadow: 0 2px 4px rgba(166, 124, 0, 0.25);
   }
 
-  .avatar-sm { width: 1.5rem; height: 1.5rem; font-size: 0.625rem; }
-  .avatar-lg { width: 2.5rem; height: 2.5rem; font-size: 0.875rem; }
-  .avatar-xl { width: 3rem; height: 3rem; font-size: 1rem; }
+  .avatar-sm {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.625rem;
+  }
+  .avatar-lg {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 0.875rem;
+  }
+  .avatar-xl {
+    width: 3rem;
+    height: 3rem;
+    font-size: 1rem;
+  }
 
   /* ── 分割线 ── */
   .divider {
@@ -396,27 +430,63 @@
     animation: popBounce 1.4s ease-in-out infinite both;
   }
 
-  .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
-  .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+  .loading-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+  .loading-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+  }
 
   @keyframes popBounce {
-    0%, 80%, 100% { transform: scale(0.5); opacity: 0.3; }
-    40%           { transform: scale(1.15); opacity: 1; }
+    0%,
+    80%,
+    100% {
+      transform: scale(0.5);
+      opacity: 0.3;
+    }
+    40% {
+      transform: scale(1.15);
+      opacity: 1;
+    }
   }
 
   /* ── 列表交错动画 ── */
-  .stagger-list > *:nth-child(1) { animation-delay: 30ms; }
-  .stagger-list > *:nth-child(2) { animation-delay: 60ms; }
-  .stagger-list > *:nth-child(3) { animation-delay: 90ms; }
-  .stagger-list > *:nth-child(4) { animation-delay: 120ms; }
-  .stagger-list > *:nth-child(5) { animation-delay: 150ms; }
-  .stagger-list > *:nth-child(6) { animation-delay: 180ms; }
-  .stagger-list > *:nth-child(7) { animation-delay: 210ms; }
-  .stagger-list > *:nth-child(8) { animation-delay: 240ms; }
-  .stagger-list > *:nth-child(9) { animation-delay: 270ms; }
-  .stagger-list > *:nth-child(10) { animation-delay: 300ms; }
-  .stagger-list > *:nth-child(11) { animation-delay: 330ms; }
-  .stagger-list > *:nth-child(12) { animation-delay: 360ms; }
+  .stagger-list > *:nth-child(1) {
+    animation-delay: 30ms;
+  }
+  .stagger-list > *:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  .stagger-list > *:nth-child(3) {
+    animation-delay: 90ms;
+  }
+  .stagger-list > *:nth-child(4) {
+    animation-delay: 120ms;
+  }
+  .stagger-list > *:nth-child(5) {
+    animation-delay: 150ms;
+  }
+  .stagger-list > *:nth-child(6) {
+    animation-delay: 180ms;
+  }
+  .stagger-list > *:nth-child(7) {
+    animation-delay: 210ms;
+  }
+  .stagger-list > *:nth-child(8) {
+    animation-delay: 240ms;
+  }
+  .stagger-list > *:nth-child(9) {
+    animation-delay: 270ms;
+  }
+  .stagger-list > *:nth-child(10) {
+    animation-delay: 300ms;
+  }
+  .stagger-list > *:nth-child(11) {
+    animation-delay: 330ms;
+  }
+  .stagger-list > *:nth-child(12) {
+    animation-delay: 360ms;
+  }
 
   /* ── 品牌卡片 (brand-card) ── */
   .brand-card {
@@ -450,7 +520,13 @@
   }
 
   /* 兼容旧类名（死代码清理过渡期） */
-  .magic-card { /* 同 brand-card */ }
-  .shimmer-button { /* 同 btn */ }
-  .violet-letter-mark { /* 同 brand-card */ }
+  .magic-card {
+    /* 同 brand-card */
+  }
+  .shimmer-button {
+    /* 同 btn */
+  }
+  .violet-letter-mark {
+    /* 同 brand-card */
+  }
 }

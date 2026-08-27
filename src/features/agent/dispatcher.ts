@@ -84,9 +84,7 @@ export class AgentDispatcher {
 
       // 取 top-5 并发读取记忆详情
       const topResults = results.slice(0, 5);
-      const memories = topResults
-        .map((r) => memoryService.getMemory(r.memoryId))
-        .filter(Boolean);
+      const memories = topResults.map((r) => memoryService.getMemory(r.memoryId)).filter(Boolean);
 
       const matched = memories.map((m) => ({
         memoryId: m!.id,
@@ -165,7 +163,9 @@ export class AgentDispatcher {
     if (cmd === "help" || cmd === "帮助") {
       return {
         type: "json",
-        data: { content: "可用命令:\n/help - 显示帮助\n/记忆 - 列出所有记忆\n/标签 - 列出所有标签" },
+        data: {
+          content: "可用命令:\n/help - 显示帮助\n/记忆 - 列出所有记忆\n/标签 - 列出所有标签",
+        },
       };
     }
     return { type: "json", data: { content: `未知命令: /${cmd}，输入 /help 查看帮助` } };

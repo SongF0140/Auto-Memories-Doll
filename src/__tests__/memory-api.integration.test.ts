@@ -161,9 +161,7 @@ describe("memory list/search/ingest HTTP contracts", () => {
   });
 
   it("GET /api/memory/search parses limit as base 10", async () => {
-    await searchMemories(
-      jsonRequest("http://localhost/api/memory/search?q=test&limit=08", "GET"),
-    );
+    await searchMemories(jsonRequest("http://localhost/api/memory/search?q=test&limit=08", "GET"));
 
     expect(vectorRetrieverMock.searchDetailed).toHaveBeenCalledWith("test", 8, 0.3);
   });

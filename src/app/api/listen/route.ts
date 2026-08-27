@@ -71,7 +71,9 @@ export async function POST(request: NextRequest) {
     }
     body = JSON.parse(raw);
   } catch {
-    return NextResponse.json(apiError(ErrorCode.INVALID_JSON, "请求体不是有效 JSON"), { status: 400 });
+    return NextResponse.json(apiError(ErrorCode.INVALID_JSON, "请求体不是有效 JSON"), {
+      status: 400,
+    });
   }
 
   const parsed = listenRequestSchema.safeParse(body);
@@ -145,7 +147,9 @@ export async function POST(request: NextRequest) {
         message: statsError instanceof Error ? statsError.message : String(statsError),
       });
     }
-    return NextResponse.json(apiError(ErrorCode.INTERNAL_ERROR, "监听请求处理失败"), { status: 500 });
+    return NextResponse.json(apiError(ErrorCode.INTERNAL_ERROR, "监听请求处理失败"), {
+      status: 500,
+    });
   } finally {
     memoryService?.close();
     statsService?.close();

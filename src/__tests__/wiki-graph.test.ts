@@ -48,8 +48,19 @@ ${wikilinkLines}
 `;
 }
 
-function addFile(name: string, memoryId: string, title: string, tags: string[], related: string[], wikilinks: string[] = []) {
-  writeFileSync(join(TEST_ROOT, name), makeMdFile(memoryId, title, tags, related, wikilinks), "utf-8");
+function addFile(
+  name: string,
+  memoryId: string,
+  title: string,
+  tags: string[],
+  related: string[],
+  wikilinks: string[] = [],
+) {
+  writeFileSync(
+    join(TEST_ROOT, name),
+    makeMdFile(memoryId, title, tags, related, wikilinks),
+    "utf-8",
+  );
 }
 
 beforeEach(() => {

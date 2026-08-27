@@ -6,22 +6,22 @@ import type { ModelType } from "./model-adapter";
  */
 export type TaskCategory =
   // ── 旗舰任务：需要强推理能力 ──
-  | "intent_classification"   // 意图分类与路由分流
-  | "audit_evaluation"        // 审计评估、冲突裁决
-  | "quality_evaluation"      // 记忆质量评审
-  | "final_evaluation"        // 最终评估（如代码审查结论）
+  | "intent_classification" // 意图分类与路由分流
+  | "audit_evaluation" // 审计评估、冲突裁决
+  | "quality_evaluation" // 记忆质量评审
+  | "final_evaluation" // 最终评估（如代码审查结论）
   // ── 普通任务：平衡质量与成本 ──
-  | "chat_response"           // 对话回复
-  | "code_generation"         // 代码生成
-  | "profile_analysis"        // 用户画像分析
-  | "memory_extraction"       // 记忆提取
-  | "memory_classification"   // 记忆分类
-  | "translation"             // 翻译
+  | "chat_response" // 对话回复
+  | "code_generation" // 代码生成
+  | "profile_analysis" // 用户画像分析
+  | "memory_extraction" // 记忆提取
+  | "memory_classification" // 记忆分类
+  | "translation" // 翻译
   // ── 廉价任务：低成本优先 ──
-  | "test_generation"         // 测试代码生成
-  | "summarization"           // 文本摘要
-  | "simple_extraction"       // 简单信息提取（标签、关键词等）
-  | "format_conversion";      // 格式转换
+  | "test_generation" // 测试代码生成
+  | "summarization" // 文本摘要
+  | "simple_extraction" // 简单信息提取（标签、关键词等）
+  | "format_conversion"; // 格式转换
 
 /**
  * 任务路由器：按任务类别自动分配到对应模型层级。

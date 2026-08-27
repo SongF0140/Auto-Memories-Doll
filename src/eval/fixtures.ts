@@ -28,7 +28,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-cpp-01",
     title: "C++智能指针使用笔记",
-    content: "unique_ptr 独占所有权，适合 RAII 场景；shared_ptr 用引用计数共享所有权，注意循环引用要用 weak_ptr 打破。",
+    content:
+      "unique_ptr 独占所有权，适合 RAII 场景；shared_ptr 用引用计数共享所有权，注意循环引用要用 weak_ptr 打破。",
     summary: "unique_ptr 与 shared_ptr 的区别和典型用法",
     tags: ["c++", "智能指针", "shared_ptr"],
     topic: "cpp-learning",
@@ -36,7 +37,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-cpp-02",
     title: "CMake构建配置要点",
-    content: "CMakeLists 里用 target_link_libraries 管理依赖，file(COPY) 会在 configure 阶段复制配置文件到构建目录。",
+    content:
+      "CMakeLists 里用 target_link_libraries 管理依赖，file(COPY) 会在 configure 阶段复制配置文件到构建目录。",
     summary: "CMake 依赖管理与文件复制的坑",
     tags: ["cmake", "构建"],
     topic: "cpp-learning",
@@ -44,7 +46,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-cpp-03",
     title: "虚函数与多态总结",
-    content: "基类指针调用虚函数走虚表查找实现运行时多态，析构函数必须声明为 virtual 防止派生类泄漏。",
+    content:
+      "基类指针调用虚函数走虚表查找实现运行时多态，析构函数必须声明为 virtual 防止派生类泄漏。",
     summary: "虚函数表机制与多态的条件",
     tags: ["c++", "多态", "虚函数"],
     topic: "cpp-learning",
@@ -60,7 +63,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-cpp-05",
     title: "内存泄漏排查方法",
-    content: "用 valgrind 或 AddressSanitizer 定位泄漏点，重点检查 new 之后有没有配对的 delete 路径。",
+    content:
+      "用 valgrind 或 AddressSanitizer 定位泄漏点，重点检查 new 之后有没有配对的 delete 路径。",
     summary: "内存泄漏的定位工具与常见原因",
     tags: ["内存泄漏", "valgrind"],
     topic: "cpp-learning",
@@ -70,7 +74,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-park-01",
     title: "树莓派5泊车引导系统方案",
-    content: "树莓派5 8GB 做边缘节点，Camera Module 3 采集车位画面，选用 YOLOv8n 模型做车位检测，实现智能泊车引导。",
+    content:
+      "树莓派5 8GB 做边缘节点，Camera Module 3 采集车位画面，选用 YOLOv8n 模型做车位检测，实现智能泊车引导。",
     summary: "边缘计算泊车引导的整体技术方案",
     tags: ["树莓派", "泊车", "边缘计算"],
     topic: "edge-parking",
@@ -78,7 +83,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-park-02",
     title: "YOLOv8n模型INT8量化",
-    content: "YOLOv8n 导出 ONNX 后做 INT8 量化，用 onnxruntime 在树莓派上推理，帧率能满足实时车位检测。",
+    content:
+      "YOLOv8n 导出 ONNX 后做 INT8 量化，用 onnxruntime 在树莓派上推理，帧率能满足实时车位检测。",
     summary: "模型量化与 ONNXRuntime 部署细节",
     tags: ["yolo", "量化", "onnx"],
     topic: "edge-parking",
@@ -86,7 +92,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-park-03",
     title: "MQTT通信协议设计",
-    content: "边缘端通过 MQTT 把车位状态发布到 broker，JavaWeb 后端订阅主题更新数据库，QoS 设为 1 保证送达。",
+    content:
+      "边缘端通过 MQTT 把车位状态发布到 broker，JavaWeb 后端订阅主题更新数据库，QoS 设为 1 保证送达。",
     summary: "边缘到后端的 MQTT 消息链路",
     tags: ["mqtt", "通信"],
     topic: "edge-parking",
@@ -102,7 +109,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-park-05",
     title: "乱停治理闭环流程",
-    content: "检测到乱停后生成工单，通知车主挪车，超时未处理则推送给管理员，形成检测-通知-处置闭环。",
+    content:
+      "检测到乱停后生成工单，通知车主挪车，超时未处理则推送给管理员，形成检测-通知-处置闭环。",
     summary: "乱停车辆从发现到处置的闭环",
     tags: ["泊车", "治理"],
     topic: "edge-parking",
@@ -138,7 +146,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-agent-01",
     title: "Vercel AI SDK流式输出",
-    content: "用 streamText 驱动 agent 循环，前端消费 ReadableStream 事件增量渲染，isStepCount 限制最大轮次。",
+    content:
+      "用 streamText 驱动 agent 循环，前端消费 ReadableStream 事件增量渲染，isStepCount 限制最大轮次。",
     summary: "AI SDK 流式 agent 循环的实现方式",
     tags: ["ai-sdk", "流式"],
     topic: "agent-dev",
@@ -146,7 +155,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-agent-02",
     title: "记忆系统审计队列设计",
-    content: "候选记忆先写入 pending_events 待审计队列，按 memoryId 串行消费，冲突三级分级后再落盘。",
+    content:
+      "候选记忆先写入 pending_events 待审计队列，按 memoryId 串行消费，冲突三级分级后再落盘。",
     summary: "审计队列的写入治理机制",
     tags: ["审计队列", "记忆"],
     topic: "agent-dev",
@@ -162,7 +172,8 @@ export const EVAL_MEMORIES: EvalMemory[] = [
   {
     id: "mem-agent-04",
     title: "MCP服务器配置笔记",
-    content: "stdio 型 MCP 服务器要在连接器页面手动粘贴 JSON 配置，mcp.json 格式是 mcpServers 包裹 name 与 command。",
+    content:
+      "stdio 型 MCP 服务器要在连接器页面手动粘贴 JSON 配置，mcp.json 格式是 mcpServers 包裹 name 与 command。",
     summary: "MCP 服务器的接入方式",
     tags: ["mcp", "配置"],
     topic: "agent-dev",

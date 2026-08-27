@@ -6,11 +6,16 @@ import { ErrorCode } from "../../../lib/api-errors";
 import { apiResponse, apiError } from "../../../lib/api-response";
 import { logger } from "../../../lib/logger";
 
-
 /** sortBy 字段白名单 —— 仅允许按这些字段排序，拒绝注入攻击 */
 const SORTABLE_FIELDS = new Set([
-  "createdAt", "updatedAt", "accessedAt", "accessCount",
-  "heatScore", "title", "sourceType", "topic",
+  "createdAt",
+  "updatedAt",
+  "accessedAt",
+  "accessCount",
+  "heatScore",
+  "title",
+  "sourceType",
+  "topic",
 ]);
 
 export async function GET(request: NextRequest) {
@@ -41,7 +46,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     logger.api.error("[Memory] 列表查询失败:", { message });
-    return NextResponse.json(apiError(ErrorCode.MEMORY_QUERY_FAILED, `查询失败: ${message}`), { status: 500 });
+    return NextResponse.json(apiError(ErrorCode.MEMORY_QUERY_FAILED, `查询失败: ${message}`), {
+      status: 500,
+    });
   } finally {
     service.close();
   }
@@ -57,7 +64,10 @@ export async function POST(request: NextRequest) {
 
   const parsed = memoryCreateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(apiError(ErrorCode.VALIDATION_FAILED, parsed.error.issues[0].message), { status: 400 });
+    return NextResponse.json(
+      apiError(ErrorCode.VALIDATION_FAILED, parsed.error.issues[0].message),
+      { status: 400 },
+    );
   }
 
   const { title, content, tags, sourceType } = parsed.data;
@@ -87,11 +97,15 @@ export async function POST(request: NextRequest) {
         topicZh: memoryRecord.topicZh,
       },
     );
-    return NextResponse.json(apiResponse({ ...memoryRecord, id: memoryId, status: "pending_audit" }));
+    return NextResponse.json(
+      apiResponse({ ...memoryRecord, id: memoryId, status: "pending_audit" }),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";
     logger.api.error("[Memory] 创建失败:", { message });
-    return NextResponse.json(apiError(ErrorCode.MEMORY_CREATE_FAILED, `创建失败: ${message}`), { status: 500 });
+    return NextResponse.json(apiError(ErrorCode.MEMORY_CREATE_FAILED, `创建失败: ${message}`), {
+      status: 500,
+    });
   } finally {
     service.close();
   }

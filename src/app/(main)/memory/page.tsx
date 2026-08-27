@@ -1,16 +1,13 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import React, { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
-import EmptyState from '@/components/common/EmptyState';
-import MemoryLibraryItem from '@/components/memory/MemoryLibraryItem';
-import {
-  listMemoriesClient,
-  searchMemoriesClient,
-} from '@/lib/memory-api-client';
-import { defaultTopicLabels } from '@/config/topics-data';
-import type { MemoryRecord } from '@/types/memory';
+import Link from "next/link";
+import React, { useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import EmptyState from "@/components/common/EmptyState";
+import MemoryLibraryItem from "@/components/memory/MemoryLibraryItem";
+import { listMemoriesClient, searchMemoriesClient } from "@/lib/memory-api-client";
+import { defaultTopicLabels } from "@/config/topics-data";
+import type { MemoryRecord } from "@/types/memory";
 
 const PAGE_SIZE = 12;
 const SEARCH_LIMIT = 50;
@@ -34,12 +31,12 @@ export default function MemoryLibraryPage() {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [activeTopic, setActiveTopic] = useState('all');
-  const [searchInput, setSearchInput] = useState('');
+  const [activeTopic, setActiveTopic] = useState("all");
+  const [searchInput, setSearchInput] = useState("");
   const [searchMode, setSearchMode] = useState(false);
-  const [retrievalMode, setRetrievalMode] = useState<'vector' | 'keyword' | null>(null);
+  const [retrievalMode, setRetrievalMode] = useState<"vector" | "keyword" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -47,9 +44,9 @@ export default function MemoryLibraryPage() {
 
     let cancelled = false;
     setLoading(true);
-    setError('');
+    setError("");
 
-    listMemoriesClient(PAGE_SIZE, page, activeTopic === 'all' ? undefined : activeTopic)
+    listMemoriesClient(PAGE_SIZE, page, activeTopic === "all" ? undefined : activeTopic)
       .then((data) => {
         if (cancelled) return;
         setMemories(data.items);
@@ -59,7 +56,7 @@ export default function MemoryLibraryPage() {
         if (cancelled) return;
         setMemories([]);
         setTotal(0);
-        setError(loadError instanceof Error ? loadError.message : '记忆列表加载失败');
+        setError(loadError instanceof Error ? loadError.message : "记忆列表加载失败");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -77,7 +74,7 @@ export default function MemoryLibraryPage() {
 
     setSearchMode(true);
     setLoading(true);
-    setError('');
+    setError("");
     setRetrievalMode(null);
 
     try {
@@ -88,14 +85,14 @@ export default function MemoryLibraryPage() {
     } catch (searchError) {
       setMemories([]);
       setTotal(0);
-      setError(searchError instanceof Error ? searchError.message : '记忆搜索失败');
+      setError(searchError instanceof Error ? searchError.message : "记忆搜索失败");
     } finally {
       setLoading(false);
     }
   };
 
   const clearSearch = () => {
-    setSearchInput('');
+    setSearchInput("");
     setSearchMode(false);
     setRetrievalMode(null);
     setPage(1);
@@ -105,7 +102,7 @@ export default function MemoryLibraryPage() {
   const handleTopicChange = (topic: string) => {
     setActiveTopic(topic);
     setPage(1);
-    setSearchInput('');
+    setSearchInput("");
     setSearchMode(false);
     setRetrievalMode(null);
   };
@@ -121,7 +118,9 @@ export default function MemoryLibraryPage() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-text-tertiary">
               Memory Archive
             </p>
-            <h1 className="font-mono text-3xl font-bold tracking-tight text-text-primary">记忆检索库</h1>
+            <h1 className="font-mono text-3xl font-bold tracking-tight text-text-primary">
+              记忆检索库
+            </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
               搜索、筛选和浏览已经通过审计写入的记忆，点击卡片查看完整内容。
             </p>
@@ -144,7 +143,7 @@ export default function MemoryLibraryPage() {
               className="input min-h-11 flex-1"
             />
             <button type="submit" className="btn min-h-11 md:px-7" disabled={loading && searchMode}>
-              {loading && searchMode ? '搜索中...' : '搜索记忆'}
+              {loading && searchMode ? "搜索中..." : "搜索记忆"}
             </button>
             {searchMode ? (
               <button type="button" className="btn-secondary min-h-11" onClick={clearSearch}>
@@ -155,7 +154,10 @@ export default function MemoryLibraryPage() {
 
           {!searchMode ? (
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label htmlFor="memory-topic-filter" className="text-sm font-medium text-text-secondary">
+              <label
+                htmlFor="memory-topic-filter"
+                className="text-sm font-medium text-text-secondary"
+              >
                 话题筛选
               </label>
               <select
@@ -175,27 +177,41 @@ export default function MemoryLibraryPage() {
           ) : null}
         </section>
 
-        {retrievalMode === 'keyword' ? (
-          <div role="status" className="mb-6 rounded-xl border border-warning-bg bg-warning-bg/70 px-4 py-3 text-sm text-warning">
+        {retrievalMode === "keyword" ? (
+          <div
+            role="status"
+            className="mb-6 rounded-xl border border-warning-bg bg-warning-bg/70 px-4 py-3 text-sm text-warning"
+          >
             当前处于降级模式：Embedding 不可用，搜索已自动切换为关键词匹配。
           </div>
         ) : null}
 
         {error ? (
-          <div role="alert" className="mb-6 flex flex-col gap-3 rounded-xl border border-error/20 bg-error-bg px-4 py-4 text-sm text-error sm:flex-row sm:items-center sm:justify-between">
+          <div
+            role="alert"
+            className="mb-6 flex flex-col gap-3 rounded-xl border border-error/20 bg-error-bg px-4 py-4 text-sm text-error sm:flex-row sm:items-center sm:justify-between"
+          >
             <span>{error}</span>
-            <button type="button" className="btn-secondary shrink-0" onClick={() => setReloadToken((token) => token + 1)}>
+            <button
+              type="button"
+              className="btn-secondary shrink-0"
+              onClick={() => setReloadToken((token) => token + 1)}
+            >
               重试
             </button>
           </div>
         ) : null}
 
         {loading ? (
-          <LoadingState label={searchMode ? '正在搜索记忆...' : '正在加载记忆库...'} />
+          <LoadingState label={searchMode ? "正在搜索记忆..." : "正在加载记忆库..."} />
         ) : memories.length === 0 ? (
           <EmptyState
-            title={searchMode ? '没有找到匹配的记忆' : '暂无记忆'}
-            description={searchMode ? '尝试更换关键词或检查拼写。' : '先开始一段对话或导入内容，记忆会出现在这里。'}
+            title={searchMode ? "没有找到匹配的记忆" : "暂无记忆"}
+            description={
+              searchMode
+                ? "尝试更换关键词或检查拼写。"
+                : "先开始一段对话或导入内容，记忆会出现在这里。"
+            }
           />
         ) : (
           <>
@@ -203,7 +219,11 @@ export default function MemoryLibraryPage() {
               <h2 className="font-mono text-lg font-semibold text-text-primary">
                 {searchMode ? `搜索结果（${total}）` : `全部记忆（${total}）`}
               </h2>
-              {!searchMode ? <span className="text-sm text-text-tertiary">第 {page} / {totalPages} 页</span> : null}
+              {!searchMode ? (
+                <span className="text-sm text-text-tertiary">
+                  第 {page} / {totalPages} 页
+                </span>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -213,7 +233,10 @@ export default function MemoryLibraryPage() {
             </div>
 
             {!searchMode && totalPages > 1 ? (
-              <nav className="mt-8 flex items-center justify-center gap-3" aria-label="记忆列表分页">
+              <nav
+                className="mt-8 flex items-center justify-center gap-3"
+                aria-label="记忆列表分页"
+              >
                 <button
                   type="button"
                   className="btn-secondary"

@@ -71,7 +71,9 @@ export function buildProviderSelectionPatch(
   const chatModels = Object.entries(providerEntry.models)
     .filter(([, model]) => model.type === "chat")
     .map(([name]) => name);
-  const embeddingModel = Object.entries(providerEntry.models).find(([, model]) => model.type === "embedding");
+  const embeddingModel = Object.entries(providerEntry.models).find(
+    ([, model]) => model.type === "embedding",
+  );
   const firstChatModel = chatModels[0];
   const firstEmbeddingModel = embeddingModel?.[0];
   const embeddingDimensions = embeddingModel?.[1].dimensions;

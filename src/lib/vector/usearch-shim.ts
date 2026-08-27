@@ -52,7 +52,10 @@ class ShimIndex {
     return this.vectors.size;
   }
 
-  search(vector: Float32Array, count: number): {
+  search(
+    vector: Float32Array,
+    count: number,
+  ): {
     keys: ArrayLike<bigint | number>;
     distances: ArrayLike<number>;
   } {
@@ -74,7 +77,8 @@ class ShimIndex {
   add(keyOrKeys: bigint | BigUint64Array, vectorOrVectors: Float32Array): void {
     const keys = toKeyArray(keyOrKeys);
     const values = toVectorArray(vectorOrVectors);
-    const dimensions = this.dimensions || (keys.length > 0 ? Math.floor(values.length / keys.length) : 0);
+    const dimensions =
+      this.dimensions || (keys.length > 0 ? Math.floor(values.length / keys.length) : 0);
 
     if (keys.length === 1) {
       this.insertSingle(keys[0], values.slice(), dimensions || values.length);
@@ -285,7 +289,11 @@ export function createShimUsearchModule() {
         count: number,
         threads?: number,
       ): { keys: ArrayLike<bigint | number>; distances: ArrayLike<number> };
-      add(keyOrKeys: bigint | BigUint64Array, vectorOrVectors: Float32Array, threads?: number): void;
+      add(
+        keyOrKeys: bigint | BigUint64Array,
+        vectorOrVectors: Float32Array,
+        threads?: number,
+      ): void;
       load(path: string): void;
       save(path: string): void;
       contains(key: bigint): boolean;

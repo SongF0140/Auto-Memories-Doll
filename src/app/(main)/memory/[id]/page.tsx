@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import MemoryCard from '@/components/memory/MemoryCard';
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import MemoryCard from "@/components/memory/MemoryCard";
 import {
   getMemoryClient,
   memoryDetailHref,
   recordMemoryAccessClient,
-} from '@/lib/memory-api-client';
-import type { MemoryRecord } from '@/types/memory';
+} from "@/lib/memory-api-client";
+import type { MemoryRecord } from "@/types/memory";
 
 export default function MemoryDetailPage() {
   const params = useParams<{ id: string }>();
@@ -17,7 +17,7 @@ export default function MemoryDetailPage() {
   const memoryId = params.id;
   const [memory, setMemory] = useState<MemoryRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function MemoryDetailPage() {
 
     async function loadMemory() {
       setLoading(true);
-      setError('');
+      setError("");
 
       try {
         const loadedMemory = await getMemoryClient(memoryId, controller.signal);
@@ -35,7 +35,7 @@ export default function MemoryDetailPage() {
         });
       } catch (loadError) {
         if (controller.signal.aborted) return;
-        setError(loadError instanceof Error ? loadError.message : '记忆加载失败');
+        setError(loadError instanceof Error ? loadError.message : "记忆加载失败");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -51,13 +51,13 @@ export default function MemoryDetailPage() {
     setDeleting(true);
     try {
       const response = await fetch(`/api/memory/${encodeURIComponent(memory.id)}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
       if (!response.ok) throw new Error(`删除失败 (${response.status})`);
-      router.push('/memory');
+      router.push("/memory");
       router.refresh();
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : '删除失败');
+      setError(deleteError instanceof Error ? deleteError.message : "删除失败");
     } finally {
       setDeleting(false);
     }
@@ -83,7 +83,7 @@ export default function MemoryDetailPage() {
       <div className="flex min-h-full items-center justify-center px-6 py-16">
         <div className="card max-w-md text-center">
           <h1 className="text-2xl font-bold">记忆不存在</h1>
-          <p className="mt-3 text-sm text-text-secondary">{error || '没有找到对应的记忆内容。'}</p>
+          <p className="mt-3 text-sm text-text-secondary">{error || "没有找到对应的记忆内容。"}</p>
           <Link href="/memory" className="btn mt-6">
             返回检索库
           </Link>
@@ -108,7 +108,10 @@ export default function MemoryDetailPage() {
         </nav>
 
         {error ? (
-          <div role="alert" className="mb-5 rounded-lg border border-error/20 bg-error-bg px-4 py-3 text-sm text-error">
+          <div
+            role="alert"
+            className="mb-5 rounded-lg border border-error/20 bg-error-bg px-4 py-3 text-sm text-error"
+          >
             {error}
           </div>
         ) : null}
@@ -120,7 +123,7 @@ export default function MemoryDetailPage() {
             完整内容
           </h2>
           <div className="mt-4 whitespace-pre-wrap text-base leading-8 text-text-secondary">
-            {memory.content || memory.summaryZh || memory.summary || '（暂无详细内容）'}
+            {memory.content || memory.summaryZh || memory.summary || "（暂无详细内容）"}
           </div>
         </section>
 
@@ -141,11 +144,15 @@ export default function MemoryDetailPage() {
                 </div>
                 <div>
                   <dt className="text-text-tertiary">创建时间</dt>
-                  <dd className="mt-1 text-text-primary">{new Date(memory.createdAt).toLocaleString('zh-CN')}</dd>
+                  <dd className="mt-1 text-text-primary">
+                    {new Date(memory.createdAt).toLocaleString("zh-CN")}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-text-tertiary">最后更新</dt>
-                  <dd className="mt-1 text-text-primary">{new Date(memory.updatedAt).toLocaleString('zh-CN')}</dd>
+                  <dd className="mt-1 text-text-primary">
+                    {new Date(memory.updatedAt).toLocaleString("zh-CN")}
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -155,7 +162,7 @@ export default function MemoryDetailPage() {
               disabled={deleting}
               className="btn btn-danger"
             >
-              {deleting ? '删除中...' : '删除记忆'}
+              {deleting ? "删除中..." : "删除记忆"}
             </button>
           </div>
 
@@ -164,7 +171,11 @@ export default function MemoryDetailPage() {
               <p className="text-sm font-medium text-text-secondary">关联记忆</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {memory.graphLinks.map((linkedId) => (
-                  <Link key={linkedId} href={memoryDetailHref(linkedId)} className="tag hover:border-accent hover:text-accent">
+                  <Link
+                    key={linkedId}
+                    href={memoryDetailHref(linkedId)}
+                    className="tag hover:border-accent hover:text-accent"
+                  >
                     {linkedId}
                   </Link>
                 ))}

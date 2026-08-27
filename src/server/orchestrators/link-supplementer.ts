@@ -98,12 +98,20 @@ export class LinkSupplementer {
     // 候选链接目标（排除今日记忆和非同 topic 的记忆）
     const todayTopics = new Set(todaysMemories.map((m) => m.topic));
     const todayIds = new Set(todaysMemories.map((m) => m.id));
-    const candidates = allMemories.filter(
-      (m) => !todayIds.has(m.id) && (todayTopics.has(m.topic) || todaysMemories.some((t) => t.tags.some((tag) => m.tags.includes(tag)))),
-    ).slice(0, 30);
+    const candidates = allMemories
+      .filter(
+        (m) =>
+          !todayIds.has(m.id) &&
+          (todayTopics.has(m.topic) ||
+            todaysMemories.some((t) => t.tags.some((tag) => m.tags.includes(tag)))),
+      )
+      .slice(0, 30);
 
     const candidatesText = candidates
-      .map((m) => `[${m.id}] "${m.title}" (topic: ${m.topic}, tags: ${m.tags.join(", ")}) | ${m.summary}`)
+      .map(
+        (m) =>
+          `[${m.id}] "${m.title}" (topic: ${m.topic}, tags: ${m.tags.join(", ")}) | ${m.summary}`,
+      )
       .join("\n");
 
     const prompt = `分析以下今日记忆和候选记忆，找出应该建立 [[wikilink]] 关联但尚未链接的记忆对。
@@ -130,14 +138,20 @@ ${candidatesText}
 
     try {
       const response = await ModelAdapter.generate(prompt, "flagship");
-      const jsonStr = response.content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+      const jsonStr = response.content
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
 
       const analyzed = JSON.parse(jsonStr);
       if (!Array.isArray(analyzed)) return [];
 
       const memoryMap = new Map(allMemories.map((m) => [m.id, m]));
       return analyzed
-        .filter((item: any) => item.fromId && item.toId && memoryMap.has(item.fromId) && memoryMap.has(item.toId))
+        .filter(
+          (item: any) =>
+            item.fromId && item.toId && memoryMap.has(item.fromId) && memoryMap.has(item.toId),
+        )
         .map((item: any) => ({
           from: { id: item.fromId, title: memoryMap.get(item.fromId)!.title },
           to: { id: item.toId, title: memoryMap.get(item.toId)!.title },

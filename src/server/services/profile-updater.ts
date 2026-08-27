@@ -149,7 +149,9 @@ export class ProfileUpdater {
       if (updatedProfile && updatedProfile.length > 20) {
         const similarity = this.lineJaccardSimilarity(existingProfile, updatedProfile);
         if (similarity >= this.UPDATE_SIMILARITY_THRESHOLD) {
-          logger.memory.info("[ProfileUpdater:flagship] 画像变化不显著，跳过回写", { similarity: similarity.toFixed(3) });
+          logger.memory.info("[ProfileUpdater:flagship] 画像变化不显著，跳过回写", {
+            similarity: similarity.toFixed(3),
+          });
           return;
         }
 
@@ -165,7 +167,9 @@ export class ProfileUpdater {
         });
       }
     } catch (error) {
-      logger.memory.error("[ProfileUpdater:flagship] 旗舰模型分析失败:", { error: (error as Error).message });
+      logger.memory.error("[ProfileUpdater:flagship] 旗舰模型分析失败:", {
+        error: (error as Error).message,
+      });
     }
   }
 
@@ -205,7 +209,9 @@ export class ProfileUpdater {
         // 相似度阈值检查：避免画像无明显变化时反复回写导致 prompt 缓存震荡
         const similarity = this.lineJaccardSimilarity(existingProfile, updatedProfile);
         if (similarity >= this.UPDATE_SIMILARITY_THRESHOLD) {
-          logger.memory.info("[ProfileUpdater] 画像变化不显著，跳过回写", { similarity: similarity.toFixed(3) });
+          logger.memory.info("[ProfileUpdater] 画像变化不显著，跳过回写", {
+            similarity: similarity.toFixed(3),
+          });
           return;
         }
 
@@ -253,8 +259,18 @@ export class ProfileUpdater {
    */
   private lineJaccardSimilarity(existing: string, updated: string): number {
     if (!existing) return 0;
-    const setA = new Set(existing.split(/\n+/).map((l) => l.trim()).filter(Boolean));
-    const setB = new Set(updated.split(/\n+/).map((l) => l.trim()).filter(Boolean));
+    const setA = new Set(
+      existing
+        .split(/\n+/)
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
+    const setB = new Set(
+      updated
+        .split(/\n+/)
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
     if (setA.size === 0 && setB.size === 0) return 1;
     let intersection = 0;
     for (const line of setA) {
@@ -279,9 +295,15 @@ export class ProfileUpdater {
    */
   private computeAddedLines(existing: string, updated: string): string[] {
     const existingLines = new Set(
-      existing.split(/\n+/).map((l) => l.trim()).filter(Boolean),
+      existing
+        .split(/\n+/)
+        .map((l) => l.trim())
+        .filter(Boolean),
     );
-    const updatedLines = updated.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const updatedLines = updated
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
     return updatedLines.filter((line) => !existingLines.has(line) && !line.startsWith("#"));
   }
 
@@ -300,7 +322,9 @@ export class ProfileUpdater {
       };
       appendFileSync(changelogPath, JSON.stringify(entry) + "\n", "utf-8");
     } catch (error) {
-      logger.memory.error("[ProfileUpdater] 写入变更日志失败:", { error: (error as Error).message });
+      logger.memory.error("[ProfileUpdater] 写入变更日志失败:", {
+        error: (error as Error).message,
+      });
     }
   }
 

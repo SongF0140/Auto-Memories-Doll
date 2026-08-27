@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-console -- ErrorBoundary 必须记录未处理的 UI 异常。 */
+
 import { Component, ReactNode } from "react";
 
 interface ErrorBoundaryProps {

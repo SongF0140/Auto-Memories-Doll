@@ -7,18 +7,19 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getMemoryRoot } from "../lib/storage/path-resolver";
-import {
-  defaultRules,
-  compileRules,
-  type CompiledRule,
-  mergeRules,
-  type TopicRule,
-} from "./topics-data";
+import { type CompiledRule, mergeRules, type TopicRule } from "./topics-data";
 import { logger } from "../lib/logger";
 
 export type { TopicRule, CompiledRule };
 
-export { defaultRules, compileRules, mergeRules, getTopicLabelClient, getDefaultTopicRules, defaultTopicLabels } from "./topics-data";
+export {
+  defaultRules,
+  compileRules,
+  mergeRules,
+  getTopicLabelClient,
+  getDefaultTopicRules,
+  defaultTopicLabels,
+} from "./topics-data";
 
 /** 加载用户自定义话题配置（memory-root/topics.json） */
 function loadUserTopics(): TopicRule[] {

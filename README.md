@@ -217,19 +217,25 @@ memory-root/
 
 ```bash
 npm run typecheck    # 类型检查
-npm test             # 运行测试（40 文件，383 用例）
+npm run lint         # 严格 Lint（0 warning）
+npm test             # 运行单元/集成测试（44 文件，413 用例）
+npm run test:coverage # 覆盖率门禁（Lines 30% / Branches 70% / Functions 50%）
 npm run eval         # 检索评测（Recall@k / MRR 报告）
+npm run format:check # 格式检查
 npm run format       # 格式化代码
 npm run build        # 生产构建
+npm run test:e2e     # 真实浏览器门禁（需先安装 Chromium）
 ```
+
+Playwright E2E 使用 `e2e/.tmp/` 下的隔离 memory root 和数据库，测试结束后不会读取或写入真实 `memory-root/`。首次运行可执行 `npx playwright install chromium` 安装本地测试浏览器。
 
 ## 项目状态
 
 个人学习项目，v0.1 阶段。核心链路已跑通，持续改进中。
 
-**已完成：** Agent 循环 · 记忆审计管线 · HNSW 向量检索 · 关键词降级 · MMR 重排 · 多路召回（query 改写）· 记忆纠错闭环 · 检索评测（Recall@k/MRR）· GitHub Actions CI · 多源采集 · 会话持久化 · 上下文压缩 · 降级恢复 · 夜间督查 · 383 个测试用例
+**已完成：** Agent 循环 · 记忆审计管线 · HNSW 向量检索 · 关键词降级 · MMR 重排 · 多路召回（query 改写）· 记忆纠错闭环 · 检索评测（Recall@k/MRR）· GitHub Actions CI · 多源采集 · 会话持久化 · 上下文压缩 · 降级恢复 · loopback 安全边界 · 真实 Playwright E2E · 413 个测试用例
 
-**计划中：** 图书馆界面（目录树 + 知识卡片 + 思维导图） · Electron 桌面封装 · 评测集扩充与参数调优
+**计划中：** Electron 桌面封装 · 评测集扩充与参数调优 · 会话树形分支
 
 ## License
 

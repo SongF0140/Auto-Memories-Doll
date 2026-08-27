@@ -15,7 +15,13 @@ function hostnameFromHostHeader(hostHeader: string): string | null {
 
   try {
     const parsed = new URL(`http://${value}`);
-    if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
       return null;
     }
     return normalizeHostname(parsed.hostname);
@@ -26,13 +32,18 @@ function hostnameFromHostHeader(hostHeader: string): string | null {
 
 function isLoopbackRequest(request: NextRequest): boolean {
   const hostHeader = request.headers.get("host");
-  const hostname = hostHeader === null ? normalizeHostname(request.nextUrl.hostname) : hostnameFromHostHeader(hostHeader);
+  const hostname =
+    hostHeader === null
+      ? normalizeHostname(request.nextUrl.hostname)
+      : hostnameFromHostHeader(hostHeader);
   return hostname !== null && LOOPBACK_HOSTNAMES.has(hostname);
 }
 
 export function middleware(request: NextRequest) {
   if (!isLoopbackRequest(request)) {
-    return NextResponse.json(apiError(ErrorCode.VALIDATION_FAILED, "仅允许通过本机地址访问 API"), { status: 403 });
+    return NextResponse.json(apiError(ErrorCode.VALIDATION_FAILED, "仅允许通过本机地址访问 API"), {
+      status: 403,
+    });
   }
 
   const method = request.method;

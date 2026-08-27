@@ -132,7 +132,7 @@ export class McpIngestBridge {
     // 约定 MCP collect_memory 返回 { items: [...] } 或直接返回数组
     const items = Array.isArray(result)
       ? result
-      : (result as any)?.items || (result as any)?.data || [(result as any)];
+      : (result as any)?.items || (result as any)?.data || [result as any];
 
     return items
       .filter((item: any) => item && (item.content || item.text || item.body))

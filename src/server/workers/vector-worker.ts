@@ -23,7 +23,9 @@ export class VectorWorker {
         vectorIndex.create(vectorRecord);
         this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(row.id, row.id);
       } catch (error) {
-        logger.vector.error(`Failed to build vector for memory ${row.id}:`, { error: (error as Error).message });
+        logger.vector.error(`Failed to build vector for memory ${row.id}:`, {
+          error: (error as Error).message,
+        });
       }
     }
 

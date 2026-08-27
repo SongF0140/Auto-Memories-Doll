@@ -53,7 +53,10 @@ const defaultConfig: AiConfig = {
   embedding: { ...defaultEmbeddingConfig, model: "text-embedding-3-small" },
 };
 
-const tierLabels: Record<keyof Pick<AiConfig, "flagship" | "standard" | "budget">, { title: string; desc: string; icon: string }> = {
+const tierLabels: Record<
+  keyof Pick<AiConfig, "flagship" | "standard" | "budget">,
+  { title: string; desc: string; icon: string }
+> = {
   flagship: {
     title: "旗舰模型",
     desc: "分流、分析、评估 — 强推理，高精度",
@@ -100,14 +103,17 @@ export default function AiSettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
 
   /* ── 更新函数 ── */
-  const updateShared = <K extends "provider" | "baseURL" | "apiKey">(key: K, value: AiConfig[K]) => {
+  const updateShared = <K extends "provider" | "baseURL" | "apiKey">(
+    key: K,
+    value: AiConfig[K],
+  ) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
   const updateTier = (
     slot: "flagship" | "standard" | "budget",
     field: keyof ModelTierConfig,
-    value: string | number
+    value: string | number,
   ) => {
     setConfig((prev) => ({
       ...prev,
@@ -255,7 +261,13 @@ export default function AiSettingsPage() {
             >
               {testing ? (
                 <span className="flex items-center gap-2">
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="animate-spin w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <circle cx="12" cy="12" r="10" opacity="0.3" />
                     <path d="M12 2a10 10 0 0 1 10 10" />
                   </svg>
@@ -316,8 +328,8 @@ export default function AiSettingsPage() {
                           tier === "flagship"
                             ? "rgba(166,124,0,0.1)"
                             : tier === "standard"
-                            ? "rgba(201,162,39,0.1)"
-                            : "rgba(160,120,60,0.1)",
+                              ? "rgba(201,162,39,0.1)"
+                              : "rgba(160,120,60,0.1)",
                         color: "#A67C00",
                       }}
                     >
@@ -329,23 +341,35 @@ export default function AiSettingsPage() {
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     {/* 模型名 */}
                     <div>
-                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">模型名称</label>
+                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">
+                        模型名称
+                      </label>
                       <input
                         type="text"
                         value={tierConfig.model}
                         onChange={(e) => updateTier(tier, "model", e.target.value)}
-                        placeholder={tier === "flagship" ? "gpt-4o" : tier === "standard" ? "gpt-4o-mini" : "gpt-4o-mini"}
+                        placeholder={
+                          tier === "flagship"
+                            ? "gpt-4o"
+                            : tier === "standard"
+                              ? "gpt-4o-mini"
+                              : "gpt-4o-mini"
+                        }
                         className="input text-sm"
                       />
                     </div>
 
                     {/* Max Tokens */}
                     <div>
-                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">Max Tokens</label>
+                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">
+                        Max Tokens
+                      </label>
                       <input
                         type="number"
                         value={tierConfig.maxTokens}
-                        onChange={(e) => updateTier(tier, "maxTokens", parseInt(e.target.value) || 8192)}
+                        onChange={(e) =>
+                          updateTier(tier, "maxTokens", parseInt(e.target.value) || 8192)
+                        }
                         min={1}
                         max={131072}
                         className="input text-sm"
@@ -354,11 +378,15 @@ export default function AiSettingsPage() {
 
                     {/* Temperature */}
                     <div>
-                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">Temperature</label>
+                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">
+                        Temperature
+                      </label>
                       <input
                         type="number"
                         value={tierConfig.temperature}
-                        onChange={(e) => updateTier(tier, "temperature", parseFloat(e.target.value) || 0.3)}
+                        onChange={(e) =>
+                          updateTier(tier, "temperature", parseFloat(e.target.value) || 0.3)
+                        }
                         step={0.1}
                         min={0}
                         max={2}
@@ -368,11 +396,15 @@ export default function AiSettingsPage() {
 
                     {/* Timeout */}
                     <div>
-                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">超时 (ms)</label>
+                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">
+                        超时 (ms)
+                      </label>
                       <input
                         type="number"
                         value={tierConfig.timeout}
-                        onChange={(e) => updateTier(tier, "timeout", parseInt(e.target.value) || 60000)}
+                        onChange={(e) =>
+                          updateTier(tier, "timeout", parseInt(e.target.value) || 60000)
+                        }
                         min={1000}
                         max={120000}
                         className="input text-sm"
@@ -381,11 +413,15 @@ export default function AiSettingsPage() {
 
                     {/* Max Retries */}
                     <div>
-                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">重试次数</label>
+                      <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">
+                        重试次数
+                      </label>
                       <input
                         type="number"
                         value={tierConfig.maxRetries}
-                        onChange={(e) => updateTier(tier, "maxRetries", parseInt(e.target.value) || 3)}
+                        onChange={(e) =>
+                          updateTier(tier, "maxRetries", parseInt(e.target.value) || 3)
+                        }
                         min={0}
                         max={10}
                         className="input text-sm"
@@ -442,11 +478,15 @@ export default function AiSettingsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">队列超时 (ms)</label>
+              <label className="block text-xs font-medium text-[#8B7D6B] mb-1.5">
+                队列超时 (ms)
+              </label>
               <input
                 type="number"
                 value={config.embedding.queueTimeoutMs}
-                onChange={(e) => updateEmbedding("queueTimeoutMs", parseInt(e.target.value) || 30000)}
+                onChange={(e) =>
+                  updateEmbedding("queueTimeoutMs", parseInt(e.target.value) || 30000)
+                }
                 min={1000}
                 max={300000}
                 className="input text-sm"
@@ -456,7 +496,10 @@ export default function AiSettingsPage() {
         </div>
 
         {/* ── 4. 操作按钮区 ── */}
-        <div className="flex items-center justify-between pt-4 border-t" style={{ borderColor: "#E8E0D4" }}>
+        <div
+          className="flex items-center justify-between pt-4 border-t"
+          style={{ borderColor: "#E8E0D4" }}
+        >
           <div className="text-sm text-[#8B7D6B]">
             💡 配置会自动保存到浏览器本地存储（localStorage）
           </div>
@@ -475,7 +518,13 @@ export default function AiSettingsPage() {
             <button onClick={handleSave} disabled={saving} className="btn">
               {saving ? (
                 <span className="flex items-center gap-2">
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="animate-spin w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <circle cx="12" cy="12" r="10" opacity="0.3" />
                     <path d="M12 2a10 10 0 0 1 10 10" />
                   </svg>

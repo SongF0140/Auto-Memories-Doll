@@ -115,7 +115,13 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
   "src/app/api/memory/[id]/route.ts": {
     requestSchema: "memoryUpdateSchema",
     responseSchema: "memoryDetailResponseSchema",
-    errorCodes: ["VALIDATION_FAILED", "NOT_FOUND", "MEMORY_UPDATE_FAILED", "MEMORY_DELETE_FAILED", "INTERNAL_ERROR"],
+    errorCodes: [
+      "VALIDATION_FAILED",
+      "NOT_FOUND",
+      "MEMORY_UPDATE_FAILED",
+      "MEMORY_DELETE_FAILED",
+      "INTERNAL_ERROR",
+    ],
   },
   "src/app/api/memory/[id]/access/route.ts": {
     responseSchema: "memoryAccessResponseSchema",

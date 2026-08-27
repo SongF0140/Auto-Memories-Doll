@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { deduplicateMemories, detectDuplicates } from "../server/pipelines/deduplicator";
-import { formatMemoryContent, formatSummary, formatMemoryToMarkdown } from "../server/pipelines/formatter";
+import {
+  formatMemoryContent,
+  formatSummary,
+  formatMemoryToMarkdown,
+} from "../server/pipelines/formatter";
 import { splitText } from "../server/pipelines/splitter";
 import { extractTags } from "../server/pipelines/json-pipeline";
 
@@ -50,18 +54,15 @@ describe("deduplicateMemories", () => {
 describe("detectDuplicates", () => {
   it("高相似度内容检测为重复", () => {
     // Jaccard ≈ 0.905: 19 公共 / 21 union (20 词 each, 1 diff)
-    const result = detectDuplicates(
-      "a b c d e f g h i j k l m n o p q r s u",
-      ["a b c d e f g h i j k l m n o p q r s t"],
-    );
+    const result = detectDuplicates("a b c d e f g h i j k l m n o p q r s u", [
+      "a b c d e f g h i j k l m n o p q r s t",
+    ]);
     expect(result.isDuplicate).toBe(true);
     expect(result.similarity).toBeGreaterThan(0.9);
   });
 
   it("完全不同内容不重复", () => {
-    const result = detectDuplicates("apple banana", [
-      "zebra xylophone",
-    ]);
+    const result = detectDuplicates("apple banana", ["zebra xylophone"]);
     expect(result.isDuplicate).toBe(false);
   });
 
@@ -71,9 +72,7 @@ describe("detectDuplicates", () => {
   });
 
   it("标准化后比较", () => {
-    const result = detectDuplicates("Hello, World!", [
-      "hello world",
-    ]);
+    const result = detectDuplicates("Hello, World!", ["hello world"]);
     expect(result.isDuplicate).toBe(true);
   });
 });

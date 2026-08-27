@@ -42,9 +42,6 @@ const CODE_FENCE = /^```[\s\S]*?```/gm;
 /** HTML 标签 */
 const HTML_TAG = /<[^>]+>/g;
 
-/** 多余空白行（>2个连续换行） */
-const EXTRA_NEWLINES = /\n{3,}/g;
-
 /**
  * 清洗并修饰记忆标题
  *
@@ -76,7 +73,10 @@ export function sanitizeTitle(raw: string): string {
   title = title.replace(MARKDOWN_LINK, "$1");
 
   // 5. 按行处理
-  const lines = title.split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = title
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   // 找第一个有意义的非 emoji 行作为候选标题
   let candidate = "";

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { ConfigService } from "../../../../server/services/config-service";
 import { mcpServerSchema } from "../../../../lib/validation";
 
-
 export async function GET() {
   const service = new ConfigService();
   try {

@@ -127,9 +127,7 @@ export default function StorageConfigForm({ config, onChanged }: StorageConfigFo
       {/* 路径修改 */}
       <div className="space-y-4 pt-4 border-t border-border">
         <div>
-          <label className="block text-sm font-medium text-text-primary mb-2">
-            新笔记路径
-          </label>
+          <label className="block text-sm font-medium text-text-primary mb-2">新笔记路径</label>
           <input
             type="text"
             value={newPath}
@@ -176,8 +174,7 @@ export default function StorageConfigForm({ config, onChanged }: StorageConfigFo
               </p>
               <p>
                 <span className="text-text-tertiary">文件数：</span>
-                {preview.fileCount} 个
-                <span className="ml-3 text-text-tertiary">大小：</span>
+                {preview.fileCount} 个<span className="ml-3 text-text-tertiary">大小：</span>
                 {formatBytes(preview.totalBytes)}
               </p>
             </div>

@@ -1,5 +1,12 @@
 import { getDatabase } from "../../lib/storage/database";
-import { AiConfig, McpServerConfig, SkillConfig, StorageConfig, ToolWatchSource, ToolType } from "../../types/config";
+import {
+  AiConfig,
+  McpServerConfig,
+  SkillConfig,
+  StorageConfig,
+  ToolWatchSource,
+  ToolType,
+} from "../../types/config";
 import { env } from "../../config/env";
 import Database from "better-sqlite3";
 

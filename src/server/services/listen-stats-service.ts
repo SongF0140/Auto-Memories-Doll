@@ -45,9 +45,7 @@ export class ListenStatsService {
   }
 
   getStats(): ListenStats {
-    const row = this.db
-      .prepare("SELECT * FROM listen_stats WHERE id = 1")
-      .get() as
+    const row = this.db.prepare("SELECT * FROM listen_stats WHERE id = 1").get() as
       | {
           totalReceived: number;
           totalProcessed: number;

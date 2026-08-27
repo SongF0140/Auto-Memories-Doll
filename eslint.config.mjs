@@ -5,7 +5,7 @@ import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
-    ignores: [".next/**", "node_modules/**", "memory-root/**", "dist/**"],
+    ignores: [".next/**", "coverage/**", "node_modules/**", "memory-root/**", "dist/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -39,6 +39,14 @@ export default tseslint.config(
         URL: "readonly",
         navigator: "readonly",
         localStorage: "readonly",
+      },
+    },
+  },
+  {
+    files: ["e2e/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
       },
     },
   },

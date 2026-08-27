@@ -9,13 +9,10 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { provider, baseURL, apiKey, model } = body;
+    const { baseURL, apiKey, model } = body;
 
     if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: "API Key 不能为空" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "API Key 不能为空" }, { status: 400 });
     }
 
     const url = (baseURL || "https://api.openai.com/v1").replace(/\/$/, "");
@@ -67,7 +64,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
           { success: false, error: errorMsg },
-          { status: 200 } // 返回200让前端能读取错误信息
+          { status: 200 }, // 返回200让前端能读取错误信息
         );
       }
     } catch (fetchError: unknown) {
@@ -77,19 +74,16 @@ export async function POST(request: NextRequest) {
       if (err.name === "AbortError") {
         return NextResponse.json(
           { success: false, error: "连接超时（10秒），请检查网络和 API 地址" },
-          { status: 200 }
+          { status: 200 },
         );
       }
 
-        return NextResponse.json(
-          { success: false, error: `网络错误: ${err.message}` },
-          { status: 200 }
-        );
+      return NextResponse.json(
+        { success: false, error: `网络错误: ${err.message}` },
+        { status: 200 },
+      );
     }
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: "服务器内部错误" },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ success: false, error: "服务器内部错误" }, { status: 500 });
   }
 }

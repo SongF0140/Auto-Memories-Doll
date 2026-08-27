@@ -46,7 +46,8 @@ export interface ExtractedMemoryEntity {
 /** 意图的语义描述，用于 embedding 相似度计算 */
 const INTENT_DESCRIPTIONS: Record<Exclude<IntentType, "chat" | "system_command">, string> = {
   memory_create: "创建、保存、记录新的记忆或知识，例如记住某个信息、存储内容、创建备忘录、留存笔记",
-  memory_update: "修改、更新、编辑、纠正已有的记忆，例如改一下、变更内容、修正信息、调整记录、指出记错的地方",
+  memory_update:
+    "修改、更新、编辑、纠正已有的记忆，例如改一下、变更内容、修正信息、调整记录、指出记错的地方",
   memory_delete: "删除、移除、清除记忆或知识，例如删掉、去掉、清理不需要的内容、擦除记录",
   memory_query: "查询、搜索、查找、回忆已有的记忆，例如找一下之前的内容、看看保存的知识、搜索信息",
   prompt_edit: "修改提示词、prompt、系统模板、AI 指令，例如改提示词、调整系统设定",
@@ -56,11 +57,11 @@ const INTENT_DESCRIPTIONS: Record<Exclude<IntentType, "chat" | "system_command">
  * 用户意图分类器 —— 三层级联增强版
  *
  * Layer 1 - 关键词匹配（同步，<1ms）
-   *   基于关键词命中率的置信度评分，≥配置阈值直接返回。
+ *   基于关键词命中率的置信度评分，≥配置阈值直接返回。
  *
  * Layer 2 - Embedding 语义回退（异步，~100ms）
-   *   关键词置信度 <配置阈值时，用 embedding 向量相似度匹配意图描述。
-   *   支持多意图检测：返回相似度 >=配置阈值的所有候选，降序排列。
+ *   关键词置信度 <配置阈值时，用 embedding 向量相似度匹配意图描述。
+ *   支持多意图检测：返回相似度 >=配置阈值的所有候选，降序排列。
  *
  * Layer 3 - Budget LLM 实体提取（异步，~500ms）
  *   memory_create / memory_update 意图时，调用廉价模型提取
@@ -69,7 +70,10 @@ const INTENT_DESCRIPTIONS: Record<Exclude<IntentType, "chat" | "system_command">
 export class ChatClassifier {
   // ── Layer 1: 关键词 ──
 
-  private static readonly INTENT_KEYWORDS: Record<Exclude<IntentType, "chat" | "system_command">, string[]> = {
+  private static readonly INTENT_KEYWORDS: Record<
+    Exclude<IntentType, "chat" | "system_command">,
+    string[]
+  > = {
     memory_create: ["记住", "保存", "记录", "存下", "记一下"],
     memory_update: ["更新", "修改", "编辑", "改一下", "变更", "记错", "纠正", "更正"],
     memory_delete: ["删除", "移除", "清除", "删掉", "去掉"],
@@ -104,7 +108,9 @@ export class ChatClassifier {
       const positionBonus = lowerText.indexOf(matched[0]) < 10 ? INTENT_KEYWORD_POSITION_BONUS : 0;
       const score = Math.min(
         INTENT_MAX_CONFIDENCE,
-        INTENT_KEYWORD_BASE_CONFIDENCE + INTENT_KEYWORD_MATCH_BONUS * matched.length + positionBonus,
+        INTENT_KEYWORD_BASE_CONFIDENCE +
+          INTENT_KEYWORD_MATCH_BONUS * matched.length +
+          positionBonus,
       );
 
       if (score > bestScore) {
@@ -134,7 +140,10 @@ export class ChatClassifier {
   async classifyAsync(text: string): Promise<IntentResult> {
     // Layer 1: 关键词快速路径
     const keywordResult = this.classify(text);
-    if (keywordResult.confidence >= INTENT_CLASSIFY_KEYWORD_THRESHOLD || keywordResult.type === "system_command") {
+    if (
+      keywordResult.confidence >= INTENT_CLASSIFY_KEYWORD_THRESHOLD ||
+      keywordResult.type === "system_command"
+    ) {
       return keywordResult;
     }
 
@@ -147,14 +156,19 @@ export class ChatClassifier {
     }
   }
 
-  private async classifyByEmbedding(text: string, keywordFallback: IntentResult): Promise<IntentResult> {
+  private async classifyByEmbedding(
+    text: string,
+    keywordFallback: IntentResult,
+  ): Promise<IntentResult> {
     const textEmbedding = await ModelAdapter.generateEmbedding(text);
     if (textEmbedding.embedding.length === 0) return keywordFallback;
 
     await this.ensureIntentEmbeddings();
 
     const candidates: IntentCandidate[] = [];
-    const intentTypes = Object.keys(INTENT_DESCRIPTIONS) as Array<Exclude<IntentType, "chat" | "system_command">>;
+    const intentTypes = Object.keys(INTENT_DESCRIPTIONS) as Array<
+      Exclude<IntentType, "chat" | "system_command">
+    >;
 
     for (const intent of intentTypes) {
       const intentEmb = this.intentEmbeddingCache!.get(intent);
@@ -162,7 +176,11 @@ export class ChatClassifier {
 
       const similarity = cosineSimilarity(textEmbedding.embedding, intentEmb);
       if (similarity >= INTENT_EMBEDDING_THRESHOLD) {
-        candidates.push({ type: intent, confidence: Math.round(similarity * 100) / 100, matchedKeywords: [] });
+        candidates.push({
+          type: intent,
+          confidence: Math.round(similarity * 100) / 100,
+          matchedKeywords: [],
+        });
       }
     }
 
@@ -184,7 +202,9 @@ export class ChatClassifier {
     if (this.intentEmbeddingCache) return;
 
     this.intentEmbeddingCache = new Map();
-    const intents = Object.keys(INTENT_DESCRIPTIONS) as Array<Exclude<IntentType, "chat" | "system_command">>;
+    const intents = Object.keys(INTENT_DESCRIPTIONS) as Array<
+      Exclude<IntentType, "chat" | "system_command">
+    >;
 
     // 并发获取所有意图描述的 embedding
     const results = await Promise.all(

@@ -53,12 +53,7 @@ export function resolveConflicts(
   const merged: Partial<MemoryRecord> = {};
 
   for (const field of changedFields) {
-    if (
-      field === "version" ||
-      field === "id" ||
-      field === "createdAt" ||
-      field === "updatedAt"
-    )
+    if (field === "version" || field === "id" || field === "createdAt" || field === "updatedAt")
       continue;
 
     const existingValue = existing[field as keyof MemoryRecord];

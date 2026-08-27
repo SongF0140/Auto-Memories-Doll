@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MemoryService } from "../../../../../server/services/memory-service";
 
-
 /**
  * POST /api/memory/[id]/access
  * 记录用户访问：递增 accessCount + 刷新 accessedAt

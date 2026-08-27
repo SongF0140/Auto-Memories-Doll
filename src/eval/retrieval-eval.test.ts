@@ -62,8 +62,7 @@ vi.mock("../lib/storage/database", () => ({
 
 // 向量生成 → 由 evalMock 控制：关闭时返回空向量触发关键词降级，开启时用确定性向量
 vi.mock("../lib/vector/generator", () => ({
-  generateEmbedding: async (text: string) =>
-    evalMock.useVector ? bigramEmbedding(text) : [],
+  generateEmbedding: async (text: string) => (evalMock.useVector ? bigramEmbedding(text) : []),
   isEmbeddingEmpty: (embedding: number[]) => embedding.length === 0,
   buildVectorRecord: async (memoryId: string, text: string) => ({
     memoryId,
@@ -90,9 +89,26 @@ function seedMemories(db: Database.Database): void {
   `);
   for (const m of EVAL_MEMORIES) {
     stmt.run(
-      m.id, 1, "eval", "manual", m.title, null, m.content, m.summary, null,
-      JSON.stringify(m.tags), null, m.topic, null,
-      SEED_TIME, SEED_TIME, SEED_TIME, 0, 0, null, JSON.stringify([]),
+      m.id,
+      1,
+      "eval",
+      "manual",
+      m.title,
+      null,
+      m.content,
+      m.summary,
+      null,
+      JSON.stringify(m.tags),
+      null,
+      m.topic,
+      null,
+      SEED_TIME,
+      SEED_TIME,
+      SEED_TIME,
+      0,
+      0,
+      null,
+      JSON.stringify([]),
     );
   }
 }
@@ -217,8 +233,17 @@ function renderMarkdown(report: {
   modes: Record<
     string,
     {
-      overall: { total: number; recallAt1: number; recallAt5: number; recallAt10: number; mrr: number };
-      byKind: Record<string, { total: number; recallAt1: number; recallAt5: number; recallAt10: number; mrr: number }>;
+      overall: {
+        total: number;
+        recallAt1: number;
+        recallAt5: number;
+        recallAt10: number;
+        mrr: number;
+      };
+      byKind: Record<
+        string,
+        { total: number; recallAt1: number; recallAt5: number; recallAt10: number; mrr: number }
+      >;
     }
   >;
 }): string {

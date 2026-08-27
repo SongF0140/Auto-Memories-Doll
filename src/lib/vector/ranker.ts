@@ -1,8 +1,5 @@
 import { MemoryRecord } from "../../types/memory";
-import {
-  RANKER_DEFAULT_MMR_ALPHA,
-  RANKER_WEIGHTS,
-} from "../../config/constants";
+import { RANKER_DEFAULT_MMR_ALPHA, RANKER_WEIGHTS } from "../../config/constants";
 
 export type RankResult = {
   memoryId: string;

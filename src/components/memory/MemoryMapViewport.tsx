@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React from 'react';
-import EmptyState from '@/components/common/EmptyState';
-import KnowledgeMap, { type KnowledgeNode } from '@/components/memory/KnowledgeMap';
-import type { MemoryRecord } from '@/types/memory';
+import React from "react";
+import EmptyState from "@/components/common/EmptyState";
+import KnowledgeMap, { type KnowledgeNode } from "@/components/memory/KnowledgeMap";
+import type { MemoryRecord } from "@/types/memory";
 
 interface MemoryMapViewportProps {
   memories: MemoryRecord[];
@@ -27,7 +27,12 @@ function LoadingState() {
   );
 }
 
-export default function MemoryMapViewport({ memories, loading, error, onNodeClick }: MemoryMapViewportProps) {
+export default function MemoryMapViewport({
+  memories,
+  loading,
+  error,
+  onNodeClick,
+}: MemoryMapViewportProps) {
   if (loading) return <LoadingState />;
 
   if (error) {
@@ -44,7 +49,10 @@ export default function MemoryMapViewport({ memories, loading, error, onNodeClic
   if (memories.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6">
-        <EmptyState title="暂无知识图谱" description="有记忆内容后，系统会按话题和标签聚合知识节点。" />
+        <EmptyState
+          title="暂无知识图谱"
+          description="有记忆内容后，系统会按话题和标签聚合知识节点。"
+        />
       </div>
     );
   }

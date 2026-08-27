@@ -40,10 +40,10 @@ describe("buildMemoryRecord", () => {
   });
 
   it("respects provided id and zh fields", () => {
-    const r = buildMemoryRecord(
-      "src", "chat", "t", "c", "s", ["x"], "topic-x", "custom-id",
-      { titleZh: "中文标题", tagsZh: ["中文"] },
-    );
+    const r = buildMemoryRecord("src", "chat", "t", "c", "s", ["x"], "topic-x", "custom-id", {
+      titleZh: "中文标题",
+      tagsZh: ["中文"],
+    });
     expect(r.id).toBe("custom-id");
     expect(r.titleZh).toBe("中文标题");
     expect(r.tagsZh).toEqual(["中文"]);
@@ -166,8 +166,17 @@ describe("validateVectorRecord", () => {
   });
 
   it("rejects missing memoryId / model / updatedAt", () => {
-    expect(validateVectorRecord({ embedding: [0.1], model: "x", dimensions: 1, updatedAt: "t" } as any)).toBe(false);
-    expect(validateVectorRecord({ memoryId: "m", embedding: [0.1], dimensions: 1, updatedAt: "t" } as any)).toBe(false);
+    expect(
+      validateVectorRecord({ embedding: [0.1], model: "x", dimensions: 1, updatedAt: "t" } as any),
+    ).toBe(false);
+    expect(
+      validateVectorRecord({
+        memoryId: "m",
+        embedding: [0.1],
+        dimensions: 1,
+        updatedAt: "t",
+      } as any),
+    ).toBe(false);
   });
 });
 

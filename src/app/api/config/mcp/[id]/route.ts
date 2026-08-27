@@ -3,7 +3,6 @@ import { z } from "zod";
 import { ConfigService } from "../../../../../server/services/config-service";
 import { mcpServerSchema } from "../../../../../lib/validation";
 
-
 const idSchema = z.string().min(1).max(128);
 
 function validateId(params: { id: string }) {

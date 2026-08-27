@@ -70,15 +70,12 @@ export class OpenAIProvider implements AiProvider {
 
           // 使用 fullStream 获取所有事件（文本 + 工具调用）
           let roundNum = 0;
-          let currentToolName = "";
-
           for await (const chunk of result.fullStream) {
             switch (chunk.type) {
               case "text-delta":
                 controller.enqueue({ type: "text_delta", content: chunk.text });
                 break;
               case "tool-call": {
-                currentToolName = chunk.toolName;
                 controller.enqueue({
                   type: "tool_call_start",
                   toolName: chunk.toolName,
@@ -90,7 +87,8 @@ export class OpenAIProvider implements AiProvider {
                 controller.enqueue({
                   type: "tool_call_result",
                   toolName: chunk.toolName,
-                  result: typeof chunk.output === "string" ? chunk.output : JSON.stringify(chunk.output),
+                  result:
+                    typeof chunk.output === "string" ? chunk.output : JSON.stringify(chunk.output),
                 });
                 break;
               case "start-step":
@@ -132,7 +130,7 @@ export class OpenAIProvider implements AiProvider {
         const model = openai.embedding(this.config.embedding.model);
         const result = await model.doEmbed({ values: [text] });
         return result.embeddings[0] || [];
-      } catch (error) {
+      } catch {
         if (attempt === maxRetries) {
           return [];
         }
