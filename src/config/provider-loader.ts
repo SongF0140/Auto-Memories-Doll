@@ -19,7 +19,9 @@ export type ProviderCatalog = {
   providers: Record<string, ProviderEntry>;
 };
 
-const DEFAULT_PATH = path.join(__dirname, "providers.json");
+// 不能用 __dirname：Next.js 打包后 __dirname 是 .next/server/app/** 路由目录，
+// JSON 会找不到（ENOENT → 配置接口 500）。dev/start 均以项目根为 cwd。
+const DEFAULT_PATH = path.join(process.cwd(), "src", "config", "providers.json");
 const providerModelEntrySchema = z.object({
   type: z.enum(["chat", "embedding"]),
   contextWindow: z.number().int().positive().optional(),

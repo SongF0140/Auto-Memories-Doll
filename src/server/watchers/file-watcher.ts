@@ -55,6 +55,13 @@ export function stopFileWatcher(): void {
   }
 }
 
+/**
+ * 获取文件监听器运行状态（供 API 状态查询）。
+ */
+export function getFileWatcherStatus(): { running: boolean; root: string } {
+  return { running: watcher !== null, root: getMemoryRoot() };
+}
+
 type MarkdownFileEvent = "add" | "change";
 
 /**
@@ -79,6 +86,8 @@ function getFileUpdates(record: MemoryRecord, filePath: string): Partial<MemoryR
     tagsZh: record.tagsZh,
     topic: record.topic,
     topicZh: record.topicZh,
+    kind: record.kind,
+    evidence: record.evidence,
     graphLinks: record.graphLinks,
   };
 }
@@ -157,6 +166,11 @@ async function ingestMarkdownFileOnce(
           ...record,
           id: getStableFileMemoryId(filePath),
           source: filePath,
+          // 纯文本文件的内容本身就是原文：补上证据链，避免采集类入口被闸门强制转 review
+          evidence: record.evidence ?? {
+            text: content.slice(0, 500),
+            location: filePath,
+          },
         };
         const existing = memoryService.getMemory(stableRecord.id);
         if (eventType === "change" && existing) {

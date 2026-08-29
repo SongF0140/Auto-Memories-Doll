@@ -124,8 +124,9 @@ export class OpenAIProvider implements AiProvider {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const openai = createOpenAI({
-          apiKey: this.config.apiKey,
-          baseURL: this.config.baseURL,
+          // embedding 可配置专属凭证（如 GLM embedding + 主 key 走 Kimi chat）
+          apiKey: this.config.embedding.apiKey || this.config.apiKey,
+          baseURL: this.config.embedding.baseURL || this.config.baseURL,
         });
         const model = openai.embedding(this.config.embedding.model);
         const result = await model.doEmbed({ values: [text] });

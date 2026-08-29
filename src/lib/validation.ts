@@ -37,6 +37,9 @@ const embeddingSchema = z.object({
   dimensions: z.number().int().min(1).max(8192),
   maxConcurrency: z.number().int().min(1).max(50),
   queueTimeoutMs: z.number().int().min(1000).max(300000),
+  // embedding 可走不同提供商：key/baseURL 可选，留空回落共享配置
+  apiKey: z.string().optional(),
+  baseURL: z.union([z.string().url("embedding baseURL 必须是有效的 URL"), z.literal("")]).optional(),
 });
 
 export const aiConfigSchema = z.object({
@@ -131,7 +134,14 @@ export const storageConfigPreviewSchema = z
   })
   .strict();
 
-export const toolTypeSchema = z.enum(["codex", "claude-code", "cursor", "markdown", "text"]);
+export const toolTypeSchema = z.enum([
+  "codex",
+  "claude-code",
+  "cursor",
+  "trae",
+  "markdown",
+  "text",
+]);
 
 const optionalTrimmedTextSchema = z
   .string()

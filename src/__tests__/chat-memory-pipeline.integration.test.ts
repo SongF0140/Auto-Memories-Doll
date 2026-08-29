@@ -96,8 +96,27 @@ vi.mock("../server/services/memory-service", () => ({
   })),
 }));
 
+vi.mock("../lib/ai/model-adapter", () => ({
+  ModelAdapter: {
+    isDegradedMode: false,
+    generateEmbedding: vi.fn(() =>
+      Promise.resolve({ embedding: [0.1], model: "test", timestamp: "2026-01-01" }),
+    ),
+  },
+}));
+
+vi.mock("../lib/vector/index", () => ({
+  VectorIndex: vi.fn(() => ({
+    create: vi.fn(() => Promise.resolve()),
+    close: vi.fn(),
+    search: vi.fn(() => [] as Array<{ memoryId: string; similarity: number }>),
+  })),
+}));
+
 vi.mock("../server/services/quality-filter-service", () => ({
-  QualityFilterService: vi.fn(() => ({ filter: vi.fn(() => Promise.resolve({ ok: true })) })),
+  QualityFilterService: vi.fn(() => ({
+    filter: vi.fn(() => Promise.resolve({ verdict: "accept", score: 8 })),
+  })),
 }));
 
 vi.mock("../server/services/audit-service", () => ({

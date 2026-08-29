@@ -1,4 +1,4 @@
-import { logger } from "./src/lib/logger";
+import { logger } from "./lib/logger";
 
 let auditScheduler: { start: () => void; stop: () => void } | null = null;
 let cleanupScheduler: { start: () => void; stop: () => void } | null = null;
@@ -9,17 +9,17 @@ let browserCollectScheduler: { start: () => void; stop: () => void } | null = nu
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { startAllListeners } = await import("./src/server/listener/listener-service");
+    const { startAllListeners } = await import("./server/listener/listener-service");
     const port = parseInt(process.env.PORT || "3000", 10);
     startAllListeners(port);
 
     // ── 后台调度器 ──
-    const { AuditScheduler } = await import("./src/server/schedulers/audit-scheduler");
-    const { CleanupScheduler } = await import("./src/server/schedulers/cleanup-scheduler");
-    const { VectorScheduler } = await import("./src/server/schedulers/vector-scheduler");
-    const { RetentionScheduler } = await import("./src/server/schedulers/retention-scheduler");
-    const { McpCollectScheduler } = await import("./src/server/schedulers/mcp-collect-scheduler");
-    const { BrowserCollectScheduler } = await import("./src/server/schedulers/browser-collect-scheduler");
+    const { AuditScheduler } = await import("./server/schedulers/audit-scheduler");
+    const { CleanupScheduler } = await import("./server/schedulers/cleanup-scheduler");
+    const { VectorScheduler } = await import("./server/schedulers/vector-scheduler");
+    const { RetentionScheduler } = await import("./server/schedulers/retention-scheduler");
+    const { McpCollectScheduler } = await import("./server/schedulers/mcp-collect-scheduler");
+    const { BrowserCollectScheduler } = await import("./server/schedulers/browser-collect-scheduler");
 
     auditScheduler = new AuditScheduler();
     cleanupScheduler = new CleanupScheduler();
@@ -38,13 +38,13 @@ export async function register() {
     logger.ingest.info("[Instrumentation] 调度器已启动: audit / cleanup / vector / retention / mcp-collect / browser-collect");
 
     // 启动 AI API 健康检查（降级恢复）
-    const { ModelAdapter } = await import("./src/lib/ai/model-adapter");
+    const { ModelAdapter } = await import("./lib/ai/model-adapter");
     ModelAdapter.startHealthCheck();
     logger.api.info("[Instrumentation] AI API 健康检查已启动");
 
     // 启动本地工具目录监听器（Cursor/Codex/Claude Code 等会话文件采集）
     const { startToolDirWatcher, stopToolDirWatcher } = await import(
-      "./src/server/watchers/tool-dir-watcher"
+      "./server/watchers/tool-dir-watcher"
     );
     startToolDirWatcher().catch((e) => {
       logger.ingest.error("[Instrumentation] ToolDirWatcher 启动失败", {

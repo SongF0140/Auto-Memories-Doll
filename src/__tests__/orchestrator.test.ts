@@ -130,11 +130,28 @@ vi.mock("../lib/vector/generator", () => ({
   ),
 }));
 
+// ── mock: model-adapter（recallSimilarMemories 依赖） ──
+vi.mock("../lib/ai/model-adapter", () => ({
+  ModelAdapter: {
+    isDegradedMode: false,
+    generateEmbedding: vi.fn(() =>
+      Promise.resolve({ embedding: [0.1], model: "test", timestamp: "2026-01-01" }),
+    ),
+  },
+}));
+
 // ── mock: VectorIndex ──
 const vectorIndexCreate = vi.fn();
 const vectorIndexClose = vi.fn();
+const vectorIndexSearch = vi.fn(
+  () => [] as Array<{ memoryId: string; similarity: number }>,
+);
 vi.mock("../lib/vector/index", () => ({
-  VectorIndex: vi.fn(() => ({ create: vectorIndexCreate, close: vectorIndexClose })),
+  VectorIndex: vi.fn(() => ({
+    create: vectorIndexCreate,
+    close: vectorIndexClose,
+    search: vectorIndexSearch,
+  })),
 }));
 
 // ── mock: services ──
@@ -153,6 +170,7 @@ function createMemoryServiceStub() {
     enqueueEvent: vi.fn(),
     dequeueEvent: vi.fn(),
     getPendingEvents: vi.fn(),
+    getEvent: vi.fn(),
     updateEvent: vi.fn(),
     classifyMemory: vi.fn(),
     count: vi.fn(() => 0),
@@ -229,7 +247,8 @@ describe("Orchestrator", () => {
       chunks: [{ content: "cleaned content", summary: "pipe-summary", tags: ["pipe-tag"] }],
     };
     builderMock.validatorResult = true;
-    qualityFilterMock.mockResolvedValue({ ok: true });
+    qualityFilterMock.mockResolvedValue({ verdict: "accept", score: 8, kind: "fact" });
+    vectorIndexSearch.mockReturnValue([]);
     auditorProcessMock.mockResolvedValue(null);
     memoryServiceStub.listMemoryContents.mockReturnValue([]);
     orchestrator = new Orchestrator();
@@ -514,7 +533,6 @@ describe("Orchestrator", () => {
       const event = { ...builderMock.pendingEvent, eventType: "ingest" };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null); // 不存在
-      qualityFilterMock.mockResolvedValue({ ok: true });
       memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
       memoryServiceStub.listMemories.mockReturnValue([]);
 
@@ -522,7 +540,7 @@ describe("Orchestrator", () => {
 
       expect(event.status).toBe("done");
       expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalledWith(
-        expect.objectContaining({ id: event.memoryId }),
+        expect.objectContaining({ id: event.memoryId, kind: "fact" }),
       );
       expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith(
         event.memoryId,
@@ -530,16 +548,146 @@ describe("Orchestrator", () => {
       );
     });
 
-    it("质量过滤不通过 → status=failed → retryCount++ → 记录失败", async () => {
+    it("新建路径向量召回不可用（embedding 失败）→ fail-closed 转人工 review", async () => {
       const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null);
-      qualityFilterMock.mockResolvedValue({ ok: false, reason: "低质量内容" });
+
+      const modelAdapter = await import("../lib/ai/model-adapter");
+      vi.mocked(modelAdapter.ModelAdapter.generateEmbedding).mockRejectedValueOnce(
+        new Error("embedding down"),
+      );
 
       await orchestrator.processQueue();
 
-      expect(event.status).toBe("failed");
-      expect(event.retryCount).toBe(1);
+      expect(event.status).toBe("review");
+      expect(event.retryCount).toBe(0);
+      expect(memoryServiceStub.createMemoryRecord).not.toHaveBeenCalled();
+      const fileManager = await import("../lib/storage/file-manager");
+      expect(fileManager.createFailureRecord).toHaveBeenCalledWith(
+        "test-id",
+        "vector-recall",
+        expect.any(Error),
+      );
+    });
+
+    it("派生存储同步失败（写 Markdown 抛错）→ 记忆已入库、事件仍 done、归档失败记录", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      // 第一次 getMemory（存在性检查）→ 不存在；commitNewMemory 内取回刚入库的记录
+      memoryServiceStub.getMemory
+        .mockReturnValueOnce(null)
+        .mockReturnValue({ ...builderMock.memoryRecord });
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+
+      const memoryWriter = await import("../lib/storage/memory-writer");
+      vi.mocked(memoryWriter.writeMemoryMarkdown).mockRejectedValueOnce(new Error("disk full"));
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("done");
+      expect(event.retryCount).toBe(0);
+      expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ id: event.memoryId }),
+      );
+      const fileManager = await import("../lib/storage/file-manager");
+      expect(fileManager.createFailureRecord).toHaveBeenCalledWith(
+        "test-id",
+        "write-memory-markdown",
+        expect.any(Error),
+      );
+    });
+
+    it("分类失败（classifyMemory 抛错）→ 记忆已入库、事件仍 done", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory
+        .mockReturnValueOnce(null)
+        .mockReturnValue({ ...builderMock.memoryRecord });
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      memoryServiceStub.classifyMemory.mockImplementation(() => {
+        throw new Error("classify boom");
+      });
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("done");
+      expect(event.retryCount).toBe(0);
+      expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalled();
+    });
+
+    it("质量闸门 reject → status=rejected → 不重试 → 记录失败", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(null);
+      qualityFilterMock.mockResolvedValue({
+        verdict: "reject",
+        score: 2,
+        reason: "低质量内容",
+      });
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("rejected");
+      expect(event.retryCount).toBe(0);
+    });
+
+    it("质量闸门 review → status=review → 不重试不落盘", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(null);
+      qualityFilterMock.mockResolvedValue({
+        verdict: "review",
+        score: 5,
+        reason: "处于灰区",
+      });
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("review");
+      expect(event.retryCount).toBe(0);
+      expect(memoryServiceStub.createMemoryRecord).not.toHaveBeenCalled();
+    });
+
+    it("向量去重：召回相似度 ≥ 0.95 → status=rejected → 不调用质量闸门", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockImplementation((id: string) =>
+        id === "existing-mem"
+          ? { ...builderMock.memoryRecord, id: "existing-mem", title: "已有记忆" }
+          : null,
+      );
+      vectorIndexSearch.mockReturnValue([{ memoryId: "existing-mem", similarity: 0.97 }]);
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("rejected");
+      expect(qualityFilterMock).not.toHaveBeenCalled();
+    });
+
+    it("闸门收到相似记忆提示（新颖性上下文注入）", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest" };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockImplementation((id: string) =>
+        id === "hint-mem"
+          ? { ...builderMock.memoryRecord, id: "hint-mem", title: "相似记忆", summary: "相似摘要" }
+          : null,
+      );
+      vectorIndexSearch.mockReturnValue([{ memoryId: "hint-mem", similarity: 0.75 }]);
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+
+      await orchestrator.processQueue();
+
+      expect(qualityFilterMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([
+          expect.objectContaining({ title: "相似记忆", similarity: 0.75 }),
+        ]),
+      );
+      expect(event.status).toBe("done");
     });
   });
 
@@ -643,6 +791,86 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("更新内容质量 review 时禁 auto_merge → 不写回，逐字段生成冲突转人工", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventType: "ingest",
+        changedFields: ["content", "title"],
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      const existing = { ...builderMock.memoryRecord, content: "旧正文", title: "旧标题" };
+      memoryServiceStub.getMemory.mockReturnValue(existing);
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      qualityFilterMock.mockResolvedValue({
+        verdict: "review",
+        score: 5,
+        kind: "fact",
+        reason: "更新质量存疑",
+      });
+
+      auditorProcessMock.mockResolvedValue({
+        status: "done",
+        resolution: {
+          action: "auto_merge",
+          merged: { content: "借更新洗入的内容", title: "洗入标题" },
+          conflicts: [],
+        },
+      });
+
+      await orchestrator.processQueue();
+
+      // 禁止 auto_merge 写回
+      expect(memoryServiceStub.updateMemory).not.toHaveBeenCalled();
+      // candidate 与 existing 的差异字段逐条转人工冲突
+      const auditService = (orchestrator as any).auditService;
+      expect(auditService.createConflict).toHaveBeenCalledTimes(2);
+      expect(auditService.createConflict).toHaveBeenCalledWith(
+        event.memoryId,
+        "evt-1",
+        "content",
+        "旧正文",
+        "test content",
+      );
+      expect(auditService.createConflict).toHaveBeenCalledWith(
+        event.memoryId,
+        "evt-1",
+        "title",
+        "旧标题",
+        "test title",
+      );
+      // 审计阶段已结束，待裁决状态由 conflict_records 承载
+      expect(event.status).toBe("done");
+    });
+
+    it("更新路径向量召回不可用 → 跳过语义去重继续审计，auto_merge 正常写回", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventType: "ingest",
+        changedFields: ["content"],
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(builderMock.memoryRecord);
+      memoryServiceStub.listMemories.mockReturnValue([]);
+
+      const modelAdapter = await import("../lib/ai/model-adapter");
+      vi.mocked(modelAdapter.ModelAdapter.generateEmbedding).mockRejectedValueOnce(
+        new Error("embedding down"),
+      );
+
+      auditorProcessMock.mockResolvedValue({
+        status: "done",
+        resolution: { action: "auto_merge", merged: { content: "merged content" }, conflicts: [] },
+      });
+
+      await orchestrator.processQueue();
+
+      expect(memoryServiceStub.updateMemory).toHaveBeenCalledWith(
+        builderMock.pendingEvent.memoryId,
+        expect.objectContaining({ content: "merged content" }),
+      );
+      expect(event.status).toBe("done");
+    });
+
     it("Auditor 返回 null（dequeue 失败）→ status=failed", async () => {
       const event = {
         ...builderMock.pendingEvent,
@@ -681,7 +909,6 @@ describe("Orchestrator", () => {
       };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null); // 新建
-      qualityFilterMock.mockResolvedValue({ ok: true });
       memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
       memoryServiceStub.listMemories.mockReturnValue([]);
 
@@ -737,6 +964,58 @@ describe("Orchestrator", () => {
         expect.objectContaining({
           message: expect.stringContaining("evt-bad-json"),
         }),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // resolveReviewEvent — 人工裁决
+  // ═══════════════════════════════════════════════════════════════
+
+  describe("resolveReviewEvent", () => {
+    const makeReviewEvent = () => ({
+      ...builderMock.pendingEvent,
+      status: "review" as const,
+      retryCount: 0,
+    });
+
+    it("accept → 跳过闸门直接落盘 → status=done", async () => {
+      const event = makeReviewEvent();
+      memoryServiceStub.getEvent.mockReturnValue(event);
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+
+      const result = await orchestrator.resolveReviewEvent("evt-1", "accept");
+
+      expect(qualityFilterMock).not.toHaveBeenCalled();
+      expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalled();
+      expect(result.status).toBe("done");
+    });
+
+    it("reject → status=rejected → 归档失败记录", async () => {
+      const event = makeReviewEvent();
+      memoryServiceStub.getEvent.mockReturnValue(event);
+
+      const result = await orchestrator.resolveReviewEvent("evt-1", "reject");
+
+      expect(result.status).toBe("rejected");
+      expect(memoryServiceStub.createMemoryRecord).not.toHaveBeenCalled();
+      const fileManager = await import("../lib/storage/file-manager");
+      expect(fileManager.createFailureRecord).toHaveBeenCalledWith(
+        event.memoryId,
+        "review-decision",
+        expect.any(Error),
+      );
+    });
+
+    it("事件不在 review 状态 → 抛错", async () => {
+      memoryServiceStub.getEvent.mockReturnValue({
+        ...builderMock.pendingEvent,
+        status: "pending" as const,
+      });
+
+      await expect(orchestrator.resolveReviewEvent("evt-1", "accept")).rejects.toThrow(
+        "事件不在待审状态",
       );
     });
   });

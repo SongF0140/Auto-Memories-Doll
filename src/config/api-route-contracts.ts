@@ -15,6 +15,11 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
     responseSchema: "conflictResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "NOT_FOUND", "AUDIT_CONFLICT", "INTERNAL_ERROR"],
   },
+  "src/app/api/audit/review-events/route.ts": {
+    requestSchema: "reviewDecisionSchema",
+    responseSchema: "reviewEventsResponseSchema",
+    errorCodes: ["VALIDATION_FAILED", "NOT_FOUND", "INTERNAL_ERROR"],
+  },
   "src/app/api/chat/route.ts": {
     requestSchema: "chatRequestSchema",
     responseSchema: "chatResponseSchema",
@@ -88,6 +93,10 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
     requestSchema: "toolSourceUpdateSchema",
     responseSchema: "toolSourceResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "NOT_FOUND", "INTERNAL_ERROR"],
+  },
+  "src/app/api/config/tool-sources/status/route.ts": {
+    responseSchema: "toolSourceStatusResponseSchema",
+    errorCodes: ["INTERNAL_ERROR"],
   },
   "src/app/api/health/route.ts": {
     responseSchema: "healthResponseSchema",

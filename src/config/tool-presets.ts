@@ -28,4 +28,10 @@ export const TOOL_PRESETS: Record<
     path: "~/.cursor/conversations",
     filePattern: "*.json",
   },
+  trae: {
+    name: "Trae 会话记忆",
+    toolType: "trae",
+    path: "~/.trae-cn/memory",
+    filePattern: "**/*.jsonl",
+  },
 };

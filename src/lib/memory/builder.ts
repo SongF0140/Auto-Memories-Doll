@@ -1,4 +1,4 @@
-import { MemoryRecord, PendingEvent } from "../../types/memory";
+import { MemoryRecord, MemoryKind, MemoryEvidence, PendingEvent } from "../../types/memory";
 import { generateId } from "../utils/id";
 import { getCurrentTime } from "../utils/date";
 import { MEMORY_VERSION } from "../../config/constants";
@@ -14,6 +14,8 @@ export const buildMemoryRecord = (
   id?: string,
   /** 中文版本字段（可选） */
   zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
+  /** 类型与证据元数据（可选） */
+  meta?: { kind?: MemoryKind; evidence?: MemoryEvidence },
 ): MemoryRecord => {
   const now = getCurrentTime();
   return {
@@ -30,6 +32,8 @@ export const buildMemoryRecord = (
     summaryZh: zhFields?.summaryZh,
     tagsZh: zhFields?.tagsZh,
     topicZh: zhFields?.topicZh,
+    kind: meta?.kind,
+    evidence: meta?.evidence,
     createdAt: now,
     updatedAt: now,
     accessedAt: now,

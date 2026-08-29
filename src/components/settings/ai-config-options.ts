@@ -21,7 +21,7 @@ const legacyProviders: ProviderOption[] = [
   { value: "openai", label: "OpenAI" },
   { value: "openai-compatible", label: "OpenAI Compatible" },
   { value: "anthropic", label: "Anthropic" },
-  { value: "custom", label: "Custom" },
+  { value: "custom", label: "自定义/OpenAI模式" },
 ];
 
 function titleCaseProvider(id: string): string {

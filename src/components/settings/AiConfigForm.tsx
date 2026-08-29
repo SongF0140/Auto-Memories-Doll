@@ -322,6 +322,36 @@ export default function AiConfigForm({
             />
           </div>
         </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">
+              Embedding API Key（可选）
+            </label>
+            <input
+              type="password"
+              value={form.embedding.apiKey ?? ""}
+              onChange={(e) => updateEmbedding("apiKey", e.target.value)}
+              placeholder="留空则使用上方主 API Key"
+              className="input text-sm w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">
+              Embedding Base URL（可选）
+            </label>
+            <input
+              type="url"
+              value={form.embedding.baseURL ?? ""}
+              onChange={(e) => updateEmbedding("baseURL", e.target.value)}
+              placeholder="留空则使用上方 Base URL，如 https://open.bigmodel.cn/api/paas/v4"
+              className="input text-sm w-full"
+            />
+          </div>
+          <p className="md:col-span-2 text-xs text-text-secondary">
+            例子：主配置选 Moonshot（Kimi）聊天，Embedding 填智谱 API Key + Base URL，
+            模型名填 embedding-3，即可用不同提供商的 key 分别驱动对话与向量。
+          </p>
+        </div>
       </div>
 
       {/* 连接测试区域 */}

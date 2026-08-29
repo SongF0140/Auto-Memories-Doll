@@ -275,6 +275,8 @@ export class ConfigService {
         dimensions: 1536,
         maxConcurrency: 8,
         queueTimeoutMs: 60000,
+        apiKey: "",
+        baseURL: "",
       },
     };
   }

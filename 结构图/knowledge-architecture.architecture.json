@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Auto-Memories-Doll 知识库更新架构",
+    "locale": "zh-CN",
+    "output": "D:/agent_road/Auto-Memeries-Doll/knowledge-architecture.architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [1380, 720],
+    "views": [
+      {
+        "id": "layer-boundaries",
+        "label": "入口到落盘主链",
+        "focus": ["user", "ui", "source", "api", "chat", "ingest", "memory", "queue", "audit", "storage"],
+        "note": "沿横向主链查看输入、候选记忆、审计写回和主存储之间的交接。"
+      },
+      {
+        "id": "quality-control",
+        "label": "三层审计闭环",
+        "focus": ["queue", "quality", "review", "audit", "storage"],
+        "note": "查看候选记忆如何经过质量闸门、人工复核和审计中枢后才能落盘。"
+      },
+      {
+        "id": "retrieval-loop",
+        "label": "检索与索引闭环",
+        "focus": ["chat", "model", "retrieval", "audit", "derived"],
+        "note": "查看模型适配、向量与图谱检索，以及写回后的派生索引同步关系。"
+      }
+    ]
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "用户", "sublabel": "Web / 本地工作台", "tag": "交互入口", "pos": [40, 300], "size": [120, 60] },
+    { "id": "ui", "type": "frontend", "label": "Next.js UI", "sublabel": "chat / memory / audit", "pos": [190, 300], "size": [145, 60] },
+    { "id": "source", "type": "external", "label": "多源采集", "sublabel": "file / tool / API", "tag": "外部输入", "pos": [40, 500], "size": [120, 60] },
+    { "id": "api", "type": "backend", "label": "API Routes", "sublabel": "chat / ingest / listen", "pos": [370, 300], "size": [145, 60] },
+
+    { "id": "chat", "type": "backend", "label": "快轨 Agent 循环", "sublabel": "检索 / 提示 / 流式响应", "tag": "只产候选", "pos": [560, 220], "size": [165, 70] },
+    { "id": "model", "type": "cloud", "label": "ModelAdapter", "sublabel": "LLM / embedding / fallback", "tag": "模型边界", "pos": [560, 80], "size": [165, 70] },
+    { "id": "retrieval", "type": "backend", "label": "检索编排", "sublabel": "VectorRetriever + WikiGraph", "pos": [560, 500], "size": [165, 70] },
+
+    { "id": "ingest", "type": "backend", "label": "后台加工管线", "sublabel": "清洗 / 分类 / 去重 / 拆包", "pos": [760, 300], "size": [165, 70] },
+    { "id": "memory", "type": "backend", "label": "MemoryService", "sublabel": "稳定 ID / CRUD / 入队", "tag": "统一写入口", "pos": [950, 300], "size": [165, 70] },
+    { "id": "queue", "type": "messagebus", "label": "待审计队列", "sublabel": "pending_events", "tag": "按 memoryId 串行", "pos": [950, 500], "size": [165, 70] },
+
+    { "id": "quality", "type": "security", "label": "质量闸门", "sublabel": "accept / review / reject", "tag": "fail-closed", "pos": [950, 100], "size": [165, 70] },
+    { "id": "review", "type": "frontend", "label": "人工复核", "sublabel": "review 事件 / 冲突裁决", "tag": "accept / reject", "pos": [1170, 100], "size": [165, 70] },
+    { "id": "audit", "type": "backend", "label": "Orchestrator + Auditor", "sublabel": "差异 / 冲突 / 写回调度", "tag": "审计中枢", "pos": [1170, 300], "size": [165, 70] },
+
+    { "id": "storage", "type": "database", "label": "主存储真源", "sublabel": "Markdown LLMWiki + SQLite", "tag": "版本 / 事务 / 队列", "pos": [1170, 500], "size": [165, 70] },
+    { "id": "derived", "type": "backend", "label": "派生检索索引", "sublabel": "USearch HNSW / WikiGraph", "tag": "可重建加速层", "pos": [1170, 620], "size": [165, 70] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "入口层 + 1 快轨层", "wraps": ["user", "ui", "source", "api", "chat", "model", "retrieval"], "pad": 24 },
+    { "kind": "region", "label": "2 后台加工层 + 3 三层审计", "wraps": ["ingest", "memory", "queue", "quality", "review", "audit"], "pad": 24 },
+    { "kind": "region", "label": "主存储与派生索引", "wraps": ["storage", "derived"], "pad": 24 }
+  ],
+  "connections": [
+    { "id": "user-ui", "from": "user", "to": "ui", "label": "交互", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [175, 275] },
+    { "id": "ui-api", "from": "ui", "to": "api", "label": "HTTP / stream", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [350, 265] },
+    { "id": "source-api", "from": "source", "to": "api", "label": "file / tool events", "variant": "dashed", "fromSide": "right", "toSide": "left", "labelAt": [270, 465] },
+
+    { "id": "api-chat", "from": "api", "to": "chat", "label": "chat", "variant": "emphasis", "fromSide": "right", "toSide": "left", "labelAt": [545, 275] },
+    { "id": "chat-model", "from": "chat", "to": "model", "label": "LLM / embeddings", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelAt": [650, 170] },
+    { "id": "chat-retrieval", "from": "chat", "to": "retrieval", "label": "semantic recall", "fromSide": "bottom", "toSide": "top", "labelAt": [500, 465] },
+    { "id": "chat-ingest", "from": "chat", "to": "ingest", "label": "候选记忆", "variant": "dashed", "fromSide": "right", "toSide": "top", "via": [[745, 255], [745, 271], [842.5, 271]], "labelAt": [750, 240] },
+
+    { "id": "ingest-memory", "from": "ingest", "to": "memory", "label": "normalize", "fromSide": "right", "toSide": "left", "labelAt": [938, 270] },
+    { "id": "memory-queue", "from": "memory", "to": "queue", "label": "pending event", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [920, 415] },
+
+    { "id": "queue-audit", "from": "queue", "to": "audit", "label": "audit", "variant": "security", "fromSide": "right", "toSide": "bottom", "via": [[1150, 535], [1150, 390], [1252.5, 390]], "labelAt": [1138, 455] },
+    { "id": "audit-quality", "from": "audit", "to": "quality", "label": "quality rules", "variant": "security", "fromSide": "top", "toSide": "bottom", "via": [[1252.5, 250], [1032.5, 250]], "labelAt": [1135, 205] },
+    { "id": "quality-review", "from": "quality", "to": "review", "label": "needs review", "variant": "security", "fromSide": "right", "toSide": "left", "labelAt": [1140, 78] },
+    { "id": "review-audit", "from": "review", "to": "audit", "label": "decision", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [1355, 220] },
+
+    { "id": "audit-storage", "from": "audit", "to": "storage", "label": "approved write", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [1080, 400] },
+    { "id": "audit-derived", "from": "audit", "to": "derived", "label": "index refresh", "variant": "dashed", "fromSide": "right", "toSide": "top", "via": [[1360, 335], [1360, 600], [1252.5, 600]], "labelAt": [1100, 600] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "产品分析",
+      "items": [
+        "核心不是自动存笔记，而是把知识更新变成可追溯、可拒绝、可人工接管的受控系统。",
+        "快轨负责响应，后台加工负责结构化，审计层决定什么能成为长期知识。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "优点与对比",
+      "items": [
+        "Markdown 保持人类可读，SQLite 承担事务和队列，Vector / Graph 作为可重建派生层。",
+        "相比直接写文件或单一 workflow，系统具备稳定 ID、串行队列、质量闸门和人工裁决出口。"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "缺陷与改进",
+      "items": [
+        "Orchestrator 仍聚合质量、审计和派生同步；质量评分与证据覆盖还需要更强的可解释性。",
+        "继续拆分 AuditWorker / QualityGate / DerivedSync，补充 review SLA、索引健康度和大库压测指标。"
+      ]
+    }
+  ]
+}

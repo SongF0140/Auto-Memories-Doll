@@ -20,6 +20,10 @@ export type EmbeddingConfig = {
   maxConcurrency: number;
   /** 排队超时 (ms) */
   queueTimeoutMs: number;
+  /** Embedding 专属 API Key（可选，留空回落共享 apiKey，用于 chat 与 embedding 使用不同提供商） */
+  apiKey?: string;
+  /** Embedding 专属 Base URL（可选，留空回落共享 baseURL） */
+  baseURL?: string;
 };
 
 /**
@@ -83,10 +87,11 @@ export type StorageConfig = {
  * - codex:        ~/.codex/sessions/ 下的 jsonl 文件，每行一个事件 {type, payload}
  * - claude-code:  ~/.claude/projects/ 下的 jsonl 文件，每行一个消息 {role, message}
  * - cursor:       ~/.cursor/conversations/ 下的 json 文件，单个对话数组
+ * - trae:         ~/.trae-cn/memory/ 下的 jsonl 文件，每行一条结构化摘要 {intent, actions, outcome, learned}
  * - markdown:     任意 .md 文件，直接当作笔记内容
  * - text:         任意 .txt 文件，纯文本处理
  */
-export type ToolType = "codex" | "claude-code" | "cursor" | "markdown" | "text";
+export type ToolType = "codex" | "claude-code" | "cursor" | "trae" | "markdown" | "text";
 
 export type ToolWatchSource = {
   id: string;

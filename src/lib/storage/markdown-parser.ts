@@ -53,6 +53,13 @@ export function parseMemoryFromText(text: string): MemoryRecord | null {
     version: parseInt(frontmatter.version) || 1,
     source: frontmatter.source || "",
     sourceType: (frontmatter.sourceType as MemoryRecord["sourceType"]) || "manual",
+    kind: (frontmatter.kind as MemoryRecord["kind"]) || "fact",
+    evidence: frontmatter.evidenceText
+      ? {
+          text: frontmatter.evidenceText,
+          location: frontmatter.evidenceLocation || undefined,
+        }
+      : undefined,
     title,
     titleZh,
     content: body,

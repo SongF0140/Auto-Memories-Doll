@@ -21,7 +21,9 @@ describe("configuration API request validation", () => {
     const response = await getAiConfig();
     const body = await response.json();
 
-    expect(body.providerCatalog.providers.openai.baseURL).toBe("https://api.openai.com/v1");
+    // providers.json 已置空（不预设用户环境不存在的模型），目录必须是对象结构且可自由扩展
+    expect(body.providerCatalog).toHaveProperty("providers");
+    expect(body.providerCatalog.providers).toEqual({});
   });
 
   it("accepts provider IDs declared in providers.json without code changes", async () => {

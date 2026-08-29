@@ -115,6 +115,14 @@ export async function POST(request: NextRequest) {
         tagsZh: knowledgeCard.tagsZh,
         topicZh: knowledgeCard.topicZh,
       },
+      undefined,
+      // 监听入口属于采集类：携带来源证据（原文 + 可选 URL），供质量闸门做证据校验
+      {
+        evidence: {
+          text: content.slice(0, 500),
+          location: data.metadata?.url,
+        },
+      },
     );
     const filePath = getNotePath(topic, memoryId);
 

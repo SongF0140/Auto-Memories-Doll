@@ -42,15 +42,19 @@ export function createLanguageModel(modelType?: ModelType): LanguageModel {
 export function createEmbeddingModel() {
   const config = getConfig();
 
-  if (config.provider === "anthropic") {
+  const embeddingApiKey = config.embedding.apiKey || config.apiKey;
+  const embeddingBaseURL = config.embedding.baseURL || config.baseURL;
+
+  // Anthropic 无 embedding API；但若 embedding 配了专属端点则放行走该端点
+  if (config.provider === "anthropic" && !config.embedding.baseURL) {
     throw new AiServiceError(
       "Anthropic provider does not support embeddings. Please use an OpenAI-compatible embedding model.",
     );
   }
 
   const openai = createOpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
+    apiKey: embeddingApiKey,
+    baseURL: embeddingBaseURL,
   });
   return openai.embedding(config.embedding.model);
 }

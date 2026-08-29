@@ -147,10 +147,10 @@ src/
 ├─ types/
 ├─ config/
 ├─ styles/
+├─ instrumentation.ts           # Next.js 插桩入口，启动后台监听器（使用 src 目录时必须位于 src/ 下）
 public/
 │  └─ bridge/capture.js         # 浏览器桥接脚本（捕获 AI 聊天页面）
 docs/
-instrumentation.ts              # Next.js 插桩入口，启动后台监听器
 next.config.js                  # Next.js 配置，启用 instrumentationHook
 ```
 
@@ -286,7 +286,7 @@ Agent 循环不知道 Next.js 路由细节、React 组件、会话文件落盘�
 
 **启动方式**：
 - `next.config.js` 启用 `experimental.instrumentationHook`
-- `instrumentation.ts` 在 `NEXT_RUNTIME === "nodejs"` 时调用 `startFileWatcher()`
+- `src/instrumentation.ts` 在 `NEXT_RUNTIME === "nodejs"` 时调用 `startFileWatcher()`；项目使用 `src/` 目录时，Next.js 仅识别 `src/instrumentation.ts`，放在项目根目录不会被加载
 - 服务端启动时自动运行，无需手动触发
 
 **注意事项**：
@@ -836,6 +836,10 @@ export type ConflictRecord = {
 | 检索库与图谱路由语义 | `/memory` 应承担检索库职责，图谱应有唯一入口 | 已修复：`/memory` 提供列表、搜索、话题筛选、分页和详情/话题/图谱链接；`/memory/map` 统一由 `KnowledgeMap` + `MemoryMapViewport` 渲染，删除重复路由实现 | ~~P0~~ |
 | `/api/listen` 错误响应契约 | 错误应使用 `{ success:false, error:{ code, message } }` | 已修复：非法 JSON、Zod 校验、大小超限和内部异常统一使用 `apiError`；内部异常客户端消息稳定且详细信息仅写 logger；桥接脚本兼容对象错误 | ~~P1~~ |
 | 工程门禁与真实浏览器流程 | CI 仅覆盖 typecheck/lint/test/eval，缺少格式、覆盖率、构建和真实 E2E | 已修复：严格 Lint、Prettier、覆盖率阈值、production build、Playwright Chromium E2E 和隔离测试数据接入 CI；E2E 覆盖首页→聊天、检索库→详情、检索库→图谱、设置→工具监听和 listen 错误契约 | ~~P1~~ |
+| 写入质量闸门 fail-open | 第 4.8 节仅要求候选入队审计，无质量判定语义；旧实现为单一 LLM PASS/FAIL 且降级/异常/API 失败时直接放行 | 已修复：`QualityFilterService` 重写为三态判定（`accept ≥7 分` / `reject <4 分` / `review 4-6 分`），闸门不可用转 `review` 人工裁决而非放行（fail-closed）；`PendingEvent.status` 新增 `rejected`（终拒不重试）与 `review`（待人工，不进重试循环）；质量 FAIL 不再进重试循环 | ~~P0~~ |
+| 更新路径绕过质量闸门 | 旧实现仅新建记忆过质量闸门，update 事件 content 变更直接进审计 | 已修复：`Orchestrator` 更新分支在 `changedFields` 含 `content` 时同样执行向量去重 + 质量闸门（reject → rejected；review → warn 后继续审计 diff/冲突兜底） | ~~P1~~ |
+| 多入口写入无语义去重 | 旧实现仅 ingest 入口有 Jaccard 快筛，chat/listen/tool 等入口无语义去重 | 已修复：`Orchestrator` 统一入口向量语义去重（`VectorIndex.search` cosine ≥ 0.95 判重 → rejected）；一次 embedding 召回 top-K 相似记忆同时服务去重与闸门新颖性上下文（≥0.6 才注入 prompt，省 token） | ~~P1~~ |
+| review 无人工裁决出口 | 无 | 已修复：`Orchestrator.resolveReviewEvent(eventId, action)`（accept 跳闸门直接落盘，避免重新入队死循环；reject 终拒归档）+ `GET/POST /api/audit/review-events` 路由 + API 契约登记 | ~~P2~~ |
 
 ### 11.2 渐进式路线图
 
@@ -900,6 +904,9 @@ Phase 5 — 检索与质量收口
   [x] Playwright Chromium 真实 E2E（隔离 memory root/database）
   [x] usearch 字面量加载，生产构建无 Critical dependency warning
   [x] usearch 移至 optionalDependencies（CI 走 JS 精确后端）
+  [x] 写入质量闸门三态化（QualityFilterService：accept/reject/review 分级评分，fail-closed，相似记忆注入新颖性上下文）
+  [x] 全入口向量语义去重（cosine ≥ 0.95 判重，新建/更新路径统一，一次召回双重复用）
+  [x] review 人工裁决出口（resolveReviewEvent + GET/POST /api/audit/review-events）
 ```
 
 ## 12. 本轮补充记录
@@ -929,4 +936,36 @@ Phase 5 — 检索与质量收口
 - 已补齐用户入口：首页快捷入口“开始对话”指向 `/chat`，设置侧栏新增“工具监听”指向 `/settings/tools`
 - 已统一 `/api/listen` 错误契约，并让 `public/bridge/capture.js` 读取对象错误中的 `message`
 - 已加入 Vitest 临时 memory root、覆盖率阈值和 Playwright 隔离 seed；真实浏览器覆盖 5 条关键流程
-- 当前测试总量：44 个测试文件，413 passed / 0 skipped（共 413 用例）
+- 已完成写入质量闸门三态化：`QualityFilterService` 输出 `{verdict: accept|reject|review, score, reason}`，LLM 0-10 分级评分（≥7 入库 / 4-6 人工 / <4 拒绝），降级/解析失败重试后/API 异常统一转 `review`（fail-closed）；prompt 注入库内相似记忆（top-K，≥0.6）供新颖性比对
+- 已完成全入口向量语义去重：`Orchestrator.recallSimilarMemories` 一次 embedding + `VectorIndex.search`，cosine ≥ 0.95 → `rejected`；`recallSimilarMemories` + `commitNewMemory` 抽取复用，更新路径 content 变更同样过闸门
+- 已完成人工裁决出口：`Orchestrator.resolveReviewEvent`（accept 跳闸门落盘防死循环 / reject 终拒）+ `/api/audit/review-events` 路由；`MemoryService` 新增 `getEvent` / `getEventsByStatus`
+- `PendingEvent.status` 扩展 `rejected` / `review`：终拒不重试，review 不被自动消费；`retryFailedEvents` 仅重置 `failed`
+- 已完成更新并入框架级融合：`MemoryCorrectionService` 改写 prompt 要求把新信息纳入记忆的知识框架（按主题逻辑归位重组、重复表述合并成更完整说法、读起来像一开始就是这么写的，禁止末尾追加孤立补充段、不遗漏原有信息、同步更新 summary）；`update_memory` 工具描述同步引导模型框架级融合 content
+- 已完成融合硬校验（非提示词的程序化保障）：`isAppendLikeRewrite` 结构判定——改写结果归一化空白后若以原文为严格前缀（且确有改动）即判为"末尾追加式"，拒绝并注入 `APPEND_REJECT_FEEDBACK` 重试一次，仍追加则改写失败不入队；改错字等开头重组场景不误判
+- 新增/更新测试：`quality-filter-service.test.ts`（10 用例三态协议）、`orchestrator.test.ts`（reject/review/去重/提示注入/resolveReviewEvent）、`memory-correction.test.ts`（框架级融合 prompt 契约 + 追加式硬校验）、`api-route-contracts.test.ts` 登记 review-events 路由
+- 当前测试总量：44 个测试文件，429 passed / 0 skipped（共 429 用例）
+- 已修复知识地图三症状：①清理库内 5 条写入时编码丢失（中文全 `?`）的测试脏数据（memories/vector_records 归零）；②topic 页对已解码路由参数二次 `decodeURIComponent` 遇裸 `%` 抛 URIError 致知识点打不开，已去掉二次解码并新增 loadError + 重试按钮（不再吞错误）；③悬停乱码为库内坏数据非渲染问题，另修复 `KnowledgeMap` label 首字符大写与超长截断的代理对安全问题（`Array.from` 按码点处理）
+- 已按用户期望重构 `/memory/topic/[topic]` 布局为"左目录右阅读"：左栏"← 退出到上一级"（/memory/map）+ 文章目录（序号徽章、单篇删除）+ 底部统计；右侧单篇阅读视图（标题/分类/标签/正文、删除本文、上一篇/下一篇切换）
+- 已补齐人工裁决 UI：AuditPanel 新增「人工裁决」tab，消费 `/api/audit/review-events`（GET 列表 + POST accept/reject），展示候选摘要/标签/重试次数，review 事件不再只能 curl 裁决
+- 已补齐监听状态可见性：新增 `GET /api/config/tool-sources/status`（fileWatcher 运行状态 + toolWatcher 配置/活跃计数 + pending/review/failed 事件计数），`file-watcher.ts` 新增 `getFileWatcherStatus` 导出；`/settings/tools` 顶部新增运行状态面板，review>0 时给出审计页跳转链接
+- 已新增 Trae 记忆目录预设（`TOOL_PRESETS.trae`：markdown 类型、`~/.trae-cn/memory`、`**/*.md`），设置页可一键快速添加
+- 已支持 Embedding 独立凭证：`EmbeddingConfig` 新增可选 `apiKey`/`baseURL`（留空回落共享顶层配置），回落逻辑落地于 `openai-provider.generateEmbedding`、`provider.createEmbeddingModel`（anthropic 特判放宽为"有 embedding 专属 baseURL 则放行"）、`model-adapter.generateEmbedding` 空 key 判断与健康检查；`/api/config/ai` GET 对 embedding.apiKey 脱敏、POST 用 `resolveMaskedKey` 回填；`aiConfigSchema` 增加对应可选字段；设置页 Embedding 区块新增"Embedding API Key / Base URL（可选）"输入
+- `providers.json` 新增 `zhipu`（`https://open.bigmodel.cn/api/paas/v4`：glm-4.5 / glm-4.5-flash / embedding-3 2048 维）与 `moonshot`（`https://api.moonshot.cn/v1`：kimi-k2-0905-preview / moonshot-v1-8k，无 embedding 模型）条目，设置页提供商下拉自动出现
+- 已完成派生存储解耦（SQLite 真源原则落地）：`Orchestrator.syncDerivedStores` 统一承载 Markdown / Agent.md / 索引同步，每个派生任务独立 catch（记日志 + `createFailureRecord` 归档，不向上抛）；新建路径与 auto_merge 路径中 `classifyMemory` 失败同样不阻塞事件完成。派生失败不再把已入库事件整条打成 failed（避免 retryFailedEvents 错误改走更新+审计路径）；冲突解决路径 `syncResolvedMemory` 刻意保持同步感知不动；`commitNewMemory`/auto_merge 去掉 `getMemory()!` 非空断言（读取为空时用 candidate 兜底或跳过派生同步并记日志）。`orchestrator.test.ts` 新增 2 用例（写 Markdown 抛错 → 事件仍 done + 归档失败记录；classifyMemory 抛错 → 事件仍 done），全量 431 passed
+- 已完成质量闭环四项改造（写入前流程控制 → 内容可信度分层）：
+  - **embedding 失败 fail-closed**：`recallSimilarMemories` 返回 `SimilarHit[] | null`（降级/空 content/异常 → null）；新建路径 null 时事件转 review + `vector-recall` 失败归档（不再静默放行绕过语义去重）；更新路径 null 时记 warn 跳过语义去重与相似提示，继续走审计兜底（diff/冲突检测）
+  - **更新审核收紧**：更新内容过闸门 verdict=review 时置 `updateQualityReview` 标志，Auditor 即使返回 auto_merge 也不写回——按 changedFields（过滤 version/id/createdAt/updatedAt）逐字段对比 candidate vs existing 生成冲突记录（人工裁决"这次更新想改什么"），事件转 done，由 `conflict_records.status='pending'` 承载待裁决
+  - **kind 记忆类型**：`MemoryRecord` 新增 `kind: fact | inference | hypothesis | insight`（默认 fact），质量闸门 LLM 顺带判定输出；非 fact 一律强制转 review 进待验证区，accept 后回填 `candidate.kind`；frontmatter 平铺 `kind:` 键序列化/解析（markdown-formatter / markdown-parser 同步支持）
+  - **证据校验入口分层**：`MemoryRecord` 新增 `evidence?: { text, location? }`；`EVIDENCE_REQUIRED_SOURCE_TYPES = ["ingest", "listen"]` 白名单内入口的 fact 缺 evidence 强制转 review（reason 提示补证据），manual/chat 等不强制避免 review 积压；tool-dir-watcher / listen 路由 / file-watcher 回退路径自动填充证据（内容片段 + 来源位置），frontmatter 平铺 `evidenceText:` / `evidenceLocation:` 键
+- 新增/更新测试：`orchestrator.test.ts`（fail-closed 转人工、更新禁 auto_merge 逐字段冲突、更新路径降级跳过去重正常写回）、`quality-filter-service.test.ts`（17 用例：kind 四类强制 review、kind 非法值兜底 fact、白名单内无证据 review / 白名单外放行、证据注入 prompt 断言）、`listen-api.integration.test.ts`（断言对齐 stageCreateMemory 10 参签名）
+- 当前测试总量：44 个测试文件，441 passed / 0 skipped（共 441 用例）；tsc src 零错误
+- 已修复 `/settings/ai` 假页面问题：原页面为旧演示实现（仅存 localStorage、保存/连接测试均为模拟、Embedding 区块缺独立 Key/URL 字段），与真实后端完全脱节——此前"Embedding 独立凭证"功能只存在于未被任何路由引用的 `SettingsPanel`（死代码）。现改为与其他设置子页（mcp/tools/storage）一致的真实现：加载 `GET /api/config/ai`（脱敏 key + providerCatalog）→ 渲染 `AiConfigForm`（提供商目录下拉、模型分层、Embedding 独立 API Key/Base URL、真实连接测试 `/api/config/ai/test`）→ `POST /api/config/ai` 保存（服务端 resolveMaskedKey 回填脱敏 key）。适用于"主配置走 GLM Coding Plan 中转（无 embedding 模型）+ Embedding 填智谱正式 Key/BaseURL + embedding-3"的组合场景
+- 已修复 `loadProviderCatalog` 打包路径 bug：`DEFAULT_PATH` 原用 `path.join(__dirname, "providers.json")`，Next.js 打包后 `__dirname` 指向 `.next/server/app/api/config/ai/` 导致 `GET /api/config/ai` ENOENT 500（此前未暴露是因为 SettingsPanel 从未被真实挂载、单测不经过打包）；改为 `path.join(process.cwd(), "src", "config", "providers.json")`（dev/start 均以项目根为 cwd），线上接口实测 200 且 providerCatalog 完整返回
+- 已按用户要求清空 `providers.json` 预设目录（原 openai/custom-proxy/zhipu/moonshot 为示例数据，用户实际使用自定义中转站，预设反而干扰且选中会覆盖手填 baseURL）：`"providers": {}` 后下拉仅剩 OpenAI/OpenAI Compatible/Anthropic/Custom 四个通用选项，`buildProviderSelectionPatch` 对无目录条目的提供商只改 provider 字段不覆盖 baseURL/模型，所有字段纯手填；模型名输入框本就是自由文本，可填中转站任意模型。注意 providers.json 是运行时 fs 读取 + 模块级缓存，改文件后需重启 dev server 才生效
+- 已完成工具监听自动采集闭环（用户实际环境验证）：
+  - **修复 `~` 路径静默失效**：chokidar/fs 在 Windows 不识别 `~` 前缀且 watch 不存在路径不抛错，preset 配置的监听源全部无效；`startSingleSource` 现用 `homedir()` 展开后再 watch
+  - **新增 trae 解析类型**：`ToolType` 扩展 `"trae"`，`parseTrae` 解析 `~/.trae-cn/memory/projects/` 下 session_memory_*.jsonl（每行结构化摘要 `{intent, actions[], outcome, learned[], message_summary_time}`），渲染为 LLM 友好中文 Markdown（意图/动作/结果/经验/时间分区），title 取首条 intent 前 40 字；validation z.enum、tool-presets（`~/.trae-cn/memory` + `**/*.jsonl`）、ToolSourceList 标签同步
+  - **实测采集**：本机三源全部生效——Codex CLI（`~/.codex/sessions`，102 条）、Trae 会话记忆（jsonl 结构化摘要，54 条）、Trae 记忆笔记（topics.md 等记忆文档，markdown 类型，42 条），pending_events 共 241 条待审计流水线消费
+  - 已知行为：dev server 重启后 processedFiles 内存去重清空，历史文件重新入队，靠 Orchestrator 向量语义去重（cosine ≥ 0.95）兜底
+- 新增测试：`session-parser.test.ts`（parseTrae 中文 Markdown 渲染 + 无 intent 回退文件名）；修正 `config-api-validation.test.ts` providerCatalog 断言（providers.json 已置空，改断言目录结构契约）
+- 当前测试总量：45 个测试文件，443 passed / 0 skipped（共 443 用例）；tsc src 零错误

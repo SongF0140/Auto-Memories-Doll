@@ -122,6 +122,13 @@ describe("POST /api/listen", () => {
         tagsZh: undefined,
         topicZh: undefined,
       },
+      undefined,
+      {
+        evidence: {
+          text: "监听正文",
+          location: undefined,
+        },
+      },
     );
     expect(body.memoryId).toBe("stable-listen-id");
     expect(body.filePath).toBe("/memory-root/notes/ai-coding/stable-listen-id.md");

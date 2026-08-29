@@ -23,9 +23,9 @@ export async function updateAgentMarkdown(topic: string, memories: MemoryRecord[
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const lines: string[] = [
-    `# ${topic} 话题要点`,
+    `# ${topicMemories[0]?.topicZh || topic} 话题要点`,
     "",
-    `> 本文件由系统自动生成，汇总了 **${topic}** 话题下的短时记忆要点。`,
+    `> 本文件由系统自动生成，汇总了 **${topicMemories[0]?.topicZh || topic}** 话题下的短时记忆要点。`,
     "",
     "## 记忆列表",
     "",
@@ -35,11 +35,12 @@ export async function updateAgentMarkdown(topic: string, memories: MemoryRecord[
     lines.push("_暂无记忆_", "");
   } else {
     topicMemories.forEach((m) => {
-      lines.push(`### [[${m.id}]] ${m.title}`);
+      lines.push(`### [[${m.id}]] ${m.titleZh || m.title}`);
       lines.push("");
-      lines.push(m.summary || "_无摘要_");
+      lines.push(m.summaryZh || m.summary || "_无摘要_");
       lines.push("");
-      lines.push(`- 标签: ${m.tags.length > 0 ? m.tags.join(", ") : "_无_"}`);
+      const tags = m.tagsZh && m.tagsZh.length > 0 ? m.tagsZh : m.tags;
+      lines.push(`- 标签: ${tags.length > 0 ? tags.join(", ") : "_无_"}`);
       lines.push(`- 更新: ${m.updatedAt}`);
       lines.push(`- 热度: ${m.heatScore.toFixed(2)}`);
       lines.push("");

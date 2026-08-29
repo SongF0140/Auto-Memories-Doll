@@ -1,4 +1,4 @@
-import { MemoryRecord, PendingEvent } from "../../types/memory";
+import { MemoryRecord, MemoryKind, MemoryEvidence, PendingEvent } from "../../types/memory";
 import { buildMemoryRecord, buildPendingEvent, updateMemoryRecord } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
 import { MemoryClassifier } from "../../features/memory/classifier";
@@ -56,7 +56,7 @@ export class MemoryService {
     `);
 
     // 迁移：旧数据库可能缺少 topic / zh 列
-    const migrationColumns = ["topic", "titleZh", "summaryZh", "tagsZh", "topicZh"];
+    const migrationColumns = ["topic", "titleZh", "summaryZh", "tagsZh", "topicZh", "kind", "evidence"];
     for (const col of migrationColumns) {
       try {
         this.db.exec(`ALTER TABLE memories ADD COLUMN ${col} TEXT`);
@@ -146,16 +146,18 @@ export class MemoryService {
 
       const stmt = this.db.prepare(`
       INSERT INTO memories (
-        id, version, source, sourceType, title, titleZh, content, summary, summaryZh,
+        id, version, source, sourceType, kind, evidence, title, titleZh, content, summary, summaryZh,
         tags, tagsZh, topic, topicZh,
         createdAt, updatedAt, accessedAt, accessCount, heatScore, graphLinks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
       stmt.run(
         memory.id,
         memory.version,
         memory.source,
         memory.sourceType,
+        memory.kind || "fact",
+        memory.evidence ? JSON.stringify(memory.evidence) : null,
         memory.title,
         memory.titleZh || null,
         memory.content,
@@ -201,6 +203,8 @@ export class MemoryService {
     topic: string = "uncategorized",
     zhFields?: { titleZh?: string; summaryZh?: string; tagsZh?: string[]; topicZh?: string },
     memoryId?: string,
+    /** 类型与证据元数据（可选）：监听入口应传 evidence，供闸门做证据校验 */
+    meta?: { kind?: MemoryKind; evidence?: MemoryEvidence },
   ): string {
     const memory = buildMemoryRecord(
       source,
@@ -212,6 +216,7 @@ export class MemoryService {
       topic,
       memoryId,
       zhFields,
+      meta,
     );
 
     return this.stageCreateMemoryRecord(memory);
@@ -313,6 +318,10 @@ export class MemoryService {
       accessCount: row.accessCount,
       heatScore: row.heatScore,
       vectorId: row.vectorId,
+      kind: (row.kind as MemoryRecord["kind"]) || "fact",
+      evidence: row.evidence
+        ? safeJsonParse(row.evidence, undefined, `memory ${row.id} evidence`)
+        : undefined,
       graphLinks: safeJsonParse(row.graphLinks, [] as string[], `memory ${row.id} graphLinks`),
     };
   }
@@ -416,7 +425,8 @@ export class MemoryService {
 
     const stmt = this.db.prepare(`
       UPDATE memories SET
-        version = ?, source = ?, sourceType = ?, title = ?, titleZh = ?, content = ?,
+        version = ?, source = ?, sourceType = ?, kind = ?, evidence = ?,
+        title = ?, titleZh = ?, content = ?,
         summary = ?, summaryZh = ?, tags = ?, tagsZh = ?, topic = ?, topicZh = ?,
         updatedAt = ?, accessedAt = ?, accessCount = ?,
         heatScore = ?, vectorId = ?, graphLinks = ?
@@ -426,6 +436,8 @@ export class MemoryService {
       updated.version,
       updated.source,
       updated.sourceType,
+      updated.kind || "fact",
+      updated.evidence ? JSON.stringify(updated.evidence) : null,
       updated.title,
       updated.titleZh || null,
       updated.content,
@@ -539,6 +551,55 @@ export class MemoryService {
       }`,
     );
     const rows = limit && limit > 0 ? (stmt.all(limit) as any[]) : (stmt.all() as any[]);
+
+    return rows.map((row) => ({
+      eventId: row.eventId,
+      memoryId: row.memoryId,
+      sourceType: row.sourceType as PendingEvent["sourceType"],
+      eventType: (row.eventType || undefined) as PendingEvent["eventType"],
+      candidate: row.candidate,
+      changedFields: safeJsonParse(
+        row.changedFields,
+        [] as string[],
+        `event ${row.eventId} changedFields`,
+      ),
+      createdAt: row.createdAt,
+      status: row.status as PendingEvent["status"],
+      retryCount: row.retryCount,
+    }));
+  }
+
+  /** 按 eventId 查询单个事件（任意状态） */
+  getEvent(eventId: string): PendingEvent | null {
+    const stmt = this.db.prepare("SELECT * FROM pending_events WHERE eventId = ?");
+    const row = stmt.get(eventId) as any;
+    if (!row) return null;
+
+    return {
+      eventId: row.eventId,
+      memoryId: row.memoryId,
+      sourceType: row.sourceType as PendingEvent["sourceType"],
+      eventType: (row.eventType || undefined) as PendingEvent["eventType"],
+      candidate: row.candidate,
+      changedFields: safeJsonParse(
+        row.changedFields,
+        [] as string[],
+        `event ${row.eventId} changedFields`,
+      ),
+      createdAt: row.createdAt,
+      status: row.status as PendingEvent["status"],
+      retryCount: row.retryCount,
+    };
+  }
+
+  /** 按状态查询事件列表（用于 review 待审列表等） */
+  getEventsByStatus(status: PendingEvent["status"], limit?: number): PendingEvent[] {
+    const stmt = this.db.prepare(
+      `SELECT * FROM pending_events WHERE status = ? ORDER BY createdAt ASC${
+        limit && limit > 0 ? " LIMIT ?" : ""
+      }`,
+    );
+    const rows = limit && limit > 0 ? (stmt.all(status, limit) as any[]) : (stmt.all(status) as any[]);
 
     return rows.map((row) => ({
       eventId: row.eventId,

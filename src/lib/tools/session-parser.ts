@@ -200,6 +200,50 @@ async function parseCursor(fileContent: string, filePath: string): Promise<Parse
 }
 
 /**
+ * Trae 会话记忆解析。
+ * ~/.trae-cn/memory/projects/ 下的 jsonl 文件，每行一条结构化摘要：
+ * {intent, actions[], outcome, learned[], message_summary_time, message_id}
+ * 渲染为 LLM 友好的中文 Markdown。
+ */
+async function parseTrae(fileContent: string, filePath: string): Promise<ParsedSession> {
+  const lines = fileContent.split("\n");
+  const sections: string[] = [];
+  let title = "";
+
+  for (const line of lines) {
+    const obj = tryParseJson(line);
+    if (!obj || typeof obj !== "object") continue;
+    const o = obj as Record<string, unknown>;
+    const intent = typeof o.intent === "string" ? o.intent.trim() : "";
+    if (!intent) continue;
+
+    if (!title) {
+      title = intent.length > 40 ? `${intent.slice(0, 40)}...` : intent;
+    }
+
+    const parts: string[] = [`### 意图\n\n${intent}`];
+    const actions = Array.isArray(o.actions) ? (o.actions as unknown[]).filter((a): a is string => typeof a === "string" && a.trim().length > 0) : [];
+    if (actions.length) parts.push(`**动作**：${actions.join("；")}`);
+    if (typeof o.outcome === "string" && o.outcome.trim()) parts.push(`**结果**：${o.outcome.trim()}`);
+    const learned = Array.isArray(o.learned) ? (o.learned as unknown[]).filter((l): l is string => typeof l === "string" && l.trim().length > 0) : [];
+    if (learned.length) parts.push(`**经验**：${learned.join("；")}`);
+    if (typeof o.message_summary_time === "string" && o.message_summary_time.trim()) {
+      parts.push(`**时间**：${o.message_summary_time.trim()}`);
+    }
+    sections.push(parts.join("\n\n"));
+  }
+
+  return {
+    title: title || basename(filePath, extname(filePath)),
+    content: sections.join("\n\n"),
+    source: "trae",
+    sourceFile: filePath,
+    timestamp: new Date().toISOString(),
+    messageCount: sections.length,
+  };
+}
+
+/**
  * Markdown 文件直接作为笔记内容。
  */
 async function parseMarkdown(fileContent: string, filePath: string): Promise<ParsedSession> {
@@ -256,6 +300,8 @@ export async function parseSession(
       return parseClaudeCode(content, filePath);
     case "cursor":
       return parseCursor(content, filePath);
+    case "trae":
+      return parseTrae(content, filePath);
     case "markdown":
       return parseMarkdown(content, filePath);
     case "text":

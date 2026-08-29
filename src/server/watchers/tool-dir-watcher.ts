@@ -1,5 +1,7 @@
 import { watch, FSWatcher } from "chokidar";
 import { statSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { ConfigService } from "../services/config-service";
 import { ToolWatchSource } from "../../types/config";
 import { parseSession } from "../../lib/tools/session-parser";
@@ -68,8 +70,12 @@ export async function startToolDirWatcher(): Promise<void> {
 
 async function startSingleSource(source: ToolWatchSource): Promise<void> {
   try {
+    // 展开 ~ 为用户主目录（chokidar/fs 在 Windows 上不识别 ~ 前缀）
+    const watchPath = source.path.startsWith("~")
+      ? join(homedir(), source.path.slice(1))
+      : source.path;
     const pattern = source.filePattern || "*.jsonl";
-    const watcher = watch(source.path, {
+    const watcher = watch(watchPath, {
       ignored: ["**/node_modules/**", "**/.git/**"],
       persistent: true,
       ignoreInitial: false, // 启动时扫描已有文件（首次导入历史会话）
@@ -158,6 +164,10 @@ async function handleFileEvent(
         session.content.slice(0, 200),
         tags,
         topic,
+        undefined,
+        undefined,
+        // 采集入口必须带证据链：原文片段 + 文件位置，供质量闸门做事实类证据校验
+        { evidence: { text: session.content.slice(0, 500), location: filePath } },
       );
       logger.ingest.info(`[ToolDirWatcher] 已采集会话`, {
         source: source.name,

@@ -68,10 +68,12 @@ export class MemoryCorrectionService {
       return { success: false, error: "模型当前不可用，无法执行纠错改写，请稍后重试" };
     }
 
-    // 第 3 步：budget 模型按指令改写
+    // 第 3 步：budget 模型按指令改写。
+    // 硬校验：改写结果若为"原文 + 末尾追加"结构，程序化拒绝并带反馈重试一次
+    //（融合要求不依赖模型自觉，由 isAppendLikeRewrite 结构判定兜底）。
     let rewrite: LlmRewrite;
     try {
-      const response = await ModelAdapter.generate(
+      let response = await ModelAdapter.generate(
         buildCorrectionPrompt(target, instruction),
         "budget",
       );
@@ -79,6 +81,27 @@ export class MemoryCorrectionService {
         return { success: false, error: "模型调用失败，无法执行纠错改写，请稍后重试" };
       }
       rewrite = parseRewrite(response.content);
+
+      if (rewrite.content && isAppendLikeRewrite(target.content, rewrite.content)) {
+        logger.memory.warn("改写结果为末尾追加式，带反馈重试", { memoryId: target.id });
+        response = await ModelAdapter.generate(
+          buildCorrectionPrompt(
+            target,
+            instruction,
+            APPEND_REJECT_FEEDBACK,
+          ),
+          "budget",
+        );
+        if (response.finishReason === "degraded") {
+          return { success: false, error: "模型调用失败，无法执行纠错改写，请稍后重试" };
+        }
+        rewrite = parseRewrite(response.content);
+
+        if (rewrite.content && isAppendLikeRewrite(target.content, rewrite.content)) {
+          logger.memory.warn("重试后仍为末尾追加式，拒绝本次改写", { memoryId: target.id });
+          return { success: false, error: "改写结果为末尾追加式而非框架融合，已拒绝" };
+        }
+      }
     } catch (err) {
       logger.memory.warn("纠错改写失败", {
         memoryId: target.id,
@@ -146,10 +169,19 @@ export class MemoryCorrectionService {
   }
 }
 
-function buildCorrectionPrompt(memory: MemoryRecord, instruction: string): string {
-  return [
-    "你是记忆库纠错器。下面是一条已保存的记忆和用户提出的纠错指令。",
-    "请根据纠错指令修订记忆内容，只修正指令涉及的部分，保留其余信息。",
+function buildCorrectionPrompt(memory: MemoryRecord, instruction: string, rejectReason?: string): string {
+  const lines = [
+    "你是记忆库更新器。下面是一条已保存的记忆和用户的更新指令（纠正错误或补充新信息）。",
+    "请把指令涉及的变化融合进这条记忆的知识结构，输出修订后的完整记忆。",
+    "",
+    "融合要求：",
+    "- 把新信息纳入这条记忆的知识框架：按主题与逻辑重组内容，让新要点归位到它所属的位置，与相关信息放在一起。",
+    "- 新信息与原有内容讲同一件事时，合并成一条更完整的表述，不要重复陈述。",
+    "- 修订后的记忆应当读起来像一开始就是这么写的，浑然一体，看不出拼接痕迹。",
+    "- 禁止把新信息原样追加在正文末尾形成孤立的补充段。",
+    "- 指令未涉及的原有信息一律保留，不得遗漏。",
+    "- 与原文使用相同的语言和叙述风格。",
+    "- 若内容有实质变化，同步更新 summary 使其概括融合后的内容。",
     '只输出 JSON，格式：{"title": "...", "summary": "...", "content": "..."}',
     "不需要修改的字段保持原值输出。不要添加解释性文字。",
     "",
@@ -158,8 +190,32 @@ function buildCorrectionPrompt(memory: MemoryRecord, instruction: string): strin
     `摘要: ${memory.summary}`,
     `内容: ${memory.content}`,
     "",
-    `纠错指令：${instruction}`,
-  ].join("\n");
+    `更新指令：${instruction}`,
+  ];
+  if (rejectReason) {
+    lines.push("", rejectReason);
+  }
+  return lines.join("\n");
+}
+
+/** 追加式改写被拒后注入重试的反馈 */
+const APPEND_REJECT_FEEDBACK =
+  "上一版输出被拒绝：你只是把新信息追加在原文末尾，没有融合进知识框架。" +
+  "请按主题逻辑把新信息归位重组，与相关信息放在一起，重复表述合并，" +
+  "输出一篇读起来像一开始就这么写的完整记忆。";
+
+/**
+ * 硬校验：检测改写结果是否为"原文 + 末尾追加"结构。
+ * 归一化空白后，若原文是改写结果的严格前缀（且确实发生了改动），
+ * 说明新内容被机械地接在原文后面，判定为追加式，拒绝融合失败。
+ */
+export function isAppendLikeRewrite(original: string, rewritten: string): boolean {
+  const norm = (s: string) => s.replace(/\s+/g, "");
+  const o = norm(original);
+  const n = norm(rewritten);
+  if (!o || !n) return false;
+  if (o === n) return false; // 完全未改动不算追加
+  return n.startsWith(o);
 }
 
 /** 从模型输出中提取改写结果；结构非法时返回空对象 */

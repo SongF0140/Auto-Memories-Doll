@@ -14,7 +14,12 @@ vi.mock("../lib/ai/model-adapter", () => ({
   },
 }));
 
-import { MemoryCorrectionService, parseRewrite, CORRECTED_TAG } from "../lib/memory/correction";
+import {
+  MemoryCorrectionService,
+  parseRewrite,
+  isAppendLikeRewrite,
+  CORRECTED_TAG,
+} from "../lib/memory/correction";
 import type { MemoryRecord } from "../types/memory";
 
 function makeMemory(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
@@ -61,6 +66,103 @@ describe("parseRewrite", () => {
   });
 });
 
+describe("isAppendLikeRewrite 硬校验", () => {
+  it("原文是改写结果的严格前缀 → 判定追加式", () => {
+    expect(isAppendLikeRewrite("A。B。", "A。B。C。补充内容")).toBe(true);
+  });
+
+  it("空白差异归一化后仍判定追加式", () => {
+    expect(isAppendLikeRewrite("A。 B。", "A。B。\n\n新加的一段")).toBe(true);
+  });
+
+  it("完全未改动不算追加", () => {
+    expect(isAppendLikeRewrite("A。B。", "A。B。")).toBe(false);
+  });
+
+  it("开头被重组的融合式改写不误判", () => {
+    expect(isAppendLikeRewrite("A。B。", "A2。B 融合了新点。C。")).toBe(false);
+  });
+
+  it("空串不判定", () => {
+    expect(isAppendLikeRewrite("", "A")).toBe(false);
+    expect(isAppendLikeRewrite("A", "")).toBe(false);
+  });
+});
+
+describe("MemoryCorrectionService.correct 追加式硬校验", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.degraded = false;
+  });
+
+  const appendLike = (extra: string) =>
+    JSON.stringify({
+      title: "项目名记录",
+      summary: "项目名记录",
+      content: `项目名是 Auto-Memories-Dol（少了一个 l）\n\n${extra}`,
+    });
+
+  const fused = JSON.stringify({
+    title: "项目名记录",
+    summary: "项目名记录",
+    content: "项目名是 Auto-Memories-Doll，仓库在 GitHub 开源",
+  });
+
+  const llm = (content: string) => ({
+    content,
+    finishReason: "stop",
+    model: "budget",
+    timestamp: "2026-08-23T00:00:00.000Z",
+  });
+
+  it("第一次输出追加式 → 带反馈重试 → 融合式通过", async () => {
+    const memory = makeMemory();
+    const { memoryService, retriever } = makeDeps(memory);
+    mocks.generate
+      .mockResolvedValueOnce(llm(appendLike("仓库在 GitHub 开源")))
+      .mockResolvedValueOnce(llm(fused));
+
+    const service = new MemoryCorrectionService(memoryService, retriever);
+    const result = await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+    const retryPrompt = mocks.generate.mock.calls[1][0] as string;
+    expect(retryPrompt).toContain("上一版输出被拒绝");
+    expect(retryPrompt).toContain("没有融合进知识框架");
+    expect(result.success).toBe(true);
+  });
+
+  it("两次都是追加式 → 拒绝改写，不入队", async () => {
+    const memory = makeMemory();
+    const { memoryService, retriever } = makeDeps(memory);
+    mocks.generate
+      .mockResolvedValueOnce(llm(appendLike("仓库在 GitHub 开源")))
+      .mockResolvedValueOnce(llm(appendLike("仓库在 GitHub 开源（重试版）")));
+
+    const service = new MemoryCorrectionService(memoryService, retriever);
+    const result = await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+
+    expect(mocks.generate).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      success: false,
+      error: "改写结果为末尾追加式而非框架融合，已拒绝",
+    });
+    expect(memoryService.stageUpdateMemory).not.toHaveBeenCalled();
+  });
+
+  it("融合式一次通过时不触发重试", async () => {
+    const memory = makeMemory();
+    const { memoryService, retriever } = makeDeps(memory);
+    mocks.generate.mockResolvedValue(llm(fused));
+
+    const service = new MemoryCorrectionService(memoryService, retriever);
+    const result = await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+
+    expect(mocks.generate).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
+  });
+});
+
 describe("MemoryCorrectionService.correct", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -97,6 +199,28 @@ describe("MemoryCorrectionService.correct", () => {
       expect(result.changedFields).toContain("content");
       expect(result.changedFields).toContain("tags");
     }
+  });
+
+  it("改写 prompt 要求框架级融合：归位重组、重复合并、浑然一体，禁止末尾追加", async () => {
+    const memory = makeMemory();
+    const { memoryService, retriever } = makeDeps(memory);
+    mocks.generate.mockResolvedValue({
+      content:
+        '{"title": "项目名记录", "summary": "项目名记录", "content": "项目名是 Auto-Memories-Doll"}',
+      finishReason: "stop",
+      model: "budget",
+      timestamp: "2026-08-23T00:00:00.000Z",
+    });
+
+    const service = new MemoryCorrectionService(memoryService, retriever);
+    await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+
+    expect(mocks.generate).toHaveBeenCalledTimes(1);
+    const prompt = mocks.generate.mock.calls[0][0] as string;
+    expect(prompt).toContain("纳入这条记忆的知识框架");
+    expect(prompt).toContain("合并成一条更完整的表述");
+    expect(prompt).toContain("像一开始就是这么写的");
+    expect(prompt).toContain("禁止把新信息原样追加在正文末尾");
   });
 
   it("无 memoryId 时用 locateQuery 检索定位 top-1", async () => {

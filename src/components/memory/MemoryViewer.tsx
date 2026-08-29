@@ -7,6 +7,7 @@ import { MemoryRecord } from "../../types/memory";
 import MemoryCard from "./MemoryCard";
 import Badge from "../common/Badge";
 import { getTopicLabelClient } from "../../config/topics-data";
+import Markdown from "../common/Markdown";
 
 const display = (memory: MemoryRecord) => ({
   title: memory.titleZh || memory.title,
@@ -211,9 +212,10 @@ export default function MemoryViewer({
                 {memory.content && (
                   <div>
                     <p className="text-xs font-medium text-text-tertiary mb-1">完整内容</p>
-                    <div className="bg-muted rounded-lg p-4 text-sm leading-relaxed text-text-secondary whitespace-pre-wrap">
-                      {memory.content}
-                    </div>
+                    <Markdown
+                      className="rounded-lg bg-muted p-4 text-sm text-text-secondary"
+                      content={memory.content}
+                    />
                   </div>
                 )}
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import MemoryCard from "@/components/memory/MemoryCard";
+import Markdown from "@/components/common/Markdown";
 import {
   getMemoryClient,
   memoryDetailHref,
@@ -122,9 +123,10 @@ export default function MemoryDetailPage() {
           <h2 id="memory-content-title" className="font-mono text-lg font-bold">
             完整内容
           </h2>
-          <div className="mt-4 whitespace-pre-wrap text-base leading-8 text-text-secondary">
-            {memory.content || memory.summaryZh || memory.summary || "（暂无详细内容）"}
-          </div>
+          <Markdown
+            className="mt-4 text-base text-text-secondary"
+            content={memory.content || memory.summaryZh || memory.summary || "（暂无详细内容）"}
+          />
         </section>
 
         <section className="card mt-6" aria-labelledby="memory-meta-title">

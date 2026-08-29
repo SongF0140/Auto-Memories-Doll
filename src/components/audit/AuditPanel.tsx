@@ -21,24 +21,44 @@ type AuditReport = {
   conflicts: number;
 };
 
+type ReviewEvent = {
+  eventId: string;
+  memoryId: string | null;
+  sourceType: string;
+  createdAt: string;
+  retryCount: number;
+  candidate: {
+    title: string;
+    summary: string | null;
+    contentPreview: string;
+    tags: string[];
+  } | null;
+};
+
 export default function AuditPanel() {
   const [report, setReport] = useState<AuditReport | null>(null);
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
+  const [reviewEvents, setReviewEvents] = useState<ReviewEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [replaying, setReplaying] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<"report" | "conflicts">("report");
+  const [activeTab, setActiveTab] = useState<"report" | "conflicts" | "review">("report");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [reportRes, conflictRes] = await Promise.all([
+      const [reportRes, conflictRes, reviewRes] = await Promise.all([
         fetch("/api/audit"),
         fetch("/api/audit/conflicts"),
+        fetch("/api/audit/review-events"),
       ]);
       if (reportRes.ok) setReport(await reportRes.json());
       if (conflictRes.ok) setConflicts(await conflictRes.json());
+      if (reviewRes.ok) {
+        const data = await reviewRes.json();
+        setReviewEvents(data.items || []);
+      }
     } catch (e) {
       console.error("获取审计数据失败:", e);
     } finally {
@@ -95,6 +115,24 @@ export default function AuditPanel() {
     }
   };
 
+  const handleReviewDecision = async (eventId: string, action: "accept" | "reject") => {
+    setResolvingId(eventId);
+    try {
+      const res = await fetch("/api/audit/review-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId, action }),
+      });
+      if (res.ok) {
+        setReviewEvents((prev) => prev.filter((e) => e.eventId !== eventId));
+      }
+    } catch (e) {
+      console.error("人工裁决失败:", e);
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -146,6 +184,17 @@ export default function AuditPanel() {
             style={activeTab === "conflicts" ? {} : { color: "#8B7355" }}
           >
             冲突 ({conflicts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("review")}
+            className={`text-sm px-4 py-2 rounded-lg transition-colors ${
+              activeTab === "review"
+                ? "bg-[rgba(166,124,0,0.08)] text-[#A67C00] font-semibold"
+                : "hover:bg-[#FAF7F2]"
+            }`}
+            style={activeTab === "review" ? {} : { color: "#8B7355" }}
+          >
+            人工裁决 ({reviewEvents.length})
           </button>
         </div>
 
@@ -351,6 +400,107 @@ export default function AuditPanel() {
                         className="btn btn-secondary h-8 px-4 text-xs"
                       >
                         应用手动值
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "review" && (
+          <div>
+            {reviewEvents.length === 0 ? (
+              <div className="py-16 text-center" style={{ color: "var(--color-text-tertiary)" }}>
+                暂无待人工裁决的事件
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                  以下事件被质量闸门标记为需人工判断（评分 4-6 或降级）：
+                  「接受」将跳过闸门直接入库，「拒绝」为终态拒绝不再重试。
+                </p>
+                {reviewEvents.map((event) => (
+                  <div
+                    key={event.eventId}
+                    className="bg-white border rounded-xl p-5"
+                    style={{
+                      borderColor: "var(--color-border-default)",
+                      boxShadow: "var(--shadow-card)",
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-xs font-mono"
+                          style={{ color: "var(--color-text-tertiary)" }}
+                        >
+                          {event.eventId.slice(0, 12)}...
+                        </span>
+                        <span className="tag">{event.sourceType}</span>
+                        <span className="tag">重试 {event.retryCount} 次</span>
+                      </div>
+                      <span className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                        {new Date(event.createdAt).toLocaleString("zh-CN")}
+                      </span>
+                    </div>
+
+                    {event.candidate ? (
+                      <div className="mb-4">
+                        <p
+                          className="text-sm font-medium mb-1"
+                          style={{ color: "var(--color-text-primary)" }}
+                        >
+                          {event.candidate.title}
+                        </p>
+                        {event.candidate.summary && (
+                          <p className="text-xs mb-2" style={{ color: "var(--color-text-tertiary)" }}>
+                            {event.candidate.summary}
+                          </p>
+                        )}
+                        <div
+                          className="rounded-lg p-3 text-sm whitespace-pre-wrap"
+                          style={{
+                            background: "var(--color-bg-secondary)",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {event.candidate.contentPreview}
+                        </div>
+                        {event.candidate.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {event.candidate.tags.map((tag) => (
+                              <span key={tag} className="tag">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs mb-4" style={{ color: "var(--color-text-tertiary)" }}>
+                        候选内容已损坏，无法预览
+                      </p>
+                    )}
+
+                    <div
+                      className="flex gap-2 pt-3 border-t"
+                      style={{ borderColor: "var(--color-border-default)" }}
+                    >
+                      <button
+                        onClick={() => handleReviewDecision(event.eventId, "accept")}
+                        disabled={resolvingId === event.eventId}
+                        className="btn h-8 px-4 text-xs"
+                      >
+                        接受入库
+                      </button>
+                      <button
+                        onClick={() => handleReviewDecision(event.eventId, "reject")}
+                        disabled={resolvingId === event.eventId}
+                        className="btn btn-secondary h-8 px-4 text-xs"
+                      >
+                        拒绝
                       </button>
                     </div>
                   </div>

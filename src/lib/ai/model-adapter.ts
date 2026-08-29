@@ -67,7 +67,8 @@ export class ModelAdapter {
     if (this.healthCheckTimer) return; // 已启动
     this.healthCheckTimer = setInterval(async () => {
       const config = getConfig();
-      if (!config.apiKey) return;
+      const embeddingApiKey = config.embedding.apiKey || config.apiKey;
+      if (!embeddingApiKey) return;
       try {
         const provider = getProvider();
         await provider.generateEmbedding("health-check");

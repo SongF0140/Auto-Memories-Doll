@@ -113,9 +113,13 @@ export function buildKnowledgeGraph(memories: MemoryRecord[]): {
     const status: KnowledgeNode["status"] =
       data.memories.length > 5 ? "active" : data.memories.length > 2 ? "normal" : "small";
 
+    // 按码点处理首字符大写，避免截坏代理对（emoji 等）
+    const chars = Array.from(name);
+    const label = (chars[0] ?? "").toUpperCase() + chars.slice(1).join("");
+
     return {
       id: name,
-      label: name.charAt(0).toUpperCase() + name.slice(1),
+      label,
       x: region.x + offsetX,
       y: region.y + offsetY,
       category: data.category,
@@ -454,7 +458,11 @@ export default function KnowledgeMap({ memories, onNodeClick, onNodeHover }: Kno
                   fill={isSelected || isHovered ? "#3E3224" : "#F5F0E8"}
                   opacity={opacity}
                 >
-                  {node.label.length > 10 ? node.label.slice(0, 9) + "…" : node.label}
+                  {(() => {
+                    // 按码点截断，避免切坏代理对
+                    const chars = Array.from(node.label);
+                    return chars.length > 10 ? chars.slice(0, 9).join("") + "…" : node.label;
+                  })()}
                 </text>
 
                 {/* 计数徽章 */}

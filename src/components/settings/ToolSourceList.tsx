@@ -22,6 +22,7 @@ const TOOL_TYPE_LABELS: Record<ToolType, string> = {
   codex: "Codex CLI",
   "claude-code": "Claude Code",
   cursor: "Cursor",
+  trae: "Trae",
   markdown: "Markdown",
   text: "纯文本",
 };

@@ -1,8 +1,23 @@
+/** 记忆类型：事实 / 推断 / 假设 / 待验证洞察（非 fact 必须人工裁决后才可入库） */
+export type MemoryKind = "fact" | "inference" | "hypothesis" | "insight";
+
+/** 来源证据：原文片段 + 可选位置（文件路径 / URL），事实类入库的证据约束 */
+export type MemoryEvidence = {
+  /** 原文片段（截取自来源文件/消息的原始文本） */
+  text: string;
+  /** 证据位置：来源文件路径或 URL */
+  location?: string;
+};
+
 export type MemoryRecord = {
   id: string;
   version: number;
   source: string;
   sourceType: "chat" | "ingest" | "manual" | "mcp" | "skill" | "listen";
+  /** 记忆类型（缺省视为 fact）；闸门判定非 fact 时强制转人工 */
+  kind?: MemoryKind;
+  /** 来源证据；fact 类缺少证据时闸门转人工而非直接入库 */
+  evidence?: MemoryEvidence;
   /** 原标题（AI 可读） */
   title: string;
   /** 中文标题（人可读），为空时前端回退到 title */
@@ -98,7 +113,14 @@ export type PendingEvent = {
   candidate: string;
   changedFields: string[];
   createdAt: string;
-  status: "pending" | "processing" | "done" | "failed";
+  /**
+   * 事件状态机：
+   * - pending/processing：待消费/消费中
+   * - done：已落盘；failed：系统类失败，可被重试
+   * - rejected：质量闸门或向量去重终拒，不参与重试
+   * - review：闸门不可用或评分存疑，待人工裁决，不被自动消费
+   */
+  status: "pending" | "processing" | "done" | "failed" | "rejected" | "review";
   retryCount: number;
 };
 

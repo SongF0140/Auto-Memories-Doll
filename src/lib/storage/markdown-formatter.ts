@@ -23,6 +23,13 @@ export function formatFrontmatter(record: MemoryRecord): string {
     record.topicZh ? `topicZh: "${record.topicZh}"` : "",
     `source: "${record.source}"`,
     `sourceType: "${record.sourceType}"`,
+    `kind: "${record.kind || "fact"}"`,
+    record.evidence?.text
+      ? `evidenceText: "${escapeYaml(record.evidence.text)}"`
+      : "",
+    record.evidence?.location
+      ? `evidenceLocation: "${escapeYaml(record.evidence.location)}"`
+      : "",
     `createdAt: "${record.createdAt}"`,
     `updatedAt: "${record.updatedAt}"`,
     `version: ${record.version}`,
@@ -66,10 +73,10 @@ export function formatMemoryAsMarkdown(record: MemoryRecord): string {
 
   // 正文：标题 + 内容
   const body = [
-    `# ${record.title}`,
+    `# ${record.titleZh || record.title}`,
     "",
-    record.summary ? `> ${record.summary}` : "",
-    record.summary ? "" : "",
+    record.summaryZh || record.summary ? `> ${record.summaryZh || record.summary}` : "",
+    record.summaryZh || record.summary ? "" : "",
     record.content,
     "",
     "---",

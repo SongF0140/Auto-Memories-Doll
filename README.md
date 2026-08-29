@@ -197,19 +197,35 @@ memory-root/
 
 ## 架构
 
+最终版交互式结构图：
+
+[打开知识库更新架构图](结构图/knowledge-architecture.architecture.html)
+
+![Auto-Memories-Doll 知识库更新架构图](结构图/knowledge-architecture.architecture.visual-check.1440x900.light.png)
+
+系统按“入口 → 快轨 → 后台加工 → 三层审计 → 主存储/派生索引”组织。候选记忆不会直接写入长期知识库，而是先进入待审计队列，再经过质量判断、人工复核和差异审计：
+
 ```
 用户输入 → 意图分类（关键词→语义→LLM 三级级联）
          → 记忆检索（向量 + 关键词 + 图谱）
          → 组装 prompt → AI 流式响应 → 工具调用循环
-         → 候选记忆入审计队列 → 差异比对 → 冲突处理 → Markdown 写回
+         → 候选记忆入待审计队列
+         → 质量闸门（accept / review / reject）
+         → 人工复核与冲突裁决
+         → Orchestrator + Auditor 差异比对
+         → Markdown 真源写回 → Vector / Graph 派生索引刷新
 ```
 
 | 层 | 职责 | 关键模块 |
 |----|------|----------|
-| 入口层 | 用户交互 | `src/app/`, `src/components/` |
-| 快轨层 | 即时对话、流式输出 | `src/features/chat/handler.ts` |
-| 后台加工层 | 清洗、分类、去重 | `src/features/ingest/`, `orchestrator.ts` |
-| 审计持久化层 | 冲突处理、版本管理、写回 | `src/features/audit/`, `src/lib/storage/` |
+| 入口层 | 用户交互、多源输入和 API 接入 | `src/app/`, `src/components/`, `src/app/api/` |
+| 1 快轨层 | 记忆检索、提示组装、Agent 循环和流式响应，只产生候选 | `src/features/chat/handler.ts`, `src/lib/ai/` |
+| 2 后台加工层 | 清洗、分类、去重、结构化和待审计事件生成 | `src/features/ingest/`, `src/server/pipelines/`, `MemoryService` |
+| 3 质量闸门 | 按规则将候选分为接受、人工复核或拒绝 | `src/features/audit/auditor.ts`, `differ.ts` |
+| 3 人工复核 | 处理 review 事件、冲突和人工裁决 | `src/features/audit/reviewer.ts`, `src/components/audit/`, `src/app/api/audit/` |
+| 3 审计中枢 | 差异比对、版本校验、写回调度和失败重试 | `src/server/services/orchestrator.ts`, `src/server/workers/audit-worker.ts` |
+| 主存储真源 | 保存 Markdown LLMWiki、SQLite 队列、版本和冲突记录 | `memory-root/`, `src/lib/storage/` |
+| 派生检索索引 | 从真源重建向量 ANN、关键词和 wikilink 图谱索引 | `src/lib/vector/`, `src/lib/graph/` |
 
 技术栈：TypeScript / Next.js 14 / React 18 / Vercel AI SDK / SQLite / HNSW 向量索引 / Tailwind CSS
 
