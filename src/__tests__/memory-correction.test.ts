@@ -123,7 +123,10 @@ describe("MemoryCorrectionService.correct 追加式硬校验", () => {
       .mockResolvedValueOnce(llm(fused));
 
     const service = new MemoryCorrectionService(memoryService, retriever);
-    const result = await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+    const result = await service.correct({
+      memoryId: "m1",
+      instruction: "补充：仓库在 GitHub 开源",
+    });
 
     expect(mocks.generate).toHaveBeenCalledTimes(2);
     const retryPrompt = mocks.generate.mock.calls[1][0] as string;
@@ -140,7 +143,10 @@ describe("MemoryCorrectionService.correct 追加式硬校验", () => {
       .mockResolvedValueOnce(llm(appendLike("仓库在 GitHub 开源（重试版）")));
 
     const service = new MemoryCorrectionService(memoryService, retriever);
-    const result = await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+    const result = await service.correct({
+      memoryId: "m1",
+      instruction: "补充：仓库在 GitHub 开源",
+    });
 
     expect(mocks.generate).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
@@ -156,7 +162,10 @@ describe("MemoryCorrectionService.correct 追加式硬校验", () => {
     mocks.generate.mockResolvedValue(llm(fused));
 
     const service = new MemoryCorrectionService(memoryService, retriever);
-    const result = await service.correct({ memoryId: "m1", instruction: "补充：仓库在 GitHub 开源" });
+    const result = await service.correct({
+      memoryId: "m1",
+      instruction: "补充：仓库在 GitHub 开源",
+    });
 
     expect(mocks.generate).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(true);

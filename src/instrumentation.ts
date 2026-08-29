@@ -19,7 +19,8 @@ export async function register() {
     const { VectorScheduler } = await import("./server/schedulers/vector-scheduler");
     const { RetentionScheduler } = await import("./server/schedulers/retention-scheduler");
     const { McpCollectScheduler } = await import("./server/schedulers/mcp-collect-scheduler");
-    const { BrowserCollectScheduler } = await import("./server/schedulers/browser-collect-scheduler");
+    const { BrowserCollectScheduler } =
+      await import("./server/schedulers/browser-collect-scheduler");
 
     auditScheduler = new AuditScheduler();
     cleanupScheduler = new CleanupScheduler();
@@ -35,7 +36,9 @@ export async function register() {
     mcpCollectScheduler.start();
     browserCollectScheduler.start();
 
-    logger.ingest.info("[Instrumentation] 调度器已启动: audit / cleanup / vector / retention / mcp-collect / browser-collect");
+    logger.ingest.info(
+      "[Instrumentation] 调度器已启动: audit / cleanup / vector / retention / mcp-collect / browser-collect",
+    );
 
     // 启动 AI API 健康检查（降级恢复）
     const { ModelAdapter } = await import("./lib/ai/model-adapter");
@@ -43,9 +46,8 @@ export async function register() {
     logger.api.info("[Instrumentation] AI API 健康检查已启动");
 
     // 启动本地工具目录监听器（Cursor/Codex/Claude Code 等会话文件采集）
-    const { startToolDirWatcher, stopToolDirWatcher } = await import(
-      "./server/watchers/tool-dir-watcher"
-    );
+    const { startToolDirWatcher, stopToolDirWatcher } =
+      await import("./server/watchers/tool-dir-watcher");
     startToolDirWatcher().catch((e) => {
       logger.ingest.error("[Instrumentation] ToolDirWatcher 启动失败", {
         message: e instanceof Error ? e.message : String(e),

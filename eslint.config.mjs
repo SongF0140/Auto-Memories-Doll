@@ -11,7 +11,13 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   // Node.js 配置文件（CommonJS module.exports）
   {
-    files: ["*.config.js", "*.config.mjs", "next.config.js", "postcss.config.js", "tailwind.config.js"],
+    files: [
+      "*.config.js",
+      "*.config.mjs",
+      "next.config.js",
+      "postcss.config.js",
+      "tailwind.config.js",
+    ],
     languageOptions: {
       globals: {
         module: "readonly",
@@ -71,6 +77,23 @@ export default tseslint.config(
         },
       ],
       "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  // Node.js 临时/诊断脚本（CommonJS，需要将结果输出到终端）
+  {
+    files: ["scripts/**/*.cjs"],
+    languageOptions: {
+      globals: {
+        module: "readonly",
+        require: "readonly",
+        process: "readonly",
+        __dirname: "readonly",
+        console: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "no-console": "off",
     },
   },
 );

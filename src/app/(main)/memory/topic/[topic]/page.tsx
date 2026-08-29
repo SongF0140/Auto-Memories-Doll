@@ -208,7 +208,11 @@ export default function KnowledgeDetailPage() {
           {currentMemories.map((memory, index) => {
             const isActive = memory.id === selected?.id;
             const articleTitle =
-              memory.titleZh || memory.summaryZh || memory.title || memory.summary || `文章 ${index + 1}`;
+              memory.titleZh ||
+              memory.summaryZh ||
+              memory.title ||
+              memory.summary ||
+              `文章 ${index + 1}`;
 
             return (
               <button
@@ -319,7 +323,11 @@ export default function KnowledgeDetailPage() {
                       className="text-2xl md:text-3xl font-bold font-mono tracking-tight mb-2"
                       style={{ color: "#3E3224" }}
                     >
-                      {selected.titleZh || selected.title || selected.summaryZh || selected.summary || "未命名文章"}
+                      {selected.titleZh ||
+                        selected.title ||
+                        selected.summaryZh ||
+                        selected.summary ||
+                        "未命名文章"}
                     </h1>
 
                     <p className="text-sm font-mono" style={{ color: "#8B7355" }}>
@@ -357,7 +365,9 @@ export default function KnowledgeDetailPage() {
                 style={{ color: "#5D4E37" }}
               >
                 <Markdown
-                  content={selected.content || selected.summaryZh || selected.summary || "（暂无详细内容）"}
+                  content={
+                    selected.content || selected.summaryZh || selected.summary || "（暂无详细内容）"
+                  }
                 />
               </div>
 

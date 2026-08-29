@@ -56,7 +56,15 @@ export class MemoryService {
     `);
 
     // 迁移：旧数据库可能缺少 topic / zh 列
-    const migrationColumns = ["topic", "titleZh", "summaryZh", "tagsZh", "topicZh", "kind", "evidence"];
+    const migrationColumns = [
+      "topic",
+      "titleZh",
+      "summaryZh",
+      "tagsZh",
+      "topicZh",
+      "kind",
+      "evidence",
+    ];
     for (const col of migrationColumns) {
       try {
         this.db.exec(`ALTER TABLE memories ADD COLUMN ${col} TEXT`);
@@ -599,7 +607,8 @@ export class MemoryService {
         limit && limit > 0 ? " LIMIT ?" : ""
       }`,
     );
-    const rows = limit && limit > 0 ? (stmt.all(status, limit) as any[]) : (stmt.all(status) as any[]);
+    const rows =
+      limit && limit > 0 ? (stmt.all(status, limit) as any[]) : (stmt.all(status) as any[]);
 
     return rows.map((row) => ({
       eventId: row.eventId,

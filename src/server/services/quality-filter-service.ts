@@ -119,7 +119,9 @@ export class QualityFilterService {
 
       const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
       const rawKind = typeof parsed.kind === "string" ? parsed.kind.trim() : "";
-      const kind = VALID_KINDS.includes(rawKind as MemoryKind) ? (rawKind as MemoryKind) : undefined;
+      const kind = VALID_KINDS.includes(rawKind as MemoryKind)
+        ? (rawKind as MemoryKind)
+        : undefined;
       const clamped = Math.max(0, Math.min(10, Math.round(score)));
 
       if (clamped >= ACCEPT_SCORE) {

@@ -24,12 +24,8 @@ export function formatFrontmatter(record: MemoryRecord): string {
     `source: "${record.source}"`,
     `sourceType: "${record.sourceType}"`,
     `kind: "${record.kind || "fact"}"`,
-    record.evidence?.text
-      ? `evidenceText: "${escapeYaml(record.evidence.text)}"`
-      : "",
-    record.evidence?.location
-      ? `evidenceLocation: "${escapeYaml(record.evidence.location)}"`
-      : "",
+    record.evidence?.text ? `evidenceText: "${escapeYaml(record.evidence.text)}"` : "",
+    record.evidence?.location ? `evidenceLocation: "${escapeYaml(record.evidence.location)}"` : "",
     `createdAt: "${record.createdAt}"`,
     `updatedAt: "${record.updatedAt}"`,
     `version: ${record.version}`,

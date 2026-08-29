@@ -23,7 +23,10 @@ export async function GET() {
 }
 
 /** 脱敏 apiKey 回填：`****`+尾4位 与库存值匹配则换回真实 key */
-function resolveMaskedKey(incoming: string | undefined, stored: string | undefined): string | undefined {
+function resolveMaskedKey(
+  incoming: string | undefined,
+  stored: string | undefined,
+): string | undefined {
   if (
     stored &&
     incoming &&

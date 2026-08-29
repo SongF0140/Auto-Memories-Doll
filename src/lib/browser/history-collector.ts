@@ -1,6 +1,6 @@
 import { promises as fs, existsSync } from "fs";
 import { join } from "path";
-import { homedir, platform } from "os";
+import { platform } from "os";
 import Database from "better-sqlite3";
 import { tmpdir } from "os";
 import { logger } from "../logger";
@@ -41,17 +41,17 @@ type BookmarkEntry = {
 /** 浏览器配置文件路径 */
 function getBrowserPaths(): { name: string; profilePath: string }[] {
   const paths: { name: string; profilePath: string }[] = [];
-  const localAppData = process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local");
+  if (platform() !== "win32") return paths;
 
-  if (platform() === "win32") {
-    // Chrome
-    const chromePath = join(localAppData, "Google", "Chrome", "User Data", "Default");
-    if (existsSync(chromePath)) paths.push({ name: "Chrome", profilePath: chromePath });
+  // Windows 正常会提供 LOCALAPPDATA；缺失时跳过采集，避免构建器把整个用户目录当作资源扫描。
+  const localAppData = process.env.LOCALAPPDATA;
+  if (!localAppData) return paths;
 
-    // Edge
-    const edgePath = join(localAppData, "Microsoft", "Edge", "User Data", "Default");
-    if (existsSync(edgePath)) paths.push({ name: "Edge", profilePath: edgePath });
-  }
+  const chromePath = join(localAppData, "Google", "Chrome", "User Data", "Default");
+  if (existsSync(chromePath)) paths.push({ name: "Chrome", profilePath: chromePath });
+
+  const edgePath = join(localAppData, "Microsoft", "Edge", "User Data", "Default");
+  if (existsSync(edgePath)) paths.push({ name: "Edge", profilePath: edgePath });
 
   return paths;
 }

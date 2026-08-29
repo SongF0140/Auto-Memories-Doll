@@ -85,11 +85,7 @@ export class MemoryCorrectionService {
       if (rewrite.content && isAppendLikeRewrite(target.content, rewrite.content)) {
         logger.memory.warn("改写结果为末尾追加式，带反馈重试", { memoryId: target.id });
         response = await ModelAdapter.generate(
-          buildCorrectionPrompt(
-            target,
-            instruction,
-            APPEND_REJECT_FEEDBACK,
-          ),
+          buildCorrectionPrompt(target, instruction, APPEND_REJECT_FEEDBACK),
           "budget",
         );
         if (response.finishReason === "degraded") {
@@ -169,7 +165,11 @@ export class MemoryCorrectionService {
   }
 }
 
-function buildCorrectionPrompt(memory: MemoryRecord, instruction: string, rejectReason?: string): string {
+function buildCorrectionPrompt(
+  memory: MemoryRecord,
+  instruction: string,
+  rejectReason?: string,
+): string {
   const lines = [
     "你是记忆库更新器。下面是一条已保存的记忆和用户的更新指令（纠正错误或补充新信息）。",
     "请把指令涉及的变化融合进这条记忆的知识结构，输出修订后的完整记忆。",

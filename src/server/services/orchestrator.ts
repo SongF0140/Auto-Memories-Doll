@@ -340,9 +340,7 @@ export class Orchestrator {
                 return false;
               }
               const key = field as keyof MemoryRecord;
-              return (
-                JSON.stringify(candidate[key]) !== JSON.stringify(existing[key])
-              );
+              return JSON.stringify(candidate[key]) !== JSON.stringify(existing[key]);
             });
             for (const field of changedFields) {
               const key = field as keyof MemoryRecord;

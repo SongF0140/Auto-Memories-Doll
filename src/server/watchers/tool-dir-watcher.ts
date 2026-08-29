@@ -1,6 +1,5 @@
 import { watch, FSWatcher } from "chokidar";
 import { statSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { ConfigService } from "../services/config-service";
 import { ToolWatchSource } from "../../types/config";
@@ -70,10 +69,14 @@ export async function startToolDirWatcher(): Promise<void> {
 
 async function startSingleSource(source: ToolWatchSource): Promise<void> {
   try {
-    // 展开 ~ 为用户主目录（chokidar/fs 在 Windows 上不识别 ~ 前缀）
-    const watchPath = source.path.startsWith("~")
-      ? join(homedir(), source.path.slice(1))
-      : source.path;
+    // 展开 ~ 为用户主目录（chokidar/fs 在 Windows 上不识别 ~ 前缀）。
+    // 直接读取环境变量，避免 Next.js 文件追踪器在构建时递归扫描整个用户目录。
+    let watchPath = source.path;
+    if (source.path.startsWith("~")) {
+      const homeDir = process.env.USERPROFILE || process.env.HOME;
+      if (!homeDir) throw new Error(`无法展开监听路径: ${source.path}`);
+      watchPath = join(homeDir, source.path.slice(1));
+    }
     const pattern = source.filePattern || "*.jsonl";
     const watcher = watch(watchPath, {
       ignored: ["**/node_modules/**", "**/.git/**"],

@@ -222,10 +222,19 @@ async function parseTrae(fileContent: string, filePath: string): Promise<ParsedS
     }
 
     const parts: string[] = [`### 意图\n\n${intent}`];
-    const actions = Array.isArray(o.actions) ? (o.actions as unknown[]).filter((a): a is string => typeof a === "string" && a.trim().length > 0) : [];
+    const actions = Array.isArray(o.actions)
+      ? (o.actions as unknown[]).filter(
+          (a): a is string => typeof a === "string" && a.trim().length > 0,
+        )
+      : [];
     if (actions.length) parts.push(`**动作**：${actions.join("；")}`);
-    if (typeof o.outcome === "string" && o.outcome.trim()) parts.push(`**结果**：${o.outcome.trim()}`);
-    const learned = Array.isArray(o.learned) ? (o.learned as unknown[]).filter((l): l is string => typeof l === "string" && l.trim().length > 0) : [];
+    if (typeof o.outcome === "string" && o.outcome.trim())
+      parts.push(`**结果**：${o.outcome.trim()}`);
+    const learned = Array.isArray(o.learned)
+      ? (o.learned as unknown[]).filter(
+          (l): l is string => typeof l === "string" && l.trim().length > 0,
+        )
+      : [];
     if (learned.length) parts.push(`**经验**：${learned.join("；")}`);
     if (typeof o.message_summary_time === "string" && o.message_summary_time.trim()) {
       parts.push(`**时间**：${o.message_summary_time.trim()}`);

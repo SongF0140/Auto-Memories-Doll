@@ -12,7 +12,7 @@ export async function GET() {
   const activeSources = getActiveSources();
 
   const configService = new ConfigService();
-  let enabledCount = 0;
+  let enabledCount: number;
   try {
     enabledCount = configService.listEnabledToolSources().length;
   } finally {

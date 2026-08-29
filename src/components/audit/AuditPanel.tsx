@@ -455,7 +455,10 @@ export default function AuditPanel() {
                           {event.candidate.title}
                         </p>
                         {event.candidate.summary && (
-                          <p className="text-xs mb-2" style={{ color: "var(--color-text-tertiary)" }}>
+                          <p
+                            className="text-xs mb-2"
+                            style={{ color: "var(--color-text-tertiary)" }}
+                          >
                             {event.candidate.summary}
                           </p>
                         )}

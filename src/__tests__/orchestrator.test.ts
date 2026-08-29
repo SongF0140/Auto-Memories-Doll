@@ -143,9 +143,7 @@ vi.mock("../lib/ai/model-adapter", () => ({
 // ── mock: VectorIndex ──
 const vectorIndexCreate = vi.fn();
 const vectorIndexClose = vi.fn();
-const vectorIndexSearch = vi.fn(
-  () => [] as Array<{ memoryId: string; similarity: number }>,
-);
+const vectorIndexSearch = vi.fn(() => [] as Array<{ memoryId: string; similarity: number }>);
 vi.mock("../lib/vector/index", () => ({
   VectorIndex: vi.fn(() => ({
     create: vectorIndexCreate,
@@ -683,9 +681,7 @@ describe("Orchestrator", () => {
 
       expect(qualityFilterMock).toHaveBeenCalledWith(
         expect.anything(),
-        expect.arrayContaining([
-          expect.objectContaining({ title: "相似记忆", similarity: 0.75 }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ title: "相似记忆", similarity: 0.75 })]),
       );
       expect(event.status).toBe("done");
     });

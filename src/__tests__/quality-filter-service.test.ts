@@ -186,7 +186,10 @@ describe("QualityFilterService", () => {
     (ModelAdapter.generate as any).mockResolvedValue(llmReply({ score: 9, kind: "fact" }));
 
     const result = await service.filter(
-      makeCandidate({ sourceType: "listen", evidence: { text: "对话原文片段", location: "https://x" } }),
+      makeCandidate({
+        sourceType: "listen",
+        evidence: { text: "对话原文片段", location: "https://x" },
+      }),
     );
 
     expect(result.verdict).toBe("accept");

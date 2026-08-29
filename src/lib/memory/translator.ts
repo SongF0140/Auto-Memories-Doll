@@ -118,10 +118,7 @@ export function generateZhFields(
 
   // 已经是中文的摘要直接作为中文字段；英文摘要使用现有规则尽量转换。
   const chineseCharCount = (summary.match(/[\u4e00-\u9fff]/g) || []).length;
-  const summaryZh =
-    chineseCharCount > 0
-      ? summary
-      : translateTitle(summary);
+  const summaryZh = chineseCharCount > 0 ? summary : translateTitle(summary);
 
   return {
     titleZh,

@@ -348,8 +348,8 @@ export default function AiConfigForm({
             />
           </div>
           <p className="md:col-span-2 text-xs text-text-secondary">
-            例子：主配置选 Moonshot（Kimi）聊天，Embedding 填智谱 API Key + Base URL，
-            模型名填 embedding-3，即可用不同提供商的 key 分别驱动对话与向量。
+            例子：主配置选 Moonshot（Kimi）聊天，Embedding 填智谱 API Key + Base URL， 模型名填
+            embedding-3，即可用不同提供商的 key 分别驱动对话与向量。
           </p>
         </div>
       </div>
