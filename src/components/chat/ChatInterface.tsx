@@ -62,6 +62,7 @@ export default function ChatInterface() {
   const [availableMemories, setAvailableMemories] = useState<MemoryRecord[]>([]);
   const [selectedMemoryIds, setSelectedMemoryIds] = useState<Set<string>>(new Set());
   const [degraded, setDegraded] = useState(false);
+  const [memoryPickerOpen, setMemoryPickerOpen] = useState(false);
 
   useEffect(() => {
     fetchAvailableMemories();
@@ -259,8 +260,8 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-white">
-      <div className="px-6 py-5">
+    <div className="flex h-full min-w-0 flex-col bg-white">
+      <div className="px-4 py-4 sm:px-6 sm:py-5">
         <div
           className="mx-auto max-w-6xl overflow-hidden rounded-xl border p-0"
           style={{
@@ -270,8 +271,8 @@ export default function ChatInterface() {
           }}
         >
           <div className="grid items-stretch gap-0 lg:grid-cols-1">
-            <div className="flex items-center justify-between gap-6 p-5">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:p-5">
+              <div className="flex min-w-0 items-center gap-4">
                 <div>
                   <h2
                     className="text-xl font-semibold tracking-tight"
@@ -284,27 +285,41 @@ export default function ChatInterface() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                 <ChatModeSelector mode={mode} onModeChange={setMode} />
-                <button
-                  onClick={newSession}
-                  disabled={loading || hydrating}
-                  className="btn h-9 px-3.5 text-xs"
-                  title="新建会话"
-                >
-                  新会话
-                </button>
+                <div className={`grid gap-2 ${mode === "memory" ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {mode === "memory" && (
+                    <button
+                      type="button"
+                      onClick={() => setMemoryPickerOpen((open) => !open)}
+                      className="btn h-9 px-3.5 text-xs lg:hidden"
+                      aria-expanded={memoryPickerOpen}
+                      aria-controls="mobile-memory-picker"
+                    >
+                      {memoryPickerOpen ? "收起记忆" : "选择记忆"}
+                      {selectedMemoryIds.size > 0 ? ` · ${selectedMemoryIds.size}` : ""}
+                    </button>
+                  )}
+                  <button
+                    onClick={newSession}
+                    disabled={loading || hydrating}
+                    className="btn h-9 px-3.5 text-xs"
+                    title="新建会话"
+                  >
+                    新会话
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row">
         <div className="flex-1 flex flex-col min-w-0">
           {/* 会话历史栏 */}
           {sessionIds.length > 1 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto px-6 py-2.5 border-b border-border/60">
+            <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border/60 px-4 py-2.5 sm:px-6">
               {sessionIds.slice(0, 8).map((id) => {
                 const isActive = id === sessionId;
                 return (
@@ -344,7 +359,7 @@ export default function ChatInterface() {
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto px-6 py-8">
+          <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
             {/* 降级模式提示 */}
             {degraded && (
               <div className="max-w-3xl mx-auto mb-5 rounded-xl border border-warning-bg bg-warning-bg px-4 py-3 shadow-sm">
@@ -407,7 +422,10 @@ export default function ChatInterface() {
 
         {mode === "memory" && (
           <div
-            className="w-80 lg:w-96 bg-gray-50 border-l flex flex-col"
+            id="mobile-memory-picker"
+            className={`order-first max-h-64 w-full shrink-0 flex-col border-b bg-gray-50 lg:order-none lg:flex lg:max-h-none lg:w-96 lg:border-b-0 lg:border-l ${
+              memoryPickerOpen ? "flex" : "hidden"
+            }`}
             style={{ borderColor: "var(--color-border-default)" }}
           >
             <div

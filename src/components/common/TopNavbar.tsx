@@ -25,9 +25,9 @@ export default function TopNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex items-center justify-between h-14 px-8 nav-dark">
+    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center justify-between px-3 nav-dark sm:px-8">
       {/* 左侧：Logo + 系统名称 */}
-      <Link href="/" className="flex items-center gap-2.5 group">
+      <Link href="/" className="group flex shrink-0 items-center gap-2 sm:gap-2.5">
         {/* 循环标志 Logo：暗金色 */}
         <div
           className="w-7 h-7 animate-logo-morph flex items-center justify-center"
@@ -43,14 +43,14 @@ export default function TopNavbar() {
       </Link>
 
       {/* 右侧：导航 Tab 列表 */}
-      <nav className="flex items-center gap-1">
+      <nav className="flex min-w-0 items-center gap-0.5 sm:gap-1">
         {navTabs.map((tab) => {
           const active = isActive(tab.href);
           return (
             <Link
               key={tab.id}
               href={tab.href}
-              className={`relative px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              className={`relative px-2.5 py-2 text-sm font-medium transition-all duration-200 sm:px-4 ${
                 active
                   ? "text-[#D4B84A] bg-white/10"
                   : "text-[rgba(245,240,232,0.65)] hover:text-[#F5F0E8] hover:bg-white/5"

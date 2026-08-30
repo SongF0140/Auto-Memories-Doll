@@ -32,6 +32,35 @@ test("首页可以进入聊天并启用发送按钮", async ({ page }) => {
   expect(diagnostics).toEqual([]);
 });
 
+test("手机端聊天保持单列布局并可展开记忆选择器", async ({ page }) => {
+  const diagnostics = collectBrowserDiagnostics(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.goto("/chat");
+  await expect(page.getByRole("heading", { name: "对话" })).toBeVisible();
+
+  const pageMetrics = await page.evaluate(() => ({
+    viewportWidth: document.documentElement.clientWidth,
+    pageWidth: document.documentElement.scrollWidth,
+    viewportHeight: window.innerHeight,
+    pageHeight: document.documentElement.scrollHeight,
+  }));
+  expect(pageMetrics.pageWidth).toBeLessThanOrEqual(pageMetrics.viewportWidth);
+  expect(pageMetrics.pageHeight).toBeLessThanOrEqual(pageMetrics.viewportHeight + 8);
+
+  await page.getByRole("button", { name: "记忆", exact: true }).click();
+  const memoryPicker = page.locator("#mobile-memory-picker");
+  await expect(memoryPicker).toBeHidden();
+  await page.getByRole("button", { name: "选择记忆" }).click();
+  await expect(memoryPicker).toBeVisible();
+  await expect(page.getByRole("button", { name: "收起记忆" })).toBeVisible();
+  await expect(page.getByPlaceholder("分享值得记住的内容...")).toBeVisible();
+
+  const expandedWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(expandedWidth).toBeLessThanOrEqual(pageMetrics.viewportWidth);
+  expect(diagnostics).toEqual([]);
+});
+
 test("首页导航进入检索库，列表可以打开记忆详情", async ({ page }) => {
   const diagnostics = collectBrowserDiagnostics(page);
 

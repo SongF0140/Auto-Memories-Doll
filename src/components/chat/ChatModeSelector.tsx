@@ -69,14 +69,14 @@ export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelecto
   ];
 
   return (
-    <div className="relative flex gap-1 p-1 rounded-2xl bg-muted/50 border border-border">
+    <div className="relative grid w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-muted/50 p-1 sm:flex sm:w-auto">
       {modes.map(({ value, label, description, iconKey }) => {
         const active = mode === value;
         return (
           <button
             key={value}
             onClick={() => onModeChange(value)}
-            className={`group relative flex flex-col items-start px-4 py-2.5 rounded-xl text-left transition-all duration-300 ${
+            className={`group relative flex min-w-0 flex-col items-center rounded-xl px-2 py-2.5 text-center transition-all duration-300 sm:items-start sm:px-4 sm:text-left ${
               active
                 ? "bg-surface shadow-sm border border-border-strong"
                 : "bg-transparent border border-transparent hover:bg-surface/60 hover:border-border"
@@ -102,7 +102,7 @@ export default function ChatModeSelector({ mode, onModeChange }: ChatModeSelecto
               </span>
               {label}
             </span>
-            <span className="relative z-10 text-[11px] text-text-tertiary mt-0.5 leading-tight">
+            <span className="relative z-10 mt-0.5 hidden text-[11px] leading-tight text-text-tertiary sm:block">
               {description}
             </span>
           </button>

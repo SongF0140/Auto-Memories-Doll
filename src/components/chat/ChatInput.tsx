@@ -32,8 +32,8 @@ export default function ChatInput({
   };
 
   return (
-    <div className="border-t border-border bg-white p-5">
-      <div className="max-w-3xl mx-auto flex gap-3 items-end">
+    <div className="border-t border-border bg-white p-3 sm:p-5">
+      <div className="mx-auto flex max-w-3xl items-end gap-2 sm:gap-3">
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -47,7 +47,7 @@ export default function ChatInput({
         <button
           onClick={handleSubmit}
           disabled={disabled || !content.trim()}
-          className="btn h-[52px] px-6"
+          className="btn h-[52px] shrink-0 px-4 sm:px-6"
         >
           发送
         </button>
