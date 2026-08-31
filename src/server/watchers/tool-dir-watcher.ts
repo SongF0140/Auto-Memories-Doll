@@ -1,7 +1,7 @@
 import { watch, FSWatcher } from "chokidar";
 import { readdir } from "fs/promises";
 import { statSync } from "fs";
-import { join } from "path";
+import { isAbsolute, join, relative, resolve } from "path";
 import { createHash } from "crypto";
 import { ConfigService } from "../services/config-service";
 import { ToolWatchSource } from "../../types/config";
@@ -10,6 +10,7 @@ import { MemoryService } from "../services/memory-service";
 import { isRecentWrite } from "../../lib/storage/write-tracker";
 import { logger } from "../../lib/logger";
 import { buildKnowledgeLogFromText } from "../../features/ingest/knowledge-log";
+import { getMemoryRoot } from "../../lib/storage/path-resolver";
 
 /**
  * 本地工具工作目录监听器。
@@ -107,6 +108,10 @@ async function startSingleSource(source: ToolWatchSource): Promise<void> {
       if (!homeDir) throw new Error(`无法展开监听路径: ${source.path}`);
       watchPath = join(homeDir, source.path.slice(1));
     }
+    if (isMemoryRootPath(watchPath)) {
+      logger.ingest.warn(`[ToolDirWatcher] 跳过应用自身记忆目录: ${watchPath}`);
+      return;
+    }
     const pattern = source.filePattern || "*.jsonl";
     const watcher = watch(watchPath, {
       ignored: ["**/node_modules/**", "**/.git/**"],
@@ -157,6 +162,13 @@ async function startSingleSource(source: ToolWatchSource): Promise<void> {
   }
 }
 
+function isMemoryRootPath(candidatePath: string): boolean {
+  const root = resolve(getMemoryRoot());
+  const candidate = resolve(candidatePath);
+  const relativePath = relative(root, candidate);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
 function patternToExtensions(pattern: string): string[] {
   // 从 "*.jsonl" 或 "**/*.md" 提取扩展名
   const match = pattern.match(/\*\.(\w+)/);
@@ -198,10 +210,7 @@ async function handleFileEvent(
     if (source.topic) tags.push(source.topic);
 
     // 超长会话头部截断：尾部追加不影响头部，稳定 ID + 内容跳过逻辑仍然有效
-    const content =
-      session.content.length > SESSION_CONTENT_MAX_CHARS
-        ? `${session.content.slice(0, SESSION_CONTENT_MAX_CHARS)}\n\n<!-- 会话过长已截断，原文 ${session.content.length} 字符 -->`
-        : session.content;
+    const content = limitSessionContent(session.content);
     const knowledgeLog = buildKnowledgeLogFromText(content, {
       source: source.name,
     });
@@ -266,6 +275,13 @@ async function handleFileEvent(
       error: (error as Error).message,
     });
   }
+}
+
+function limitSessionContent(content: string): string {
+  if (content.length <= SESSION_CONTENT_MAX_CHARS) return content;
+  const tailLength = 2_500;
+  const headLength = SESSION_CONTENT_MAX_CHARS - tailLength;
+  return `${content.slice(0, headLength)}\n\n<!-- 中间内容已截断，原文 ${content.length} 字符 -->\n\n${content.slice(-tailLength)}`;
 }
 
 /**

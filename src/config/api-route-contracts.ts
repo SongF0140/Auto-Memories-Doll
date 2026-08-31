@@ -144,6 +144,10 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
       "INTERNAL_ERROR",
     ],
   },
+  "src/app/api/memory/rebuild/route.ts": {
+    responseSchema: "memoryRebuildResponseSchema",
+    errorCodes: ["INTERNAL_ERROR"],
+  },
   "src/app/api/memory/[id]/access/route.ts": {
     responseSchema: "memoryAccessResponseSchema",
     errorCodes: ["NOT_FOUND", "INTERNAL_ERROR"],

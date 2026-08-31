@@ -25,7 +25,13 @@ export function startFileWatcher(): void {
   if (watcher || globalStore.__amdFileWatcherRunning) return;
 
   const watchPaths = [getMemoryRoot()];
-  const ignored = ["**/memory.db", "**/memory.db-journal", "**/memory.db-wal", "**/archive/**"];
+  const ignored = [
+    "**/memory.db",
+    "**/memory.db-journal",
+    "**/memory.db-wal",
+    "**/archive/**",
+    "**/notes/**",
+  ];
 
   watcher = watch(watchPaths, {
     ignored,
@@ -87,7 +93,7 @@ export async function scanMemoryRoot(): Promise<number> {
     for (const rel of all) {
       const normalized = rel.replace(/\\/g, "/");
       if (!normalized.endsWith(".md") && !normalized.endsWith(".markdown")) continue;
-      if (normalized.split("/").some((seg) => seg === "archive")) continue;
+      if (normalized.split("/").some((seg) => seg === "archive" || seg === "notes")) continue;
       if (normalized.endsWith("index-map.md") || normalized.endsWith("profile.md")) continue;
       await ingestMarkdownFile(join(root, rel), "scan");
       scanned++;
@@ -150,6 +156,9 @@ async function ingestMarkdownFileOnce(
   eventType: MarkdownFileEvent,
 ): Promise<void> {
   try {
+    const relativePath = filePath.replace(/\\/g, "/");
+    if (relativePath.split("/").some((segment) => segment === "notes" || segment === "archive"))
+      return;
     // 跳过本进程最近写入的文件，防止 Markdown 写回 → 监听 → 再次入队的循环
     if (isRecentWrite(filePath)) return;
 

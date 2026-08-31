@@ -38,6 +38,8 @@ export default function MemoryLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildMessage, setRebuildMessage] = useState("");
 
   useEffect(() => {
     if (searchMode) return;
@@ -107,6 +109,22 @@ export default function MemoryLibraryPage() {
     setRetrievalMode(null);
   };
 
+  const handleFullRebuild = async () => {
+    if (!window.confirm("将扫描全部现有记忆并加入重建队列，是否继续？")) return;
+    setRebuilding(true);
+    setRebuildMessage("");
+    try {
+      const response = await fetch("/api/memory/rebuild", { method: "POST" });
+      const data = await response.json();
+      setRebuildMessage(data.message || (response.ok ? "重建任务已入队。" : "重建入队失败。"));
+      setReloadToken((token) => token + 1);
+    } catch {
+      setRebuildMessage("重建入队失败，请稍后重试。");
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const topicOptions = Object.entries(defaultTopicLabels);
 
@@ -125,9 +143,19 @@ export default function MemoryLibraryPage() {
               搜索、筛选和浏览已经通过审计写入的记忆，点击卡片查看完整内容。
             </p>
           </div>
-          <Link href="/memory/map" className="btn shrink-0">
-            查看知识图谱 →
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleFullRebuild}
+              disabled={rebuilding}
+            >
+              {rebuilding ? "入队中..." : "全量扫描重建"}
+            </button>
+            <Link href="/memory/map" className="btn">
+              查看知识图谱 →
+            </Link>
+          </div>
         </header>
 
         <section className="card mb-8 p-4 sm:p-5" aria-label="记忆搜索和筛选">
@@ -176,6 +204,14 @@ export default function MemoryLibraryPage() {
             </div>
           ) : null}
         </section>
+        {rebuildMessage ? (
+          <p
+            role="status"
+            className="mb-6 rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-secondary"
+          >
+            {rebuildMessage}
+          </p>
+        ) : null}
 
         {retrievalMode === "keyword" ? (
           <div

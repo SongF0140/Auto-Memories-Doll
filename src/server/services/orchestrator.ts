@@ -43,6 +43,7 @@ const VECTOR_DEDUP_SIMILARITY = 0.95;
 const SIMILAR_HINT_MIN_SIMILARITY = 0.6;
 /** 向量召回的 top-K 条数 */
 const RECALL_TOP_K = 3;
+export const FULL_REBUILD_TAG = "全量重建";
 
 /** 来源原文的 sha256：抽取型记忆用它做变更检测与重复入库跳过 */
 function sourceHashOf(content: string): string {
@@ -244,9 +245,20 @@ export class Orchestrator {
         event.status = "processing";
         this.memoryService.updateEvent(event);
 
-        const newId = await this.ingestByExtraction(event, candidate);
+        const newId = this.memoryCardHygiene.isOptimizationCandidate(candidate)
+          ? await this.commitOptimizedNewMemory(event, candidate)
+          : await this.ingestByExtraction(event, candidate);
         // ingestByExtraction 仅在事件终态 done 时返回锚点 ID，其余终态（review/rejected）返回 undefined
         return newId;
+      }
+
+      if (candidate.tags.includes(FULL_REBUILD_TAG)) {
+        if (ModelAdapter.isDegradedMode) return;
+        const staged = await this.stageExistingMemoryOptimization(existing, false);
+        if (!staged) return;
+        event.status = "done";
+        this.memoryService.updateEvent(event);
+        return;
       }
 
       // 抽取型记忆（evidence 带 sourceHash）不走 Auditor diff：
@@ -493,63 +505,103 @@ export class Orchestrator {
     return "stage-optimization";
   }
 
-  private async stageExistingMemoryOptimization(existing: MemoryRecord): Promise<void> {
+  private async stageExistingMemoryOptimization(
+    existing: MemoryRecord,
+    allowFallback = true,
+  ): Promise<boolean> {
     const hygiene = this.memoryCardHygiene.inspect(existing);
-    if (!hygiene.needsOptimization) return;
+    if (!hygiene.needsOptimization) return true;
 
-    const optimized = await this.buildExistingMemoryOptimizationCandidate(existing, hygiene.issues);
-    const changedFields = (
-      ["title", "titleZh", "summary", "summaryZh", "content", "tags", "tagsZh"] as const
-    ).filter((field) => JSON.stringify(existing[field]) !== JSON.stringify(optimized[field]));
-
-    if (changedFields.length === 0) return;
-
-    this.memoryService.enqueueEvent(
-      buildPendingEvent(
-        existing.id,
-        existing.sourceType,
-        optimized,
-        changedFields as string[],
-        "update",
-      ),
+    const optimized = await this.buildExistingMemoryOptimizationCandidates(
+      existing,
+      hygiene.issues,
+      allowFallback,
     );
+    if (!optimized) return false;
+    for (const [index, candidate] of optimized.entries()) {
+      const eventType = index === 0 ? "update" : "create";
+      const changedFields =
+        eventType === "update"
+          ? this.getOptimizationChangedFields(existing, candidate)
+          : Object.keys(candidate);
+      if (eventType === "update" && changedFields.length === 0) continue;
+      this.memoryService.enqueueEvent(
+        buildPendingEvent(candidate.id, candidate.sourceType, candidate, changedFields, eventType),
+      );
+    }
+    return true;
   }
 
-  private async buildExistingMemoryOptimizationCandidate(
+  async enqueueFullMemoryRebuild(): Promise<number> {
+    const memories = this.memoryService.listMemories({ limit: -1 });
+    let queued = 0;
+    for (const memory of memories) {
+      if (memory.tags.includes(FULL_REBUILD_TAG)) continue;
+      if (this.memoryService.hasPendingEventWithTag(memory.id, FULL_REBUILD_TAG)) continue;
+      const candidate = { ...memory, tags: [...memory.tags, FULL_REBUILD_TAG] };
+      this.memoryService.enqueueEvent(
+        buildPendingEvent(memory.id, memory.sourceType, candidate, ["content", "tags"], "update"),
+      );
+      queued += 1;
+    }
+    return queued;
+  }
+
+  private async buildExistingMemoryOptimizationCandidates(
     existing: MemoryRecord,
     issues: ReturnType<MemoryCardHygieneService["inspect"]>["issues"],
-  ): Promise<MemoryRecord> {
+    allowFallback: boolean,
+  ): Promise<MemoryRecord[] | null> {
     try {
       const cards = await this.extraction.extract(existing, []);
-      const card = cards?.[0];
-      if (card) {
-        const tags = [
-          ...new Set([
-            ...existing.tags,
-            ...card.tags,
-            MemoryCardHygieneService.optimizationTag,
-            ...issues.map((issue) => `修复-${issue}`),
-          ]),
-        ];
-        return {
-          ...existing,
-          title: card.title,
-          titleZh: card.title,
-          summary: card.summary,
-          summaryZh: card.summary,
-          content: card.content,
-          tags,
-          tagsZh: tags,
-        };
-      }
+      if (cards?.length)
+        return cards.map((card, index) =>
+          this.buildOptimizationCandidate(existing, card, issues, index),
+        );
     } catch (error) {
       logger.audit.warn("旧记忆卡片模型优化失败，改用保守清理候选", {
         memoryId: existing.id,
         error: (error as Error).message,
       });
+      if (!allowFallback) return null;
     }
 
-    return this.memoryCardHygiene.buildFallbackOptimization(existing, issues);
+    return allowFallback
+      ? [this.memoryCardHygiene.buildFallbackOptimization(existing, issues)]
+      : null;
+  }
+
+  private buildOptimizationCandidate(
+    existing: MemoryRecord,
+    card: ExtractedCard,
+    issues: ReturnType<MemoryCardHygieneService["inspect"]>["issues"],
+    index: number,
+  ): MemoryRecord {
+    const tags = [
+      ...new Set([
+        ...existing.tags,
+        ...card.tags,
+        MemoryCardHygieneService.optimizationTag,
+        ...issues.map((issue) => `修复-${issue}`),
+      ]),
+    ];
+    return {
+      ...existing,
+      id: index === 0 ? existing.id : `${existing.id}-p${index + 1}`,
+      title: card.title,
+      titleZh: card.title,
+      summary: card.summary,
+      summaryZh: card.summary,
+      content: card.content,
+      tags,
+      tagsZh: tags,
+    };
+  }
+
+  private getOptimizationChangedFields(existing: MemoryRecord, candidate: MemoryRecord): string[] {
+    return (
+      ["title", "titleZh", "summary", "summaryZh", "content", "tags", "tagsZh"] as const
+    ).filter((field) => JSON.stringify(existing[field]) !== JSON.stringify(candidate[field]));
   }
 
   /**
@@ -717,6 +769,16 @@ export class Orchestrator {
     event.status = "done";
     this.memoryService.updateEvent(event);
     return anchorId;
+  }
+
+  private async commitOptimizedNewMemory(
+    event: PendingEvent,
+    candidate: MemoryRecord,
+  ): Promise<string> {
+    const newId = await this.commitNewMemory(event, candidate);
+    event.status = "done";
+    this.memoryService.updateEvent(event);
+    return newId;
   }
 
   /**

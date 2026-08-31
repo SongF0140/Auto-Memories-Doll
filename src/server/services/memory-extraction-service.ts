@@ -17,8 +17,6 @@ const MAX_CARDS = 8;
 const PROMPT_CONTENT_LIMIT = 12_000;
 /** 单卡正文的硬上限：保留长日志，但避免单条记忆无限膨胀。 */
 const CARD_CONTENT_LIMIT = 10_000;
-/** 来源足够长时，短抽取结果不能把上下文压缩成摘要。 */
-const DETAIL_CONTENT_MIN = 1_500;
 /** 非标准输出时的最大重试次数 */
 const MAX_PARSE_ATTEMPTS = 2;
 
@@ -64,11 +62,11 @@ export class MemoryExtractionService {
    * 逐卡校验（空标题/空正文丢弃），返回空数组或结构异常时返回 null（由调用方转人工）。
    */
   private parseCards(text: string, sourceContent: string): ExtractedCard[] | null {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
+    const json = this.extractJsonObject(text);
+    if (!json) return null;
 
     try {
-      const parsed = JSON.parse(match[0]) as { memories?: unknown };
+      const parsed = JSON.parse(json) as { memories?: unknown };
       if (!Array.isArray(parsed.memories) || parsed.memories.length === 0) return null;
 
       const cards: ExtractedCard[] = [];
@@ -85,7 +83,7 @@ export class MemoryExtractionService {
         cards.push({
           title: title.slice(0, 60),
           summary: (summary || content.slice(0, 80)).slice(0, 160),
-          content: this.ensureDetailedContent(sourceContent, content),
+          content: this.limitExtractedContent(content, sourceContent),
           tags: tags.slice(0, 5),
         });
       }
@@ -94,6 +92,31 @@ export class MemoryExtractionService {
     } catch {
       return null;
     }
+  }
+
+  private extractJsonObject(text: string): string | null {
+    const start = text.indexOf("{");
+    if (start < 0) return null;
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index++) {
+      const char = text[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = quoted;
+        continue;
+      }
+      if (char === '"') quoted = !quoted;
+      if (quoted) continue;
+      if (char === "{") depth += 1;
+      if (char === "}") depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+    return null;
   }
 
   private buildPrompt(candidate: MemoryRecord, similar: SimilarMemoryHint[]): string {
@@ -125,12 +148,11 @@ ${candidate.content.slice(0, PROMPT_CONTENT_LIMIT)}
 只回复 JSON，不要多余解释：{"memories": [{"title": "...", "summary": "...", "content": "...", "tags": ["..."]}]}`;
   }
 
-  private ensureDetailedContent(source: string, extracted: string): string {
+  private limitExtractedContent(extracted: string, source: string): string {
     const cleaned = extracted.trim();
-    if (source.length < DETAIL_CONTENT_MIN || cleaned.length >= DETAIL_CONTENT_MIN) {
-      return cleaned.slice(0, CARD_CONTENT_LIMIT);
+    if (source.length >= 1_500 && cleaned.length < 1_500) {
+      return `${cleaned}\n\n[抽取内容不足，保留为待复核候选]`.slice(0, CARD_CONTENT_LIMIT);
     }
-    const supplement = `\n\n## 原始记录补充\n\n${source}`;
-    return `${cleaned}${supplement}`.slice(0, CARD_CONTENT_LIMIT);
+    return cleaned.slice(0, CARD_CONTENT_LIMIT);
   }
 }
