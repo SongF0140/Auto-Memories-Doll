@@ -9,6 +9,7 @@ import { parseSession } from "../../lib/tools/session-parser";
 import { MemoryService } from "../services/memory-service";
 import { isRecentWrite } from "../../lib/storage/write-tracker";
 import { logger } from "../../lib/logger";
+import { buildKnowledgeLogFromText } from "../../features/ingest/knowledge-log";
 
 /**
  * 本地工具工作目录监听器。
@@ -27,7 +28,7 @@ import { logger } from "../../lib/logger";
 /** 防抖静默窗口：文件最后一次变更后静默如此之久才采集 */
 const DEBOUNCE_QUIET_MS = 90_000;
 /** 会话内容入库上限：超大会话全文 embedding+LLM 闸门耗时数分钟，会拖死队列 */
-const SESSION_CONTENT_MAX_CHARS = 20_000;
+const SESSION_CONTENT_MAX_CHARS = 10_000;
 
 interface WatcherEntry {
   source: ToolWatchSource;
@@ -201,6 +202,9 @@ async function handleFileEvent(
       session.content.length > SESSION_CONTENT_MAX_CHARS
         ? `${session.content.slice(0, SESSION_CONTENT_MAX_CHARS)}\n\n<!-- 会话过长已截断，原文 ${session.content.length} 字符 -->`
         : session.content;
+    const knowledgeLog = buildKnowledgeLogFromText(content, {
+      source: source.name,
+    });
     const hash = sourceHashOf(content);
 
     const memoryService = new MemoryService();
@@ -216,10 +220,10 @@ async function handleFileEvent(
           return; // 旧的原文型记忆且内容未变
         }
         // 内容有变更：清掉队列中同内容的未完成事件后走更新事件（触发分卡重建）
-        if (memoryService.hasEquivalentPendingEvent(stableId, content)) return;
+        if (memoryService.hasEquivalentPendingEvent(stableId, knowledgeLog.content)) return;
         memoryService.stageUpdateMemory(stableId, {
-          content,
-          summary: content.slice(0, 200),
+          content: knowledgeLog.content,
+          summary: knowledgeLog.summary,
           evidence: {
             text: content.slice(0, 500),
             location: filePath,
@@ -234,14 +238,14 @@ async function handleFileEvent(
       }
 
       // 新文件：队列里已有同内容事件（重启重扫、旧事件仍在积压）→ 跳过
-      if (memoryService.hasEquivalentPendingEvent(stableId, content)) return;
+      if (memoryService.hasEquivalentPendingEvent(stableId, knowledgeLog.content)) return;
 
       memoryService.stageCreateMemory(
         `${source.name}:${filePath}`,
         "ingest",
         session.title,
-        content,
-        content.slice(0, 200),
+        knowledgeLog.content,
+        knowledgeLog.summary,
         tags,
         topic,
         undefined,

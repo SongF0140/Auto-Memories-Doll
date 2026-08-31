@@ -15,8 +15,10 @@ export type ExtractedCard = {
 const MAX_CARDS = 8;
 /** 送入 LLM 的原文上限（与采集侧 SESSION_CONTENT_MAX_CHARS 对齐后留余量） */
 const PROMPT_CONTENT_LIMIT = 12_000;
-/** 单卡正文的硬上限：超出截断（正常输出远小于此值） */
-const CARD_CONTENT_LIMIT = 4_000;
+/** 单卡正文的硬上限：保留长日志，但避免单条记忆无限膨胀。 */
+const CARD_CONTENT_LIMIT = 10_000;
+/** 来源足够长时，短抽取结果不能把上下文压缩成摘要。 */
+const DETAIL_CONTENT_MIN = 1_500;
 /** 非标准输出时的最大重试次数 */
 const MAX_PARSE_ATTEMPTS = 2;
 
@@ -42,7 +44,7 @@ export class MemoryExtractionService {
     for (let attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
       try {
         const response = await ModelAdapter.generate(prompt, "flagship");
-        const cards = this.parseCards(response.content);
+        const cards = this.parseCards(response.content, candidate.content);
         if (cards) return cards;
         logger.quality.warn("抽取输出非标准 JSON，重试", {
           attempt,
@@ -61,7 +63,7 @@ export class MemoryExtractionService {
    * 解析 LLM 输出：{"memories": [{"title","summary","content","tags"}]}
    * 逐卡校验（空标题/空正文丢弃），返回空数组或结构异常时返回 null（由调用方转人工）。
    */
-  private parseCards(text: string): ExtractedCard[] | null {
+  private parseCards(text: string, sourceContent: string): ExtractedCard[] | null {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
 
@@ -83,7 +85,7 @@ export class MemoryExtractionService {
         cards.push({
           title: title.slice(0, 60),
           summary: (summary || content.slice(0, 80)).slice(0, 160),
-          content: content.slice(0, CARD_CONTENT_LIMIT),
+          content: this.ensureDetailedContent(sourceContent, content),
           tags: tags.slice(0, 5),
         });
       }
@@ -110,7 +112,7 @@ ${similar.map((s, i) => `${i + 1}. 《${s.title}》：${s.summary}`).join("\n")}
 4. 每张卡片：
    - title：中文标题，20 字以内，概括该卡话题
    - summary：中文一句话摘要，80 字以内
-   - content：中文正文，100-400 字，完整保留该话题下的关键信息（数字、配置值、结论不能丢或改）
+   - content：中文详细日志，优先 1,500-10,000 字；必须保留笔记、坑点、问题与回答、数字、配置值、结论和必要的原始上下文。原文较短时按实际长度输出，不要编造内容。
    - tags：2-5 个中文标签
 5. 只整理原文确实包含的信息，不要编造或补充原文没有的内容。
 ${similarBlock}
@@ -121,5 +123,14 @@ ${similarBlock}
 ${candidate.content.slice(0, PROMPT_CONTENT_LIMIT)}
 
 只回复 JSON，不要多余解释：{"memories": [{"title": "...", "summary": "...", "content": "...", "tags": ["..."]}]}`;
+  }
+
+  private ensureDetailedContent(source: string, extracted: string): string {
+    const cleaned = extracted.trim();
+    if (source.length < DETAIL_CONTENT_MIN || cleaned.length >= DETAIL_CONTENT_MIN) {
+      return cleaned.slice(0, CARD_CONTENT_LIMIT);
+    }
+    const supplement = `\n\n## 原始记录补充\n\n${source}`;
+    return `${cleaned}${supplement}`.slice(0, CARD_CONTENT_LIMIT);
   }
 }

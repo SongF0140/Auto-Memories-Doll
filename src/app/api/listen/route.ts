@@ -99,13 +99,14 @@ export async function POST(request: NextRequest) {
 
     // 2. 生成知识卡片
     const knowledgeCard = processor.generateKnowledgeCard(data);
+    const memoryContent = knowledgeCard.content || content;
 
     // 3. 唯一写入入口：先进入待审计队列，禁止在这里提前写 Markdown
     const memoryId = memoryService.stageCreateMemory(
       data.source,
       data.sourceType,
       title,
-      content,
+      memoryContent,
       knowledgeCard.summary,
       knowledgeCard.tags,
       topic,
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
       // 监听入口属于采集类：携带来源证据（原文 + 可选 URL），供质量闸门做证据校验
       {
         evidence: {
-          text: content.slice(0, 500),
+          text: memoryContent.slice(0, 500),
           location: data.metadata?.url,
         },
       },
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
       knowledgeCard: {
         title: knowledgeCard.title,
         summary: knowledgeCard.summary,
+        content: memoryContent,
         tags: knowledgeCard.tags,
         topic: knowledgeCard.topic,
       },

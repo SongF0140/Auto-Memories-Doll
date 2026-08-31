@@ -529,4 +529,96 @@
   .violet-letter-mark {
     /* 同 brand-card */
   }
+
+  /* ── 地图页专用浮层 ── */
+  .map-overlay-card {
+    background: rgba(255, 253, 249, 0.88);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--shadow-card);
+    color: var(--foreground);
+    backdrop-filter: blur(10px);
+  }
+
+  .map-option {
+    border-radius: var(--radius-sm);
+    transition:
+      background-color 200ms var(--ease-smooth),
+      border-color 200ms var(--ease-smooth),
+      color 200ms var(--ease-smooth),
+      transform 200ms var(--ease-smooth);
+  }
+
+  .map-option:hover {
+    background: var(--card-bg-alt);
+    border-color: var(--card-border);
+  }
+
+  .map-region {
+    font-family: "Geist Mono", "SF Mono", "Cascadia Code", "Consolas", monospace;
+    letter-spacing: 0.35em;
+    fill: currentColor;
+    opacity: 0.76;
+    user-select: none;
+  }
+
+  .map-region-active {
+    opacity: 1;
+  }
+
+  .map-node-group {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: opacity 200ms var(--ease-smooth);
+  }
+
+  .map-node-visual {
+    transition:
+      transform 200ms var(--ease-smooth),
+      opacity 200ms var(--ease-smooth);
+  }
+
+  .map-node-group:hover .map-node-visual,
+  .map-node-group:focus-visible .map-node-visual {
+    transform: scale(1.08);
+  }
+
+  .map-fade {
+    transition: opacity 200ms var(--ease-smooth);
+  }
+
+  .map-pop {
+    animation: map-pop 320ms var(--ease-bounce);
+  }
+
+  .map-breathe {
+    animation: map-breathe 3.2s ease-in-out infinite;
+  }
+
+  .map-focus-ring {
+    opacity: 0;
+    transition: opacity 200ms var(--ease-smooth);
+  }
+
+  .map-node-group:focus-visible .map-focus-ring {
+    opacity: 1;
+  }
+
+  @keyframes map-pop {
+    0% {
+      transform: scale(0.96);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes map-breathe {
+    0%,
+    100% {
+      opacity: 0.06;
+    }
+    50% {
+      opacity: 0.14;
+    }
+  }
 }

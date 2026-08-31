@@ -1,6 +1,7 @@
 import { ConversationData, ConversationMessage } from "../../types/memory";
 import { MemoryExtractor } from "../memory/extractor";
 import { generateZhFields } from "../../lib/memory/translator";
+import { buildKnowledgeLog } from "./knowledge-log";
 
 export type ProcessingResult = {
   memoryIds: string[];
@@ -12,6 +13,7 @@ export type KnowledgeCard = {
   title: string;
   titleZh?: string;
   summary: string;
+  content: string;
   tags: string[];
   tagsZh?: string[];
   topic: string;
@@ -76,28 +78,22 @@ export class ConversationProcessor {
 
   generateKnowledgeCard(data: ConversationData): KnowledgeCard {
     const { title, topic } = this.formatConversation(data);
-    const allText = data.messages.map((m) => m.content).join("\n");
-    const summary = this.extractKeyInsights(allText);
+    const log = buildKnowledgeLog(data.messages, {
+      source: data.source,
+      metadata: data.metadata,
+    });
     const tags = data.tags || [];
-    const zhFields = generateZhFields(title, summary, tags, topic);
+    const zhFields = generateZhFields(title, log.summary, tags, topic);
 
     return {
       title,
       titleZh: zhFields.titleZh,
-      summary,
+      summary: log.summary,
+      content: log.content,
       tags,
       tagsZh: zhFields.tagsZh,
       topic,
       topicZh: zhFields.topicZh,
     };
-  }
-
-  private extractKeyInsights(text: string): string {
-    const cleaned = text
-      .replace(/#{1,6}\s/g, "")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-    if (cleaned.length <= 200) return cleaned;
-    return cleaned.substring(0, 200) + "...";
   }
 }

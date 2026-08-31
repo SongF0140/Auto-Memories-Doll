@@ -62,7 +62,7 @@ describe("memory map viewport", () => {
       <MemoryMapViewport memories={[memory]} loading={false} error="" onNodeClick={vi.fn()} />,
     );
 
-    expect(html).toContain("搜索知识节点");
+    expect(html).toContain("显示筛选");
     expect(html).not.toContain("暂无知识图谱");
   });
 });
