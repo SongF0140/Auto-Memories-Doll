@@ -112,6 +112,18 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
     responseSchema: "listenResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "INVALID_JSON", "INTERNAL_ERROR"],
   },
+  "src/app/api/listen/scan/route.ts": {
+    responseSchema: "listenScanResponseSchema",
+    errorCodes: ["INTERNAL_ERROR"],
+  },
+  "src/app/api/listen/import/route.ts": {
+    responseSchema: "listenImportResponseSchema",
+    errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
+  },
+  "src/app/api/listen/rebuild/route.ts": {
+    responseSchema: "listenRebuildResponseSchema",
+    errorCodes: ["INTERNAL_ERROR"],
+  },
   "src/app/api/memory/route.ts": {
     requestSchema: "memoryCreateSchema",
     responseSchema: "memoryResponseSchema",

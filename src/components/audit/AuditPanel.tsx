@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console -- 审计操作失败需要保留浏览器端诊断信息。 */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type ConflictRecord = {
   conflictId: string;
@@ -44,6 +44,11 @@ export default function AuditPanel() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"report" | "conflicts" | "review">("report");
+  const [scanning, setScanning] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -130,6 +135,67 @@ export default function AuditPanel() {
       console.error("人工裁决失败:", e);
     } finally {
       setResolvingId(null);
+    }
+  };
+
+  const handleScan = async () => {
+    setScanning(true);
+    setImportMessage(null);
+    try {
+      const res = await fetch("/api/listen/scan", { method: "POST" });
+      const data = await res.json();
+      setImportMessage(data.message || (res.ok ? "扫描完成" : "扫描失败"));
+    } catch (e) {
+      console.error("扫描失败:", e);
+      setImportMessage("扫描失败，请查看服务端日志");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleRebuild = async () => {
+    if (!confirm("重建将删除所有文件采集的记忆卡片（对话/手动创建的不受影响），然后全量重扫重新生成中文卡片。继续？")) {
+      return;
+    }
+    setRebuilding(true);
+    setImportMessage(null);
+    try {
+      const res = await fetch("/api/listen/rebuild", { method: "POST" });
+      const data = await res.json();
+      setImportMessage(data.message || (res.ok ? "重建已启动" : "重建失败"));
+    } catch (e) {
+      console.error("重建失败:", e);
+      setImportMessage("重建失败，请查看服务端日志");
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
+  const handleImport = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const lines: string[] = [];
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/listen/import", { method: "POST", body: form });
+        const data = await res.json();
+        const result = data.results?.[0];
+        if (res.ok && result?.success) {
+          lines.push(`「${file.name}」导入成功，已保存到 ${result.savedPath}`);
+        } else {
+          lines.push(`「${file.name}」导入失败：${result?.error || data.error?.message || "未知错误"}`);
+        }
+      }
+      setImportMessage(lines.join("\n"));
+    } catch (e) {
+      console.error("导入失败:", e);
+      setImportMessage("导入失败，请查看服务端日志");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -280,6 +346,90 @@ export default function AuditPanel() {
                     {replaying ? "处理中..." : "执行重放"}
                   </button>
                 </div>
+
+                <div
+                  className="flex items-center justify-between pt-3 border-t"
+                  style={{ borderColor: "var(--color-border-default)" }}
+                >
+                  <div>
+                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                      扫描记忆库
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                      立即检查记忆库 Markdown 与工具会话目录，未变更的自动跳过（零 LLM 成本）
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleScan}
+                    disabled={scanning || importing || rebuilding}
+                    className="btn h-9 px-4 text-sm"
+                  >
+                    {scanning ? "扫描中..." : "立即扫描"}
+                  </button>
+                </div>
+
+                <div
+                  className="flex items-center justify-between pt-3 border-t"
+                  style={{ borderColor: "var(--color-border-default)" }}
+                >
+                  <div>
+                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                      重建采集卡片
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                      删除所有文件采集的旧卡片并重扫，按话题拆分重新生成中文卡片（对话/手动记忆不受影响）
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRebuild}
+                    disabled={scanning || importing || rebuilding}
+                    className="btn h-9 px-4 text-sm"
+                  >
+                    {rebuilding ? "重建中..." : "重建"}
+                  </button>
+                </div>
+
+                <div
+                  className="flex items-center justify-between pt-3 border-t"
+                  style={{ borderColor: "var(--color-border-default)" }}
+                >
+                  <div>
+                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                      导入本地消息记录
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
+                      支持 .md / .markdown / .txt / .jsonl（单文件 ≤5MB），jsonl 自动转换为可读格式
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={scanning || importing || rebuilding}
+                    className="btn btn-secondary h-9 px-4 text-sm"
+                  >
+                    {importing ? "导入中..." : "选择文件"}
+                  </button>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".md,.markdown,.txt,.jsonl"
+                  className="hidden"
+                  onChange={(e) => handleImport(e.target.files)}
+                />
+
+                {importMessage && (
+                  <p
+                    className="text-xs whitespace-pre-wrap rounded-lg p-3"
+                    style={{
+                      background: "var(--color-bg-secondary)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {importMessage}
+                  </p>
+                )}
               </div>
             </div>
           </div>

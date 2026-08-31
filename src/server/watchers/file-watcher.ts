@@ -1,7 +1,7 @@
 import { watch, FSWatcher } from "chokidar";
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { createHash } from "crypto";
-import { resolve } from "path";
+import { join, resolve } from "path";
 import { MemoryRecord } from "../../types/memory";
 import { getMemoryRoot } from "../../lib/storage/path-resolver";
 import { IngestAdapter } from "../../features/ingest/adapter";
@@ -15,8 +15,14 @@ import { logger } from "../../lib/logger";
 let watcher: FSWatcher | null = null;
 const inFlightIngests = new Map<string, Promise<void>>();
 
+// 运行状态存 globalThis：Next.js dev 把 instrumentation/listener 与路由编译成独立
+// 模块实例，模块级 let watcher 在路由 bundle 里是空副本，跨 bundle 查状态必须走 globalThis
+const globalStore = globalThis as typeof globalThis & { __amdFileWatcherRunning?: boolean };
+
 export function startFileWatcher(): void {
-  if (watcher) return;
+  // watcher 为空但 globalThis 标记为运行中：说明本模块实例被热重载重建，
+  // 真实 watcher 仍在旧实例里活着，跳过以免同进程双监听
+  if (watcher || globalStore.__amdFileWatcherRunning) return;
 
   const watchPaths = [getMemoryRoot()];
   const ignored = ["**/memory.db", "**/memory.db-journal", "**/memory.db-wal", "**/archive/**"];
@@ -44,6 +50,8 @@ export function startFileWatcher(): void {
     logger.ingest.error("[FileWatcher] 监听错误:", { error: (error as Error).message });
   });
 
+  globalStore.__amdFileWatcherRunning = true;
+
   logger.ingest.info(`[FileWatcher] 已启动，监听目录: ${watchPaths.join(", ")}`);
 }
 
@@ -51,6 +59,7 @@ export function stopFileWatcher(): void {
   if (watcher) {
     watcher.close();
     watcher = null;
+    globalStore.__amdFileWatcherRunning = false;
     logger.ingest.info("[FileWatcher] 已停止");
   }
 }
@@ -59,10 +68,35 @@ export function stopFileWatcher(): void {
  * 获取文件监听器运行状态（供 API 状态查询）。
  */
 export function getFileWatcherStatus(): { running: boolean; root: string } {
-  return { running: watcher !== null, root: getMemoryRoot() };
+  return { running: globalStore.__amdFileWatcherRunning === true, root: getMemoryRoot() };
 }
 
-type MarkdownFileEvent = "add" | "change";
+type MarkdownFileEvent = "add" | "change" | "scan";
+
+/**
+ * 立即重扫记忆库目录下所有 Markdown（绕过 chokidar 事件），供「扫描/重建」按钮调用。
+ * 跳过 archive/ 与系统文件；imports/ 一并扫描——重建采集卡片后，导入文件的卡片
+ * 只能从这里恢复。已入库且未变更的文件在采集层被哈希跳过，不会产生重复 LLM 成本。
+ * 返回扫描的文件数。
+ */
+export async function scanMemoryRoot(): Promise<number> {
+  const root = getMemoryRoot();
+  let scanned = 0;
+  try {
+    const all = await readdir(root, { recursive: true });
+    for (const rel of all) {
+      const normalized = rel.replace(/\\/g, "/");
+      if (!normalized.endsWith(".md") && !normalized.endsWith(".markdown")) continue;
+      if (normalized.split("/").some((seg) => seg === "archive")) continue;
+      if (normalized.endsWith("index-map.md") || normalized.endsWith("profile.md")) continue;
+      await ingestMarkdownFile(join(root, rel), "scan");
+      scanned++;
+    }
+  } catch (error) {
+    logger.ingest.error("[FileWatcher] 扫描记忆库失败:", { error: (error as Error).message });
+  }
+  return scanned;
+}
 
 /**
  * 将文件路径映射为稳定 ID，供没有 frontmatter 的外部 Markdown 使用。
@@ -122,6 +156,9 @@ async function ingestMarkdownFileOnce(
     const content = await readFile(filePath, "utf-8");
     if (content.length < 10) return;
 
+    // 来源原文哈希：入库内容是中文重写卡后与原文不可字面比对，靠它判断文件是否变更
+    const contentHash = createHash("sha256").update(content).digest("hex");
+
     const memoryService = new MemoryService();
 
     try {
@@ -133,10 +170,21 @@ async function ingestMarkdownFileOnce(
             ...record,
             id: record.id || getStableFileMemoryId(filePath),
             source: record.source || filePath,
+            evidence: {
+              text: record.evidence?.text ?? content.slice(0, 500),
+              location: record.evidence?.location ?? filePath,
+              sourceHash: contentHash,
+            },
           };
           const existing = memoryService.getMemory(stableRecord.id);
 
-          if (eventType === "change" && existing) {
+          if (existing) {
+            // 内容未变更（scan/change 重扫）→ 零成本跳过
+            const unchanged = existing.evidence?.sourceHash
+              ? existing.evidence.sourceHash === contentHash
+              : existing.content === content;
+            if (unchanged) return;
+            // 有变更（或 add 时已存在）→ 统一走更新事件，由审计流程决定合并/冲突
             memoryService.stageUpdateMemory(
               stableRecord.id,
               getFileUpdates(stableRecord, filePath),
@@ -166,14 +214,18 @@ async function ingestMarkdownFileOnce(
           ...record,
           id: getStableFileMemoryId(filePath),
           source: filePath,
-          // 纯文本文件的内容本身就是原文：补上证据链，避免采集类入口被闸门强制转 review
-          evidence: record.evidence ?? {
-            text: content.slice(0, 500),
-            location: filePath,
+          // 纯文本文件的内容本身就是原文：补上证据链（含原文哈希），避免采集类入口被闸门强制转 review
+          evidence: {
+            ...(record.evidence ?? { text: content.slice(0, 500), location: filePath }),
+            sourceHash: contentHash,
           },
         };
         const existing = memoryService.getMemory(stableRecord.id);
-        if (eventType === "change" && existing) {
+        if (existing) {
+          const unchanged = existing.evidence?.sourceHash
+            ? existing.evidence.sourceHash === contentHash
+            : existing.content === content;
+          if (unchanged) continue;
           memoryService.stageUpdateMemory(stableRecord.id, getFileUpdates(stableRecord, filePath));
         } else {
           memoryService.stageCreateMemoryRecord(stableRecord);

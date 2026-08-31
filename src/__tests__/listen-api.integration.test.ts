@@ -45,6 +45,7 @@ vi.mock("../lib/storage/database", async () => {
 });
 
 vi.mock("../lib/storage/path-resolver", () => ({
+  getMemoryRoot: () => "/memory-root",
   getNotePath: (topic: string, memoryId: string) => `/memory-root/notes/${topic}/${memoryId}.md`,
 }));
 

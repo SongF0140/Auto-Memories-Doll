@@ -80,6 +80,7 @@ function makeMockStore(opts: {
   const currentMemory = opts.memory !== undefined ? opts.memory : null;
   let currentEvent = opts.event ?? null;
   let dequeueCount = 0;
+  const dequeueByIdCalls: string[] = [];
   const updateCalls: PendingEvent[] = [];
 
   const store: any = {
@@ -88,12 +89,18 @@ function makeMockStore(opts: {
       dequeueCount++;
       return currentEvent;
     },
+    dequeueEventById: (eventId: string) => {
+      dequeueByIdCalls.push(eventId);
+      if (currentEvent?.eventId !== eventId) return null;
+      return { ...currentEvent, status: "processing" };
+    },
     updateEvent: (event: PendingEvent) => {
       updateCalls.push(event);
       currentEvent = event;
     },
   };
   Object.defineProperty(store, "dequeueCalls", { get: () => dequeueCount });
+  Object.defineProperty(store, "dequeueByIdCalls", { get: () => dequeueByIdCalls });
   Object.defineProperty(store, "updateEventCalls", { get: () => updateCalls });
   return store as MemoryStoreReader & { updateEventCalls: PendingEvent[]; dequeueCalls: number };
 }
@@ -142,6 +149,23 @@ describe("Auditor.process — 三种分流", () => {
     expect(result!.status).toBe("done");
     expect(result!.resolution).toBeDefined();
     expect(result!.resolution!.action).toBe("auto_merge");
+  });
+
+  it("uses the requested eventId when provided, so sibling events for the same memory are not consumed", async () => {
+    const existing = makeMemory({ id: "m1", tags: ["a"] });
+    const candidate = makeMemory({ id: "m1", tags: ["a", "旧记忆优化"] });
+    const event = makeEvent("m1", candidate, ["tags"]);
+    event.eventId = "evt-optimization";
+    const store = makeMockStore({ memory: existing, event }) as ReturnType<typeof makeMockStore> & {
+      dequeueByIdCalls: string[];
+    };
+    const auditor = new Auditor(store);
+
+    const result = await auditor.process("m1", "evt-optimization");
+
+    expect(result?.eventId).toBe("evt-optimization");
+    expect(store.dequeueCalls).toBe(0);
+    expect(store.dequeueByIdCalls).toEqual(["evt-optimization"]);
   });
 
   it("returns status=conflict when scalar field values differ", async () => {

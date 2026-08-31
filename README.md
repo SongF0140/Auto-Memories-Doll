@@ -76,27 +76,27 @@ FLAGSHIP_MODEL=deepseek-chat
 
 ### 自动采集：对话从哪来都行
 
-| 来源 | 怎么接 | 说明 |
-|------|--------|------|
-| 内置对话 | 首页点击「开始对话」 | 带记忆检索的 AI 对话 |
-| Trae IDE / 浏览器 AI | `POST /api/listen` | 对话完成后自动推送 |
-| Cursor / Codex / Claude Code | 设置里添加目录监听 | 自动解析会话文件 |
-| 本地 Markdown 文件 | 放入 `memory-root/` | 文件变化自动导入 |
-| Chrome / Edge | 定时采集（默认关） | 浏览记录和书签自动总结 |
+| 来源                         | 怎么接               | 说明                   |
+| ---------------------------- | -------------------- | ---------------------- |
+| 内置对话                     | 首页点击「开始对话」 | 带记忆检索的 AI 对话   |
+| Trae IDE / 浏览器 AI         | `POST /api/listen`   | 对话完成后自动推送     |
+| Cursor / Codex / Claude Code | 设置里添加目录监听   | 自动解析会话文件       |
+| 本地 Markdown 文件           | 放入 `memory-root/`  | 文件变化自动导入       |
+| Chrome / Edge                | 定时采集（默认关）   | 浏览记录和书签自动总结 |
 
 ### 自动归类：7 个话题分类
 
-对话内容自动按关键词分到对应目录：
+对话内容会先用规则生成候选话题，再由 `standard` 中级模型从合法话题白名单里复核，避免只靠关键词把“React 项目会议纪要”这类内容误塞进 AI 编程目录。模型不可用、输出非法或返回未知目录时，会回退到规则结果；低置信度结果进入 `uncategorized`。
 
-| 话题 | 举例 |
-|------|------|
-| AI 编程 | 代码、React、API、bug、算法 |
-| 学习笔记 | 学习、教程、笔记、总结 |
-| 项目规划 | 项目、需求、架构、roadmap |
-| 日常记录 | 日记、今天、心情 |
-| 会议记录 | 会议、讨论、决策 |
-| 阅读摘录 | 论文、书籍、paper |
-| 灵感想法 | 想法、灵感、brainstorm |
+| 话题     | 举例                        |
+| -------- | --------------------------- |
+| AI 编程  | 代码、React、API、bug、算法 |
+| 学习笔记 | 学习、教程、笔记、总结      |
+| 项目规划 | 项目、需求、架构、roadmap   |
+| 日常记录 | 日记、今天、心情            |
+| 会议记录 | 会议、讨论、决策            |
+| 阅读摘录 | 论文、书籍、paper           |
+| 灵感想法 | 想法、灵感、brainstorm      |
 
 归类结果就是文件夹：`notes/ai-coding/`、`notes/learning/`……你可以直接打开看。
 
@@ -130,6 +130,7 @@ AI 在第 N 轮对话时，仍然记得第 1 轮讨论过什么。
 所有记忆写入都经过审计队列：
 
 - 候选内容先排队，不直接写入
+- 合并新内容前会先检查旧记忆卡片；如果旧卡存在乱码、英文残留、Markdown 格式不当或叙述不通顺，会先入队生成“旧记忆优化”事件，等旧卡清理通过审计后再继续合并新记忆
 - 自动检测冲突（新旧内容矛盾时不盲目覆盖）
 - 前端审计面板让你决定接受还是保留原版
 
@@ -210,22 +211,26 @@ memory-root/
          → 记忆检索（向量 + 关键词 + 图谱）
          → 组装 prompt → AI 流式响应 → 工具调用循环
          → 候选记忆入待审计队列
+         → 中级模型话题复核（白名单约束，失败回退规则）
          → 质量闸门（accept / review / reject）
+         → 旧记忆卫生检查（乱码 / 英文残留 / 格式 / 表达）
          → 人工复核与冲突裁决
          → Orchestrator + Auditor 差异比对
          → Markdown 真源写回 → Vector / Graph 派生索引刷新
 ```
 
-| 层 | 职责 | 关键模块 |
-|----|------|----------|
-| 入口层 | 用户交互、多源输入和 API 接入 | `src/app/`, `src/components/`, `src/app/api/` |
-| 1 快轨层 | 记忆检索、提示组装、Agent 循环和流式响应，只产生候选 | `src/features/chat/handler.ts`, `src/lib/ai/` |
-| 2 后台加工层 | 清洗、分类、去重、结构化和待审计事件生成 | `src/features/ingest/`, `src/server/pipelines/`, `MemoryService` |
-| 3 质量闸门 | 按规则将候选分为接受、人工复核或拒绝 | `src/features/audit/auditor.ts`, `differ.ts` |
-| 3 人工复核 | 处理 review 事件、冲突和人工裁决 | `src/features/audit/reviewer.ts`, `src/components/audit/`, `src/app/api/audit/` |
-| 3 审计中枢 | 差异比对、版本校验、写回调度和失败重试 | `src/server/services/orchestrator.ts`, `src/server/workers/audit-worker.ts` |
-| 主存储真源 | 保存 Markdown LLMWiki、SQLite 队列、版本和冲突记录 | `memory-root/`, `src/lib/storage/` |
-| 派生检索索引 | 从真源重建向量 ANN、关键词和 wikilink 图谱索引 | `src/lib/vector/`, `src/lib/graph/` |
+| 层             | 职责                                                                 | 关键模块                                                                                     |
+| -------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 入口层         | 用户交互、多源输入和 API 接入                                        | `src/app/`, `src/components/`, `src/app/api/`                                                |
+| 1 快轨层       | 记忆检索、提示组装、Agent 循环和流式响应，只产生候选                 | `src/features/chat/handler.ts`, `src/lib/ai/`                                                |
+| 2 后台加工层   | 清洗、分类、去重、结构化和待审计事件生成                             | `src/features/ingest/`, `src/server/pipelines/`, `MemoryService`                             |
+| 3 话题复核     | 用 `standard` 模型复核候选话题，只允许选择白名单目录，失败回退规则   | `src/server/services/topic-classification-service.ts`, `src/server/services/orchestrator.ts` |
+| 3 质量闸门     | 按规则将候选分为接受、人工复核或拒绝                                 | `src/features/audit/auditor.ts`, `differ.ts`                                                 |
+| 3 旧卡卫生门禁 | 合并更新前检查已有卡片质量；旧卡低质时先生成清理事件，暂缓新内容合并 | `src/server/services/memory-card-hygiene-service.ts`, `src/server/services/orchestrator.ts`  |
+| 3 人工复核     | 处理 review 事件、冲突和人工裁决                                     | `src/features/audit/reviewer.ts`, `src/components/audit/`, `src/app/api/audit/`              |
+| 3 审计中枢     | 差异比对、版本校验、写回调度和失败重试                               | `src/server/services/orchestrator.ts`, `src/server/workers/audit-worker.ts`                  |
+| 主存储真源     | 保存 Markdown LLMWiki、SQLite 队列、版本和冲突记录                   | `memory-root/`, `src/lib/storage/`                                                           |
+| 派生检索索引   | 从真源重建向量 ANN、关键词和 wikilink 图谱索引                       | `src/lib/vector/`, `src/lib/graph/`                                                          |
 
 技术栈：TypeScript / Next.js 14 / React 18 / Vercel AI SDK / SQLite / HNSW 向量索引 / Tailwind CSS
 
@@ -260,6 +265,7 @@ MIT
 ---
 
 <a id="english"></a>
+
 ## English
 
 **Auto-Memeries-Doll** is a local-first AI assistant that automatically captures, categorizes, and organizes your conversations into structured Markdown notes — so the AI never forgets what you discussed earlier.

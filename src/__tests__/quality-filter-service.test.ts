@@ -64,6 +64,14 @@ describe("QualityFilterService", () => {
     expect(result).toMatchObject({ verdict: "accept", score: 9 });
   });
 
+  it("score = 7 → review（严格筛选，避免把边缘内容误放行）", async () => {
+    (ModelAdapter.generate as any).mockResolvedValue(llmReply({ score: 7, reason: "还不够扎实" }));
+
+    const result = await service.filter(makeCandidate());
+
+    expect(result).toMatchObject({ verdict: "review", score: 7 });
+  });
+
   it("4 ≤ score < 7 → review（灰区转人工）", async () => {
     (ModelAdapter.generate as any).mockResolvedValue(llmReply({ score: 5, reason: "信息量一般" }));
 

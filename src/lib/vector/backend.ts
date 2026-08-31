@@ -360,19 +360,17 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
     const index = this.createIndex(dimensions);
 
     if (rows.length > 0) {
-      const keys = new BigUint64Array(rows.length);
-      const vectors = new Float32Array(rows.length * dimensions);
+      const keys: bigint[] = [];
+      const vectors: number[] = [];
 
-      let validCount = 0;
       for (const row of rows) {
         try {
           const embedding = JSON.parse(row.embedding) as number[];
           if (embedding.length !== dimensions) {
             throw new Error(`向量 ${row.memoryId} 的 dimensions 字段与实际长度不一致`);
           }
-          keys[validCount] = this.keyForMemoryId(row.memoryId);
-          vectors.set(embedding, validCount * dimensions);
-          validCount++;
+          keys.push(this.keyForMemoryId(row.memoryId));
+          vectors.push(...embedding);
         } catch (error) {
           logger.vector.warn("跳过损坏的向量记录，继续重建 HNSW 索引", {
             memoryId: row.memoryId,
@@ -381,8 +379,12 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
         }
       }
 
-      if (validCount > 0) {
-        index.add(keys.slice(0, validCount), vectors.slice(0, validCount * dimensions), 1);
+      if (keys.length > 0) {
+        index.add(
+          BigUint64Array.from(keys),
+          Float32Array.from(vectors),
+          1,
+        );
       }
     }
 

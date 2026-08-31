@@ -21,10 +21,10 @@ export type QualityFilterResult =
   | { verdict: "reject"; score: number; kind: MemoryKind; reason: string }
   | { verdict: "review"; score?: number; kind?: MemoryKind; reason: string };
 
-/** 评分 ≥ 此值直接入库 */
-const ACCEPT_SCORE = 7;
+/** 评分 ≥ 此值才允许直接入库 */
+const ACCEPT_SCORE = 8;
 /** 评分 < 此值终态拒绝；两者之间转人工 */
-const REJECT_SCORE = 4;
+const REJECT_SCORE = 5;
 /** 非标准输出时的最大重试次数 */
 const MAX_PARSE_ATTEMPTS = 2;
 
@@ -164,10 +164,17 @@ ${similar.map((s, i) => `${i + 1}. 《${s.title}》（相似度 ${(s.similarity 
 摘要：${candidate.summary}
 内容：${candidate.content.slice(0, 2000)}
 ${evidenceBlock}${similarBlock}
-按以下三个维度综合打 0-10 分：
-- 新颖性：知识库是否已有等价信息（与上面相似条目高度重合则新颖性低）
-- 信息密度：包含具体的事实、决策、经验教训，而非空泛表述
-- 时效价值：值得长期保留的知识，而非闲聊、寒暄、广告或碎片
+按以下严格标准综合打 0-10 分：
+- 9-10：明确可复用的高价值知识，包含具体事实、决策、经验、教训、约束、反例或可执行结论，且不是重复信息
+- 8：明显值得长期保留，信息具体、可复用、有上下文，能帮助未来决策或行动
+- 5-7：有一点价值但不够扎实、过于泛泛、上下文不足、重复度偏高、或只是“看起来有点用”
+- 0-4：闲聊、寒暄、空话、感想、广告、噪声、模糊判断、没有实际新增信息
+
+判定规则：
+- 如果你对“是否值得长期保存”有任何犹豫，分数不要超过 7
+- 只要内容缺少明确新信息、可操作结论、可复用经验，或者与已有记忆高度重复，就不要给 8 分以上
+- 评分要保守，宁可进入 review，也不要把边缘内容误放行到长期知识库
+- 目标是严格筛选出真正有价值的记忆，不是尽量放行更多内容
 
 同时判定内容性质 kind：
 - fact：来源中有明确依据的事实/决策/经验

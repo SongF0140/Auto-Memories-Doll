@@ -19,6 +19,15 @@ function rowFromRecord(record: VectorRecord): VectorSearchRow {
   };
 }
 
+function validateVectorRecord(record: VectorRecord): void {
+  if (!Array.isArray(record.embedding) || record.embedding.length === 0) {
+    throw new Error("向量不能为空");
+  }
+  if (record.embedding.length !== record.dimensions) {
+    throw new Error("dimensions 字段与实际向量长度不一致");
+  }
+}
+
 export class VectorIndex {
   private db: Database.Database;
   private searchBackend: VectorSearchBackend;
@@ -42,6 +51,7 @@ export class VectorIndex {
   }
 
   create(record: VectorRecord): void {
+    validateVectorRecord(record);
     const previous = this.read(record.memoryId);
     const stmt = this.db.prepare(`
       INSERT INTO vector_records (memoryId, embedding, model, dimensions, updatedAt)

@@ -15,7 +15,7 @@ export const buildVectorRecord = async (memoryId: string, text: string): Promise
     memoryId,
     embedding,
     model: apiConfig.embedding.name,
-    dimensions: apiConfig.embedding.dimensions,
+    dimensions: embedding.length,
     updatedAt: getCurrentTime(),
   };
 };

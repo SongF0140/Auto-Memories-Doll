@@ -71,6 +71,32 @@ describe("VectorIndex", () => {
     expect(record!.dimensions).toBe(3);
   });
 
+  it("rejects vector records whose dimensions do not match the embedding length", () => {
+    expect(() =>
+      index.create({
+        memoryId: "m1",
+        embedding: [1, 0, 0],
+        model: "test-model",
+        dimensions: 1536,
+        updatedAt: "2026-01-01",
+      }),
+    ).toThrow("dimensions 字段与实际向量长度不一致");
+    expect(index.read("m1")).toBeNull();
+  });
+
+  it("rejects empty vector records before they reach the ANN backend", () => {
+    expect(() =>
+      index.create({
+        memoryId: "m1",
+        embedding: [],
+        model: "test-model",
+        dimensions: 1536,
+        updatedAt: "2026-01-01",
+      }),
+    ).toThrow("向量不能为空");
+    expect(index.read("m1")).toBeNull();
+  });
+
   it("upserts on create (INSERT OR REPLACE)", () => {
     index.create({ memoryId: "m1", embedding: [1, 0], model: "m", dimensions: 2, updatedAt: "t1" });
     index.create({ memoryId: "m1", embedding: [0, 1], model: "m", dimensions: 2, updatedAt: "t2" });

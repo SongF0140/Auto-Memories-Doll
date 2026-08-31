@@ -102,6 +102,21 @@ vi.mock("../lib/ai/model-adapter", () => ({
     generateEmbedding: vi.fn(() =>
       Promise.resolve({ embedding: [0.1], model: "test", timestamp: "2026-01-01" }),
     ),
+    // 抽取服务依赖：返回单卡 JSON（与原 record 等价，保持断言兼容）
+    generate: vi.fn(() =>
+      Promise.resolve({
+        content: JSON.stringify({
+          memories: [
+            {
+              title: "Pipeline memory",
+              summary: "pipeline summary",
+              content: "remember pipeline content",
+              tags: ["pipeline"],
+            },
+          ],
+        }),
+      }),
+    ),
   },
 }));
 
@@ -149,6 +164,7 @@ vi.mock("../lib/storage/file-manager", () => ({
 
 vi.mock("../lib/storage/path-resolver", () => ({
   getArchivePath: () => "archive",
+  getMemoryRoot: () => "memory-root",
 }));
 
 vi.mock("fs", async () => {

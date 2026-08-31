@@ -146,6 +146,52 @@ describe("MemoryService — 队列基础操作", () => {
     // pending 列表也不再包含
     expect(svc.getPendingEvents()).toHaveLength(0);
   });
+
+  it("dequeueEventById only consumes the requested event and leaves older sibling pending", () => {
+    const svc = new MemoryService();
+    const oldEvent = makeEvent("m1", "2026-01-01T00:00:00Z", { content: "new memory" });
+    const optimizationEvent = makeEvent("m1", "2026-01-02T00:00:00Z", {
+      content: "optimized old memory",
+      tags: ["旧记忆优化"],
+    });
+    oldEvent.eventId = "evt-old";
+    optimizationEvent.eventId = "evt-optimization";
+    svc.enqueueEvent(oldEvent);
+    svc.enqueueEvent(optimizationEvent);
+
+    const dequeued = svc.dequeueEventById("evt-optimization");
+
+    expect(dequeued?.eventId).toBe("evt-optimization");
+    expect(dequeued?.status).toBe("processing");
+    const nextByMemoryId = svc.dequeueEvent("m1");
+    expect(nextByMemoryId?.eventId).toBe("evt-old");
+  });
+
+  it("hasPendingEventWithTag detects unfinished events by candidate tags", () => {
+    const svc = new MemoryService();
+    const event = makeEvent("m1", "2026-01-01T00:00:00Z", { tags: ["旧记忆优化"] });
+    svc.enqueueEvent(event);
+
+    expect(svc.hasPendingEventWithTag("m1", "旧记忆优化")).toBe(true);
+
+    event.status = "done";
+    svc.updateEvent(event);
+    expect(svc.hasPendingEventWithTag("m1", "旧记忆优化")).toBe(false);
+  });
+
+  it("updateEventCandidate persists a rewritten candidate and changed fields", () => {
+    const svc = new MemoryService();
+    const event = makeEvent("m1", "2026-01-01T00:00:00Z", { topic: "ai-coding" });
+    svc.enqueueEvent(event);
+
+    const rewrittenCandidate = JSON.parse(event.candidate);
+    rewrittenCandidate.topic = "meetings";
+    svc.updateEventCandidate(event.eventId, rewrittenCandidate, ["content", "topic", "topicZh"]);
+
+    const updated = svc.getEvent(event.eventId)!;
+    expect(JSON.parse(updated.candidate).topic).toBe("meetings");
+    expect(updated.changedFields).toEqual(["content", "topic", "topicZh"]);
+  });
 });
 
 describe("MemoryService — 串行消费顺序", () => {

@@ -15,6 +15,7 @@ export type AuditResult = {
 export type MemoryStoreReader = {
   getMemory: (id: string) => MemoryRecord | null;
   dequeueEvent: (memoryId: string) => PendingEvent | null;
+  dequeueEventById?: (eventId: string) => PendingEvent | null;
   updateEvent: (event: PendingEvent) => void;
 };
 
@@ -27,8 +28,10 @@ export class Auditor {
     this.versionManager = new VersionManager();
   }
 
-  async process(memoryId: string): Promise<AuditResult | null> {
-    const event = this.store.dequeueEvent(memoryId);
+  async process(memoryId: string, eventId?: string): Promise<AuditResult | null> {
+    const event = eventId
+      ? (this.store.dequeueEventById?.(eventId) ?? null)
+      : this.store.dequeueEvent(memoryId);
     if (!event) return null;
 
     try {

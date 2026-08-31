@@ -7,6 +7,11 @@ export type MemoryEvidence = {
   text: string;
   /** 证据位置：来源文件路径或 URL */
   location?: string;
+  /**
+   * 来源原文的 sha256（抽取型记忆专用）：入库内容是中文重写卡，
+   * 与原文不再字面可比，靠此哈希判断来源文件是否变更 / 是否重复入库
+   */
+  sourceHash?: string;
 };
 
 export type MemoryRecord = {

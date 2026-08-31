@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRecord } from "../types/memory";
 
 // ── mock: processJsonPipeline ──
 const pipelineMock = vi.hoisted(() => ({
@@ -68,15 +69,25 @@ vi.mock("../lib/memory/builder", () => ({
       version: 2,
     }),
   ),
-  buildPendingEvent: vi.fn((id: string, sourceType: string, memory: any) => ({
-    eventId: "evt-1",
-    memoryId: id,
-    eventType: sourceType,
-    candidate: JSON.stringify(memory),
-    changedFields: Object.keys(memory),
-    status: "pending" as const,
-    createdAt: "2026-01-01",
-  })),
+  buildPendingEvent: vi.fn(
+    (
+      id: string,
+      sourceType: string,
+      memory: any,
+      changedFields?: string[],
+      eventType?: string,
+    ) => ({
+      eventId: "evt-1",
+      memoryId: id,
+      sourceType,
+      eventType,
+      candidate: JSON.stringify(memory),
+      changedFields: changedFields ?? Object.keys(memory),
+      status: "pending" as const,
+      createdAt: "2026-01-01",
+      retryCount: 0,
+    }),
+  ),
 }));
 
 vi.mock("../lib/memory/validator", () => ({
@@ -167,9 +178,15 @@ function createMemoryServiceStub() {
     listMemoryContents: vi.fn(),
     enqueueEvent: vi.fn(),
     dequeueEvent: vi.fn(),
+    dequeueEventById: vi.fn(),
     getPendingEvents: vi.fn(),
+    getEventsByStatus: vi.fn(() => []),
+    resetProcessingEvents: vi.fn(() => 0),
+    listCollectedMemories: vi.fn(() => [] as MemoryRecord[]),
+    hasPendingEventWithTag: vi.fn(() => false),
     getEvent: vi.fn(),
     updateEvent: vi.fn(),
+    updateEventCandidate: vi.fn(),
     classifyMemory: vi.fn(),
     count: vi.fn(() => 0),
     close: vi.fn(),
@@ -214,6 +231,17 @@ vi.mock("../server/services/quality-filter-service", () => ({
   QualityFilterService: vi.fn(() => ({ filter: qualityFilterMock })),
 }));
 
+const topicClassifyMock = vi.fn();
+vi.mock("../server/services/topic-classification-service", () => ({
+  TopicClassificationService: vi.fn(() => ({ classify: topicClassifyMock })),
+}));
+
+// ── mock: 记忆抽取服务（中文拆卡）──
+const extractionExtractMock = vi.fn();
+vi.mock("../server/services/memory-extraction-service", () => ({
+  MemoryExtractionService: vi.fn(() => ({ extract: extractionExtractMock })),
+}));
+
 vi.mock("../features/audit/reporter", () => ({
   AuditReporter: vi.fn(() => ({
     generateMarkdownReport: vi.fn(() => Promise.resolve("# Audit Report")),
@@ -246,6 +274,16 @@ describe("Orchestrator", () => {
     };
     builderMock.validatorResult = true;
     qualityFilterMock.mockResolvedValue({ verdict: "accept", score: 8, kind: "fact" });
+    topicClassifyMock.mockImplementation(
+      async ({ suggestedTopic }: { suggestedTopic: string }) => ({
+        topic: suggestedTopic,
+        confidence: 0.8,
+        source: "model",
+      }),
+    );
+    extractionExtractMock.mockResolvedValue([
+      { title: "抽取卡片", summary: "中文摘要", content: "中文正文", tags: ["中文"] },
+    ]);
     vectorIndexSearch.mockReturnValue([]);
     auditorProcessMock.mockResolvedValue(null);
     memoryServiceStub.listMemoryContents.mockReturnValue([]);
@@ -546,6 +584,38 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("新建事件写回前先用中级模型复核并修正 topic", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventType: "ingest",
+        candidate: JSON.stringify({ ...builderMock.memoryRecord, topic: "ai-coding" }),
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(null);
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      topicClassifyMock.mockResolvedValueOnce({
+        topic: "meetings",
+        confidence: 0.9,
+        source: "model",
+        reason: "会议纪要",
+      });
+
+      await orchestrator.processQueue();
+
+      expect(topicClassifyMock).toHaveBeenCalledWith(
+        expect.objectContaining({ suggestedTopic: "ai-coding" }),
+      );
+      expect(memoryServiceStub.updateEventCandidate).toHaveBeenCalledWith(
+        event.eventId,
+        expect.objectContaining({ topic: "meetings", topicZh: "会议记录" }),
+        expect.arrayContaining(["topic", "topicZh"]),
+      );
+      expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ topic: "meetings", topicZh: "会议记录" }),
+      );
+    });
+
     it("新建路径向量召回不可用（embedding 失败）→ fail-closed 转人工 review", async () => {
       const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
@@ -685,6 +755,48 @@ describe("Orchestrator", () => {
       );
       expect(event.status).toBe("done");
     });
+
+    it("抽取产出多卡 → 首卡沿用稳定 ID，后续卡 -p2/-p3 后缀依次入库", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest" };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(null);
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      extractionExtractMock.mockResolvedValue([
+        { title: "卡一", summary: "摘要一", content: "正文一", tags: ["t1"] },
+        { title: "卡二", summary: "摘要二", content: "正文二", tags: ["t2"] },
+        { title: "卡三", summary: "摘要三", content: "正文三", tags: [] },
+      ]);
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("done");
+      const ids = memoryServiceStub.createMemoryRecord.mock.calls.map(
+        (call) => (call[0] as { id: string }).id,
+      );
+      expect(ids).toEqual(["test-id", "test-id-p2", "test-id-p3"]);
+      // 每张卡片都独立分类
+      expect(memoryServiceStub.classifyMemory).toHaveBeenCalledTimes(3);
+    });
+
+    it("抽取失败（LLM 输出异常）→ fail-closed 转人工 review，不落盘", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(null);
+      extractionExtractMock.mockResolvedValue(null);
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("review");
+      expect(event.retryCount).toBe(0);
+      expect(memoryServiceStub.createMemoryRecord).not.toHaveBeenCalled();
+      const fileManager = await import("../lib/storage/file-manager");
+      expect(fileManager.createFailureRecord).toHaveBeenCalledWith(
+        "test-id",
+        "memory-extraction",
+        expect.any(Error),
+      );
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -715,6 +827,67 @@ describe("Orchestrator", () => {
   // ═══════════════════════════════════════════════════════════════
 
   describe("processEvent — 更新记忆", () => {
+    it("旧记忆卡片存在乱码时先入队优化事件，不直接合并新记忆", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventType: "update" as const,
+        changedFields: ["content"],
+        retryCount: 0,
+      };
+      const existing = {
+        ...builderMock.memoryRecord,
+        title: "Old messy card",
+        summary: "???? garbled summary",
+        content: "This memory card is broken: �� �� ??? and bad markdown ###NoSpace",
+        tags: ["react-native"],
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue(existing);
+
+      await orchestrator.processQueue();
+
+      expect(auditorProcessMock).not.toHaveBeenCalled();
+      expect(memoryServiceStub.updateMemory).not.toHaveBeenCalled();
+      expect(memoryServiceStub.enqueueEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          memoryId: event.memoryId,
+          eventType: "update",
+          changedFields: expect.arrayContaining(["title", "summary", "content", "tags"]),
+        }),
+      );
+      const optimizationEvent = memoryServiceStub.enqueueEvent.mock.calls[0][0];
+      const optimizedCandidate = JSON.parse(optimizationEvent.candidate);
+      expect(optimizedCandidate.title).toBeTruthy();
+      expect(optimizedCandidate.summary).not.toContain("????");
+      expect(optimizedCandidate.content).not.toContain("��");
+      expect(optimizedCandidate.tags).toContain("旧记忆优化");
+      expect(event.status).toBe("pending");
+    });
+
+    it("旧记忆已有优化事件待处理时暂缓新记忆合并且不重复入队", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventType: "update" as const,
+        changedFields: ["content"],
+        retryCount: 0,
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue({
+        ...builderMock.memoryRecord,
+        title: "Broken old card",
+        summary: "????",
+        content: "Messy old card �� with unreadable content",
+      });
+      memoryServiceStub.hasPendingEventWithTag.mockReturnValue(true);
+
+      await orchestrator.processQueue();
+
+      expect(auditorProcessMock).not.toHaveBeenCalled();
+      expect(memoryServiceStub.enqueueEvent).not.toHaveBeenCalled();
+      expect(memoryServiceStub.updateMemory).not.toHaveBeenCalled();
+      expect(event.status).toBe("pending");
+    });
+
     it("Auditor 返回 auto_merge → updateMemory → 同步 Markdown + 分类 + 索引", async () => {
       const event = {
         ...builderMock.pendingEvent,
@@ -742,11 +915,54 @@ describe("Orchestrator", () => {
 
       await orchestrator.processQueue();
 
+      expect(auditorProcessMock).toHaveBeenCalledWith(event.memoryId, event.eventId);
       expect(memoryServiceStub.updateMemory).toHaveBeenCalledWith(
         builderMock.pendingEvent.memoryId,
         expect.objectContaining({ title: "merged title", content: "merged content" }),
       );
       expect(event.status).toBe("done");
+    });
+
+    it("更新事件写回前复核 topic，变更字段包含 topic 并让 Auditor 消费当前事件", async () => {
+      const event = {
+        ...builderMock.pendingEvent,
+        eventType: "update" as const,
+        changedFields: ["content"],
+        candidate: JSON.stringify({ ...builderMock.memoryRecord, topic: "ai-coding" }),
+      };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      memoryServiceStub.getMemory.mockReturnValue({
+        ...builderMock.memoryRecord,
+        topic: "ai-coding",
+        content: "旧正文",
+      });
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      topicClassifyMock.mockResolvedValueOnce({
+        topic: "meetings",
+        confidence: 0.91,
+        source: "model",
+      });
+      auditorProcessMock.mockResolvedValue({
+        status: "done",
+        resolution: {
+          action: "auto_merge",
+          merged: { content: "merged content", topic: "meetings", topicZh: "会议记录" },
+          conflicts: [],
+        },
+      });
+
+      await orchestrator.processQueue();
+
+      expect(memoryServiceStub.updateEventCandidate).toHaveBeenCalledWith(
+        event.eventId,
+        expect.objectContaining({ topic: "meetings", topicZh: "会议记录" }),
+        expect.arrayContaining(["content", "topic", "topicZh"]),
+      );
+      expect(auditorProcessMock).toHaveBeenCalledWith(event.memoryId, event.eventId);
+      expect(memoryServiceStub.updateMemory).toHaveBeenCalledWith(
+        event.memoryId,
+        expect.objectContaining({ topic: "meetings", topicZh: "会议记录" }),
+      );
     });
 
     it("Auditor 返回 manual_decision → AuditService.createConflict → status=done", async () => {
@@ -1013,6 +1229,40 @@ describe("Orchestrator", () => {
       await expect(orchestrator.resolveReviewEvent("evt-1", "accept")).rejects.toThrow(
         "事件不在待审状态",
       );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // rebuildCollectedMemories — 重建采集卡片
+  // ═══════════════════════════════════════════════════════════════
+
+  describe("rebuildCollectedMemories", () => {
+    it("删除全部 ingest 采集记忆及其派生 Markdown", async () => {
+      const collected = {
+        ...builderMock.memoryRecord,
+        id: "col-1",
+        topic: "tool-sessions",
+        sourceType: "ingest",
+        accessedAt: "2026-01-01",
+        accessCount: 0,
+        heatScore: 0,
+      } as MemoryRecord;
+      memoryServiceStub.listCollectedMemories.mockReturnValue([collected]);
+      memoryServiceStub.getMemory.mockReturnValue(collected);
+
+      const deleted = await orchestrator.rebuildCollectedMemories();
+
+      expect(deleted).toBe(1);
+      expect(memoryServiceStub.deleteMemory).toHaveBeenCalledWith("col-1");
+      const fileManager = await import("../lib/storage/file-manager");
+      expect(fileManager.deleteFile).toHaveBeenCalledWith("/fake/notes/tool-sessions/col-1.md");
+    });
+
+    it("无采集记忆时返回 0 且不触发删除", async () => {
+      const deleted = await orchestrator.rebuildCollectedMemories();
+
+      expect(deleted).toBe(0);
+      expect(memoryServiceStub.deleteMemory).not.toHaveBeenCalled();
     });
   });
 

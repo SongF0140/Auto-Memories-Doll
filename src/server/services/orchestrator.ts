@@ -4,10 +4,15 @@ import { AuditReportWriter } from "./audit-report-writer";
 import { Auditor } from "../../features/audit/auditor";
 import { AuditReporter } from "../../features/audit/reporter";
 import { QualityFilterService, SimilarMemoryHint } from "./quality-filter-service";
+import { MemoryExtractionService, ExtractedCard } from "./memory-extraction-service";
+import { MemoryCardHygieneService } from "./memory-card-hygiene-service";
+import { TopicClassificationService } from "./topic-classification-service";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
+import { createHash } from "crypto";
 import { MemoryRecord, MemoryKind, MemoryEvidence, PendingEvent } from "../../types/memory";
 import { buildMemoryRecord, buildPendingEvent } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
+import { generateZhFields } from "../../lib/memory/translator";
 import { buildVectorRecord } from "../../lib/vector/generator";
 import { VectorIndex } from "../../lib/vector/index";
 import { updateIndexMap } from "../../lib/storage/index-writer";
@@ -39,6 +44,11 @@ const SIMILAR_HINT_MIN_SIMILARITY = 0.6;
 /** 向量召回的 top-K 条数 */
 const RECALL_TOP_K = 3;
 
+/** 来源原文的 sha256：抽取型记忆用它做变更检测与重复入库跳过 */
+function sourceHashOf(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
 /** 向量召回的单条相似命中 */
 type SimilarHit = { memoryId: string; similarity: number; title: string; summary: string };
 
@@ -62,18 +72,27 @@ export class Orchestrator {
   private auditService: AuditService;
   private auditor: Auditor;
   private qualityFilter: QualityFilterService;
+  private extraction: MemoryExtractionService;
+  private memoryCardHygiene: MemoryCardHygieneService;
+  private topicClassification: TopicClassificationService;
   private reporter: AuditReporter;
   private auditReportWriter: AuditReportWriter;
+  /** 本批已发生变更的 topic 集合：聚合文件重写延后到批末 flushDerivedStores */
+  private deferredTopics = new Set<string>();
 
   constructor() {
     this.memoryService = new MemoryService();
     this.auditService = new AuditService();
     this.qualityFilter = new QualityFilterService();
+    this.extraction = new MemoryExtractionService();
+    this.memoryCardHygiene = new MemoryCardHygieneService();
+    this.topicClassification = new TopicClassificationService();
     this.reporter = new AuditReporter();
     this.auditReportWriter = new AuditReportWriter(this.reporter);
     this.auditor = new Auditor({
       getMemory: (id) => this.memoryService.getMemory(id),
       dequeueEvent: (memoryId) => this.memoryService.dequeueEvent(memoryId),
+      dequeueEventById: (eventId) => this.memoryService.dequeueEventById(eventId),
       updateEvent: (event) => this.memoryService.updateEvent(event),
     });
   }
@@ -164,12 +183,26 @@ export class Orchestrator {
     return pendingEvent.eventId;
   }
 
+  /** 僵尸事件恢复：进程上次退出时卡在 processing 的事件拉回 pending（启动时由 AuditWorker 调用） */
+  recoverStuckEvents(): number {
+    const recovered = this.memoryService.resetProcessingEvents();
+    if (recovered > 0) {
+      logger.audit.info(`恢复 ${recovered} 个僵尸事件（processing → pending）`);
+    }
+    return recovered;
+  }
+
   async processQueue(): Promise<void> {
     const pendingEvents = this.getPendingEvents({ limit: QUEUE_BATCH_SIZE });
+    // 轻量事件优先：巨型会话候选（几百 KB 的 JSON）单独一个就要 LLM 处理几分钟，
+    // 排在队头会阻塞整批；按候选体积升序处理，让去重/小事件快速消化
+    pendingEvents.sort((a, b) => (a.candidate?.length ?? 0) - (b.candidate?.length ?? 0));
 
     for (const event of pendingEvents) {
       await this.processEvent(event);
     }
+    // topic 聚合文件延后到批末统一重写（见 syncDerivedStores）
+    await this.flushDerivedStores();
 
     if (pendingEvents.length > 0) {
       const updatedMemories = this.memoryService.listMemories({ limit: LIST_LIMIT });
@@ -188,7 +221,7 @@ export class Orchestrator {
 
   private async processEvent(event: PendingEvent): Promise<string | void> {
     try {
-      const candidate = this.parseCandidate(event);
+      let candidate = this.parseCandidate(event);
 
       // 删除事件：直接删除记忆，不经过审计差异比对
       if (event.eventType === "delete") {
@@ -202,6 +235,8 @@ export class Orchestrator {
         return;
       }
 
+      candidate = await this.reviewCandidateTopic(event, candidate);
+
       const existing = this.memoryService.getMemory(event.memoryId);
 
       if (!existing) {
@@ -209,58 +244,42 @@ export class Orchestrator {
         event.status = "processing";
         this.memoryService.updateEvent(event);
 
-        // 全入口统一的向量语义去重（processIngest 的 Jaccard 是写前快筛，此处兜底改写型重复）
-        const similarHits = await this.recallSimilarMemories(candidate.content, event.memoryId);
-        if (similarHits === null) {
-          // fail-closed：embedding 失败时无法做语义去重，重复内容可能绕过保护静默入库 → 转人工
-          event.status = "review";
-          this.memoryService.updateEvent(event);
-          await this.recordQualityFailure(
-            event,
-            "vector-recall",
-            new Error("向量召回不可用，无法进行语义去重，转人工裁决"),
-          );
-          return;
-        }
-        const duplicate = similarHits.find((h) => h.similarity >= VECTOR_DEDUP_SIMILARITY);
-        if (duplicate) {
-          event.status = "rejected";
-          this.memoryService.updateEvent(event);
-          await this.recordQualityFailure(
-            event,
-            "vector-dedup",
-            new Error(
-              `与现有记忆《${duplicate.title}》高度相似（${(duplicate.similarity * 100).toFixed(1)}%），拒绝入库`,
-            ),
-          );
-          return;
-        }
-
-        // 质量闸门：注入相似记忆上下文，让 LLM 能判断新颖性（是否与库内已有知识重合）
-        const hints: SimilarMemoryHint[] = similarHits
-          .filter((h) => h.similarity >= SIMILAR_HINT_MIN_SIMILARITY)
-          .map((h) => ({ title: h.title, summary: h.summary, similarity: h.similarity }));
-        const filterResult = await this.qualityFilter.filter(candidate, hints);
-        if (filterResult.verdict !== "accept") {
-          // reject → 终态拒绝不重试；review → 挂起待人工裁决（均不进 failed 重试循环）
-          event.status = filterResult.verdict === "reject" ? "rejected" : "review";
-          this.memoryService.updateEvent(event);
-          await this.recordQualityFailure(
-            event,
-            "quality-filter",
-            new Error(filterResult.reason || "质量未达标"),
-          );
-          return;
-        }
-
-        // 闸门判定的记忆类型回填到候选（非 fact 已在闸门内转为 review，不会走到这里）
-        candidate.kind = filterResult.kind;
-
-        const newId = await this.commitNewMemory(event, candidate);
-
-        event.status = "done";
-        this.memoryService.updateEvent(event);
+        const newId = await this.ingestByExtraction(event, candidate);
+        // ingestByExtraction 仅在事件终态 done 时返回锚点 ID，其余终态（review/rejected）返回 undefined
         return newId;
+      }
+
+      // 抽取型记忆（evidence 带 sourceHash）不走 Auditor diff：
+      // existing.content 是中文重写卡、candidate 是采集原文，逐字段比对没有意义。
+      // 原文哈希未变 → 无实质变更直接完成；变了 → 删除旧分卡后重跑抽取消费链
+      if (existing.evidence?.sourceHash) {
+        if (existing.evidence.sourceHash === sourceHashOf(candidate.content)) {
+          event.status = "done";
+          this.memoryService.updateEvent(event);
+          return;
+        }
+        await this.deleteExtractedCards(event.memoryId);
+        event.status = "processing";
+        this.memoryService.updateEvent(event);
+        await this.ingestByExtraction(event, candidate);
+        return;
+      }
+
+      const existingHygieneAction = this.getExistingMemoryHygieneAction(event, candidate, existing);
+      if (existingHygieneAction === "stage-optimization") {
+        await this.stageExistingMemoryOptimization(existing);
+        logger.audit.warn("旧记忆卡片质量不合格，已先入队优化事件，本轮暂缓合并新记忆", {
+          memoryId: event.memoryId,
+          eventId: event.eventId,
+        });
+        return;
+      }
+      if (existingHygieneAction === "defer") {
+        logger.audit.warn("旧记忆卡片已有优化事件待处理，本轮暂缓合并新记忆", {
+          memoryId: event.memoryId,
+          eventId: event.eventId,
+        });
+        return;
       }
 
       // 更新路径：content 有实质变更时同样过质量闸门（防止借更新洗入低质内容）。
@@ -315,7 +334,7 @@ export class Orchestrator {
 
       // 更新路径：由 Auditor.process → dequeueEvent 原子声明（pending → processing）。
       // 此处不能再提前置为 processing，否则 dequeueEvent 查不到 pending 事件会返回 null。
-      const auditResult = await this.auditor.process(event.memoryId);
+      const auditResult = await this.auditor.process(event.memoryId, event.eventId);
 
       if (!auditResult) {
         event.status = "failed";
@@ -420,6 +439,119 @@ export class Orchestrator {
     }
   }
 
+  private async reviewCandidateTopic(
+    event: PendingEvent,
+    candidate: MemoryRecord,
+  ): Promise<MemoryRecord> {
+    const suggestedTopic = candidate.topic || "uncategorized";
+    const result = await this.topicClassification.classify({
+      title: candidate.title,
+      summary: candidate.summary,
+      content: candidate.content,
+      suggestedTopic,
+    });
+    if (candidate.topic === result.topic) return candidate;
+
+    const zhFields = generateZhFields(
+      candidate.title,
+      candidate.summary,
+      candidate.tags,
+      result.topic,
+    );
+    const reviewed: MemoryRecord = {
+      ...candidate,
+      topic: result.topic,
+      topicZh: zhFields.topicZh,
+    };
+    const changedFields = [...new Set([...event.changedFields, "topic", "topicZh"] as string[])];
+    event.candidate = JSON.stringify(reviewed);
+    event.changedFields = changedFields;
+    this.memoryService.updateEventCandidate(event.eventId, reviewed, changedFields);
+    return reviewed;
+  }
+
+  private getExistingMemoryHygieneAction(
+    event: PendingEvent,
+    candidate: MemoryRecord,
+    existing: MemoryRecord,
+  ): "continue" | "stage-optimization" | "defer" {
+    if (event.eventType === "delete") return "continue";
+    if (this.memoryCardHygiene.isOptimizationCandidate(candidate)) return "continue";
+
+    const hygiene = this.memoryCardHygiene.inspect(existing);
+    if (!hygiene.needsOptimization) return "continue";
+
+    if (
+      this.memoryService.hasPendingEventWithTag(
+        existing.id,
+        MemoryCardHygieneService.optimizationTag,
+      )
+    ) {
+      return "defer";
+    }
+
+    return "stage-optimization";
+  }
+
+  private async stageExistingMemoryOptimization(existing: MemoryRecord): Promise<void> {
+    const hygiene = this.memoryCardHygiene.inspect(existing);
+    if (!hygiene.needsOptimization) return;
+
+    const optimized = await this.buildExistingMemoryOptimizationCandidate(existing, hygiene.issues);
+    const changedFields = (
+      ["title", "titleZh", "summary", "summaryZh", "content", "tags", "tagsZh"] as const
+    ).filter((field) => JSON.stringify(existing[field]) !== JSON.stringify(optimized[field]));
+
+    if (changedFields.length === 0) return;
+
+    this.memoryService.enqueueEvent(
+      buildPendingEvent(
+        existing.id,
+        existing.sourceType,
+        optimized,
+        changedFields as string[],
+        "update",
+      ),
+    );
+  }
+
+  private async buildExistingMemoryOptimizationCandidate(
+    existing: MemoryRecord,
+    issues: ReturnType<MemoryCardHygieneService["inspect"]>["issues"],
+  ): Promise<MemoryRecord> {
+    try {
+      const cards = await this.extraction.extract(existing, []);
+      const card = cards?.[0];
+      if (card) {
+        const tags = [
+          ...new Set([
+            ...existing.tags,
+            ...card.tags,
+            MemoryCardHygieneService.optimizationTag,
+            ...issues.map((issue) => `修复-${issue}`),
+          ]),
+        ];
+        return {
+          ...existing,
+          title: card.title,
+          titleZh: card.title,
+          summary: card.summary,
+          summaryZh: card.summary,
+          content: card.content,
+          tags,
+          tagsZh: tags,
+        };
+      }
+    } catch (error) {
+      logger.audit.warn("旧记忆卡片模型优化失败，改用保守清理候选", {
+        memoryId: existing.id,
+        error: (error as Error).message,
+      });
+    }
+
+    return this.memoryCardHygiene.buildFallbackOptimization(existing, issues);
+  }
+
   /**
    * 向量召回 top-K 相似记忆（含标题/摘要），一次调用同时服务：
    * 1. 向量语义去重（相似度 ≥ VECTOR_DEDUP_SIMILARITY 判重）
@@ -477,7 +609,8 @@ export class Orchestrator {
       logger.ingest.error("派生存储同步跳过：主存储读取为空");
       return;
     }
-    const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
+    // 单条 Markdown 立即写（廉价）；topic 聚合文件与 index-map 是全量重写，
+    // 一批几十条事件每条都重写一次会拖垮消费速度 → 延后到批末 flushDerivedStores
     const guard = (stage: string) => (err: unknown) => {
       logger.ingest.error(`派生存储同步失败（不阻塞入库）: ${stage}`, {
         memoryId: memory.id,
@@ -485,11 +618,193 @@ export class Orchestrator {
       });
       createFailureRecord(memory.id, stage, err as Error).catch(() => {});
     };
+    await writeMemoryMarkdown(memory).catch(guard("write-memory-markdown"));
+    this.deferredTopics.add(memory.topic);
+  }
+
+  /** 批末统一重写本批涉及 topic 的聚合文件与 index-map（processQueue 末尾调用） */
+  private async flushDerivedStores(): Promise<void> {
+    if (this.deferredTopics.size === 0) return;
+    const topics = [...this.deferredTopics];
+    this.deferredTopics.clear();
+    const all = this.memoryService.listMemories({ limit: LIST_LIMIT });
+    const guard = (stage: string, topic: string) => (err: unknown) => {
+      logger.ingest.error(`派生存储批量同步失败（不阻塞入库）: ${stage}`, {
+        topic,
+        error: (err as Error).message,
+      });
+    };
     await Promise.all([
-      writeMemoryMarkdown(memory).catch(guard("write-memory-markdown")),
-      updateAgentMarkdown(memory.topic, all).catch(guard("update-agent-markdown")),
-      updateIndexMap(all).catch(guard("update-index-map")),
+      ...topics.map((topic) =>
+        updateAgentMarkdown(topic, all).catch(guard("update-agent-markdown", topic)),
+      ),
+      updateIndexMap(all).catch(guard("update-index-map", topics.join(","))),
     ]);
+  }
+
+  /**
+   * 采集内容的统一消费链：向量语义去重 → 质量闸门 → 中文抽取拆卡 → 多卡片提交。
+   * 新建路径与抽取型记忆的更新路径共用。
+   * 事件终态（done/rejected/review）与失败归档在本方法内落库；done 时返回首卡 ID。
+   */
+  private async ingestByExtraction(
+    event: PendingEvent,
+    candidate: MemoryRecord,
+  ): Promise<string | undefined> {
+    // 全入口统一的向量语义去重（processIngest 的 Jaccard 是写前快筛，此处兜底改写型重复）
+    const similarHits = await this.recallSimilarMemories(candidate.content, event.memoryId);
+    if (similarHits === null) {
+      // fail-closed：embedding 失败时无法做语义去重，重复内容可能绕过保护静默入库 → 转人工
+      event.status = "review";
+      this.memoryService.updateEvent(event);
+      await this.recordQualityFailure(
+        event,
+        "vector-recall",
+        new Error("向量召回不可用，无法进行语义去重，转人工裁决"),
+      );
+      return;
+    }
+    const duplicate = similarHits.find((h) => h.similarity >= VECTOR_DEDUP_SIMILARITY);
+    if (duplicate) {
+      event.status = "rejected";
+      this.memoryService.updateEvent(event);
+      await this.recordQualityFailure(
+        event,
+        "vector-dedup",
+        new Error(
+          `与现有记忆《${duplicate.title}》高度相似（${(duplicate.similarity * 100).toFixed(1)}%），拒绝入库`,
+        ),
+      );
+      return;
+    }
+
+    // 质量闸门：注入相似记忆上下文，让 LLM 能判断新颖性（是否与库内已有知识重合）
+    const hints: SimilarMemoryHint[] = similarHits
+      .filter((h) => h.similarity >= SIMILAR_HINT_MIN_SIMILARITY)
+      .map((h) => ({ title: h.title, summary: h.summary, similarity: h.similarity }));
+    const filterResult = await this.qualityFilter.filter(candidate, hints);
+    if (filterResult.verdict !== "accept") {
+      // reject → 终态拒绝不重试；review → 挂起待人工裁决（均不进 failed 重试循环）
+      event.status = filterResult.verdict === "reject" ? "rejected" : "review";
+      this.memoryService.updateEvent(event);
+      await this.recordQualityFailure(
+        event,
+        "quality-filter",
+        new Error(filterResult.reason || "质量未达标"),
+      );
+      return;
+    }
+
+    // 闸门判定的记忆类型回填到候选（非 fact 已在闸门内转为 review，不会走到这里）
+    candidate.kind = filterResult.kind;
+
+    // 中文抽取拆卡：原文直存会是英文/raw markdown 大杂烩，这里按话题拆分并全文重写为中文。
+    // 抽取失败 fail-closed 转人工，绝不把原文大杂烩静默落盘。
+    const cards = await this.extraction.extract(candidate, hints);
+    if (!cards || cards.length === 0) {
+      event.status = "review";
+      this.memoryService.updateEvent(event);
+      await this.recordQualityFailure(
+        event,
+        "memory-extraction",
+        new Error("记忆抽取失败（模型输出异常或降级），转人工裁决"),
+      );
+      return;
+    }
+
+    const anchorId = await this.commitExtractedCards(event, candidate, cards);
+
+    event.status = "done";
+    this.memoryService.updateEvent(event);
+    return anchorId;
+  }
+
+  /**
+   * 提交一次抽取产出的多张中文卡片：
+   * 首卡沿用队列稳定 ID（作为来源锚点，维持跳过/去重语义），后续卡片用 -p2、-p3… 后缀。
+   * 每张卡片独立生成向量、分类并同步派生存储。
+   */
+  private async commitExtractedCards(
+    event: PendingEvent,
+    candidate: MemoryRecord,
+    cards: ExtractedCard[],
+  ): Promise<string> {
+    const hash = sourceHashOf(candidate.content);
+    let anchorId = "";
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const id = i === 0 ? event.memoryId : `${event.memoryId}-p${i + 1}`;
+      const record: MemoryRecord = {
+        ...candidate,
+        id,
+        title: card.title,
+        titleZh: card.title,
+        summary: card.summary,
+        summaryZh: card.summary,
+        content: card.content,
+        tags: card.tags.length > 0 ? card.tags : candidate.tags,
+        tagsZh: card.tags.length > 0 ? card.tags : candidate.tagsZh,
+        evidence: {
+          text: candidate.evidence?.text ?? candidate.content.slice(0, 500),
+          location: candidate.evidence?.location,
+          sourceHash: hash,
+        },
+      };
+      await this.memoryService.createMemoryRecord(record);
+      // 分类是派生信息：失败只记日志，不影响已入库的记忆
+      try {
+        this.memoryService.classifyMemory(id, card.content);
+      } catch (err) {
+        logger.ingest.error("记忆分类失败（不阻塞入库）", {
+          memoryId: id,
+          error: (err as Error).message,
+        });
+      }
+      await this.syncDerivedStores(this.memoryService.getMemory(id) ?? record);
+      if (i === 0) anchorId = id;
+    }
+    return anchorId;
+  }
+
+  /**
+   * 重建采集卡片：删除所有 sourceType=ingest 的文件采集记忆（SQLite + 向量 + 派生 Markdown），
+   * 由调用方随后全量重扫重新入队。用于清理旧入库链路（原文直存、英文/乱码大杂烩）留下的历史卡片——
+   * 这些卡片 content 与原文一致，重扫会被内容跳过；不删则向量去重也会把重采事件拒掉，永远无法重生成。
+   * 对话/手动/MCP 创建的记忆不受影响。返回删除的卡片数。
+   */
+  async rebuildCollectedMemories(): Promise<number> {
+    const collected = this.memoryService.listCollectedMemories();
+    for (const memory of collected) {
+      // 派生 Markdown 必须先删：残留文件会被重扫重新入队，把旧卡原样捞回来
+      await deleteFile(getNotePath(memory.topic, memory.id)).catch(() => {
+        // 文件可能不存在（同步失败或从未写出），忽略
+      });
+      this.memoryService.deleteMemory(memory.id);
+    }
+    if (collected.length > 0) {
+      logger.ingest.info(`[Orchestrator] 重建：已删除 ${collected.length} 张采集卡片，待重扫重采`);
+    }
+    return collected.length;
+  }
+
+  /** 删除一次抽取的全部历史卡片（首卡 + -p 后缀分卡），用于来源内容变更后的整体重建 */
+  private async deleteExtractedCards(anchorId: string): Promise<void> {
+    const ids = [anchorId];
+    for (let i = 2; i <= 32; i++) {
+      const id = `${anchorId}-p${i}`;
+      if (!this.memoryService.getMemory(id)) break;
+      ids.push(id);
+    }
+    for (const id of ids) {
+      const memory = this.memoryService.getMemory(id);
+      if (memory) {
+        // 派生 Markdown 一并删除：残留文件会被重扫重新入队，与重建出的新分卡重复
+        await deleteFile(getNotePath(memory.topic, memory.id)).catch(() => {
+          // 文件可能不存在，忽略
+        });
+      }
+      this.memoryService.deleteMemory(id);
+    }
   }
 
   /** 新建落盘：建 SQLite 记录（真源）+ 分类 + 派生同步。processEvent 与人工放行共用。 */
@@ -547,7 +862,13 @@ export class Orchestrator {
     event.status = "processing";
     this.memoryService.updateEvent(event);
     try {
-      await this.commitNewMemory(event, candidate);
+      // 人工已放行：仍做中文抽取（保证库内卡片风格一致），抽取不可用时兜底原样落盘
+      const cards = await this.extraction.extract(candidate, []);
+      if (cards && cards.length > 0) {
+        await this.commitExtractedCards(event, candidate, cards);
+      } else {
+        await this.commitNewMemory(event, candidate);
+      }
       event.status = "done";
       this.memoryService.updateEvent(event);
     } catch (error) {

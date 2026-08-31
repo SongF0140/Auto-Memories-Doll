@@ -290,6 +290,14 @@ export class MemoryService {
     return this.mapMemoryRow(row);
   }
 
+  /** 采集型记忆（sourceType=ingest）：全部来自文件采集，可由重扫重建。供重建操作圈定删除范围。 */
+  listCollectedMemories(): MemoryRecord[] {
+    const rows = this.db
+      .prepare("SELECT * FROM memories WHERE sourceType = 'ingest'")
+      .all() as any[];
+    return rows.map((row) => this.mapMemoryRow(row));
+  }
+
   getMemoriesByIds(ids: string[]): MemoryRecord[] {
     if (ids.length === 0) return [];
 
@@ -544,11 +552,55 @@ export class MemoryService {
     return transaction();
   }
 
+  dequeueEventById(eventId: string): PendingEvent | null {
+    // 事务包裹 SELECT + UPDATE：保证原子性，防止同 memoryId 的兄弟事件被误消费
+    const transaction = this.db.transaction(() => {
+      const selectStmt = this.db.prepare(`
+        SELECT * FROM pending_events
+        WHERE eventId = ? AND status = 'pending'
+        LIMIT 1
+      `);
+      const row = selectStmt.get(eventId) as any;
+      if (!row) return null;
+
+      const updateStmt = this.db.prepare(`
+        UPDATE pending_events SET status = 'processing' WHERE eventId = ? AND status = 'pending'
+      `);
+      const result = updateStmt.run(row.eventId);
+      if (result.changes === 0) return null;
+
+      return {
+        eventId: row.eventId,
+        memoryId: row.memoryId,
+        sourceType: row.sourceType as PendingEvent["sourceType"],
+        eventType: (row.eventType || undefined) as PendingEvent["eventType"],
+        candidate: row.candidate,
+        changedFields: safeJsonParse(
+          row.changedFields,
+          [] as string[],
+          `event ${row.eventId} changedFields`,
+        ),
+        createdAt: row.createdAt,
+        status: "processing" as PendingEvent["status"],
+        retryCount: row.retryCount,
+      };
+    });
+
+    return transaction();
+  }
+
   updateEvent(event: PendingEvent): void {
     const stmt = this.db.prepare(`
       UPDATE pending_events SET status = ?, retryCount = ? WHERE eventId = ?
     `);
     stmt.run(event.status, event.retryCount, event.eventId);
+  }
+
+  updateEventCandidate(eventId: string, candidate: MemoryRecord, changedFields: string[]): void {
+    const stmt = this.db.prepare(`
+      UPDATE pending_events SET candidate = ?, changedFields = ? WHERE eventId = ?
+    `);
+    stmt.run(JSON.stringify(candidate), JSON.stringify(changedFields), eventId);
   }
 
   getPendingEvents(opts?: { limit?: number }): PendingEvent[] {
@@ -575,6 +627,57 @@ export class MemoryService {
       status: row.status as PendingEvent["status"],
       retryCount: row.retryCount,
     }));
+  }
+
+  /**
+   * 僵尸事件恢复：上次进程退出时卡在 processing 的事件永远不会被重新消费，
+   * 启动时统一拉回 pending。返回恢复条数（仅用于日志）。
+   */
+  resetProcessingEvents(): number {
+    const stmt = this.db.prepare(
+      "UPDATE pending_events SET status = 'pending' WHERE status = 'processing'",
+    );
+    const result = stmt.run();
+    return result.changes;
+  }
+
+  /**
+   * 队列级内容等价检查：同一 memoryId 的未完成事件里是否已存在等价候选内容。
+   * 场景：重启重扫时，旧事件还在积压中（记忆尚未提交），仅靠 getMemory 判断会重复入队。
+   * 等价 = 内容完全相同，或队列里是旧全文、新采集是截断头部（截断内容是全文前缀）。
+   */
+  hasEquivalentPendingEvent(memoryId: string, content: string): boolean {
+    const stmt = this.db.prepare(
+      `SELECT candidate FROM pending_events
+       WHERE memoryId = ? AND status IN ('pending', 'processing', 'review')
+       LIMIT 1`,
+    );
+    const row = stmt.get(memoryId) as { candidate?: string } | undefined;
+    if (!row) return false;
+    const candidate = safeJsonParse(
+      row.candidate ?? "",
+      null as { content?: string } | null,
+      `event ${memoryId} candidate`,
+    ) as { content?: string } | null;
+    return candidate?.content === content || !!candidate?.content?.startsWith(content);
+  }
+
+  /** 同一记忆是否已有带指定标签的未完成事件，避免重复入队同类修复任务。 */
+  hasPendingEventWithTag(memoryId: string, tag: string): boolean {
+    const stmt = this.db.prepare(
+      `SELECT candidate FROM pending_events
+       WHERE memoryId = ? AND status IN ('pending', 'processing', 'review')`,
+    );
+    const rows = stmt.all(memoryId) as Array<{ candidate?: string }>;
+
+    return rows.some((row) => {
+      const candidate = safeJsonParse(
+        row.candidate ?? "",
+        null as { tags?: string[]; tagsZh?: string[] } | null,
+        `event ${memoryId} candidate`,
+      );
+      return candidate?.tags?.includes(tag) || candidate?.tagsZh?.includes(tag);
+    });
   }
 
   /** 按 eventId 查询单个事件（任意状态） */

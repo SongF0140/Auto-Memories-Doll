@@ -1,6 +1,8 @@
 import { watch, FSWatcher } from "chokidar";
+import { readdir } from "fs/promises";
 import { statSync } from "fs";
 import { join } from "path";
+import { createHash } from "crypto";
 import { ConfigService } from "../services/config-service";
 import { ToolWatchSource } from "../../types/config";
 import { parseSession } from "../../lib/tools/session-parser";
@@ -14,19 +16,32 @@ import { logger } from "../../lib/logger";
  * 管理多个监听源（Cursor/Codex/Claude Code 等），每个源对应一个 chokidar watcher。
  * 文件新增/变化时：
  * 1. 跳过本进程写入的文件（防循环）
- * 2. 跳过已处理的文件（基于 路径+msize 去重）
- * 3. 调用 parseSession 按工具类型解析
- * 4. 送入 MemoryService.stageCreateMemory 入队
+ * 2. 防抖：文件静默 DEBOUNCE_QUIET_MS 后才解析入队（会话文件边写边读会采到半截）
+ * 3. 调用 parseSession 按工具类型解析，超长会话截断
+ * 4. 按「来源+路径」生成稳定 ID，内容未变更直接跳过，变更走更新事件
  *
- * 启动入口在 instrumentation.ts，与 FileWatcher 并行运行。
+ * 运行状态存 globalThis：Next.js dev 把 instrumentation 与路由编译成独立模块实例，
+ * 模块级单例不共享，跨 bundle 查询状态（如 GET /api/listen）必须走 globalThis。
  */
+
+/** 防抖静默窗口：文件最后一次变更后静默如此之久才采集 */
+const DEBOUNCE_QUIET_MS = 90_000;
+/** 会话内容入库上限：超大会话全文 embedding+LLM 闸门耗时数分钟，会拖死队列 */
+const SESSION_CONTENT_MAX_CHARS = 20_000;
 
 interface WatcherEntry {
   source: ToolWatchSource;
   watcher: FSWatcher;
 }
 
-let entries: WatcherEntry[] = [];
+const globalStore = globalThis as typeof globalThis & {
+  __amdToolDirEntries?: WatcherEntry[];
+  __amdToolDirStarted?: boolean;
+};
+const entries: WatcherEntry[] = (globalStore.__amdToolDirEntries ??= []);
+
+/** 防抖定时器：`${sourceId}:${filePath}` → timer */
+const pendingTimers = new Map<string, NodeJS.Timeout>();
 
 /** 已处理文件记录：path → mtime+size，用于去重 */
 const processedFiles = new Map<string, string>();
@@ -40,12 +55,25 @@ function fileSignature(filePath: string): string {
   }
 }
 
+/** 来源文件 → 稳定记忆 ID：同一会话文件永远落到同一 memoryId，重启重扫不会重复建卡 */
+function getStableSessionMemoryId(sourceId: string, filePath: string): string {
+  const resolvedPath = filePath.replace(/\\/g, "/").toLowerCase();
+  return `tool-${createHash("sha256").update(`${sourceId}:${resolvedPath}`).digest("hex").slice(0, 32)}`;
+}
+
+/** 来源原文的 sha256：入库内容是中文重写卡，靠此哈希判断来源文件是否变更 */
+function sourceHashOf(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
 /**
  * 启动所有已启用的工具监听源。
  * 在 instrumentation.ts 中调用。
  */
 export async function startToolDirWatcher(): Promise<void> {
-  if (entries.length > 0) return; // 已启动
+  // 热重载防护：watcher 实例在旧模块里活着时（globalThis 标记 + entries 非空）跳过，
+  // 避免同进程对同一目录开两个监听
+  if (entries.length > 0 || globalStore.__amdToolDirStarted) return;
 
   const configService = new ConfigService();
   let sources: ToolWatchSource[];
@@ -60,6 +88,7 @@ export async function startToolDirWatcher(): Promise<void> {
     return;
   }
 
+  globalStore.__amdToolDirStarted = true;
   for (const source of sources) {
     await startSingleSource(source);
   }
@@ -90,13 +119,23 @@ async function startSingleSource(source: ToolWatchSource): Promise<void> {
     // 简化处理：直接监听所有文件，在 handler 里按扩展名过滤
     const allowedExts = patternToExtensions(pattern);
 
-    watcher.on("add", async (filePath) => {
-      await handleFileEvent(filePath, source, allowedExts);
-    });
+    // 防抖调度：add/change 只重置定时器，静默 DEBOUNCE_QUIET_MS 后才真正解析入队。
+    // 会话文件在活跃对话期间每秒都在追加，立即采集会反复解析半截内容。
+    const schedule = (filePath: string) => {
+      const timerKey = `${source.id}:${filePath}`;
+      const existing = pendingTimers.get(timerKey);
+      if (existing) clearTimeout(existing);
+      pendingTimers.set(
+        timerKey,
+        setTimeout(() => {
+          pendingTimers.delete(timerKey);
+          void handleFileEvent(filePath, source, allowedExts);
+        }, DEBOUNCE_QUIET_MS),
+      );
+    };
 
-    watcher.on("change", async (filePath) => {
-      await handleFileEvent(filePath, source, allowedExts);
-    });
+    watcher.on("add", (filePath) => schedule(filePath));
+    watcher.on("change", (filePath) => schedule(filePath));
 
     watcher.on("error", (error) => {
       logger.ingest.error(`[ToolDirWatcher] 监听源 "${source.name}" 错误:`, {
@@ -157,20 +196,58 @@ async function handleFileEvent(
     const tags = [source.toolType, "tool-session"];
     if (source.topic) tags.push(source.topic);
 
+    // 超长会话头部截断：尾部追加不影响头部，稳定 ID + 内容跳过逻辑仍然有效
+    const content =
+      session.content.length > SESSION_CONTENT_MAX_CHARS
+        ? `${session.content.slice(0, SESSION_CONTENT_MAX_CHARS)}\n\n<!-- 会话过长已截断，原文 ${session.content.length} 字符 -->`
+        : session.content;
+    const hash = sourceHashOf(content);
+
     const memoryService = new MemoryService();
     try {
+      const stableId = getStableSessionMemoryId(source.id, filePath);
+      const existing = memoryService.getMemory(stableId);
+
+      if (existing) {
+        // 抽取型记忆：入库内容是中文重写卡，与原文不可字面比对，靠 sourceHash 判断变更
+        if (existing.evidence?.sourceHash) {
+          if (existing.evidence.sourceHash === hash) return; // 原文未变更，跳过
+        } else if (existing.content === content) {
+          return; // 旧的原文型记忆且内容未变
+        }
+        // 内容有变更：清掉队列中同内容的未完成事件后走更新事件（触发分卡重建）
+        if (memoryService.hasEquivalentPendingEvent(stableId, content)) return;
+        memoryService.stageUpdateMemory(stableId, {
+          content,
+          summary: content.slice(0, 200),
+          evidence: {
+            text: content.slice(0, 500),
+            location: filePath,
+            sourceHash: hash,
+          },
+        });
+        logger.ingest.info(`[ToolDirWatcher] 会话已更新，重新入队`, {
+          source: source.name,
+          memoryId: stableId,
+        });
+        return;
+      }
+
+      // 新文件：队列里已有同内容事件（重启重扫、旧事件仍在积压）→ 跳过
+      if (memoryService.hasEquivalentPendingEvent(stableId, content)) return;
+
       memoryService.stageCreateMemory(
         `${source.name}:${filePath}`,
         "ingest",
         session.title,
-        session.content,
-        session.content.slice(0, 200),
+        content,
+        content.slice(0, 200),
         tags,
         topic,
         undefined,
-        undefined,
-        // 采集入口必须带证据链：原文片段 + 文件位置，供质量闸门做事实类证据校验
-        { evidence: { text: session.content.slice(0, 500), location: filePath } },
+        stableId,
+        // 采集入口必须带证据链：原文片段 + 文件位置 + 原文哈希，供闸门校验与变更检测
+        { evidence: { text: content.slice(0, 500), location: filePath, sourceHash: hash } },
       );
       logger.ingest.info(`[ToolDirWatcher] 已采集会话`, {
         source: source.name,
@@ -185,6 +262,42 @@ async function handleFileEvent(
       error: (error as Error).message,
     });
   }
+}
+
+/**
+ * 立即重扫所有监听源目录（绕过防抖），供「扫描」按钮调用。
+ * 已入库且未变更的文件会被内容跳过，不产生 LLM 成本。返回扫描的文件数。
+ */
+export async function scanToolSources(): Promise<number> {
+  // 扫描 = 强制复查：清掉 mtime 签名缓存，否则同一进程内的第二次扫描会被缓存直接跳过。
+  // 内容级跳过（sourceHash/内容比对）仍在 handleFileEvent 内生效，未变更文件不会重复入队。
+  processedFiles.clear();
+  let scanned = 0;
+  for (const entry of [...entries]) {
+    let watchPath = entry.source.path;
+    if (watchPath.startsWith("~")) {
+      const homeDir = process.env.USERPROFILE || process.env.HOME;
+      if (!homeDir) continue;
+      watchPath = join(homeDir, watchPath.slice(1));
+    }
+    const allowedExts = patternToExtensions(entry.source.filePattern || "*.jsonl");
+    try {
+      const all = await readdir(watchPath, { recursive: true });
+      for (const rel of all) {
+        const normalized = rel.replace(/\\/g, "/");
+        const ext = normalized.slice(normalized.lastIndexOf("."));
+        if (!allowedExts.includes(ext)) continue;
+        // 防抖绕过：扫描要求立即采集，直接走处理函数（内部仍有内容级跳过）
+        await handleFileEvent(join(watchPath, rel), entry.source, allowedExts);
+        scanned++;
+      }
+    } catch (error) {
+      logger.ingest.error(`[ToolDirWatcher] 扫描监听源 "${entry.source.name}" 失败:`, {
+        error: (error as Error).message,
+      });
+    }
+  }
+  return scanned;
 }
 
 function defaultTopicForTool(toolType: string): string {
@@ -204,6 +317,8 @@ function defaultTopicForTool(toolType: string): string {
  * 停止所有监听源。
  */
 export function stopToolDirWatcher(): void {
+  for (const timer of pendingTimers.values()) clearTimeout(timer);
+  pendingTimers.clear();
   for (const entry of entries) {
     try {
       entry.watcher.close();
@@ -211,7 +326,8 @@ export function stopToolDirWatcher(): void {
       // ignore
     }
   }
-  entries = [];
+  entries.length = 0;
+  globalStore.__amdToolDirStarted = false;
   logger.ingest.info("[ToolDirWatcher] 已停止所有监听源");
 }
 

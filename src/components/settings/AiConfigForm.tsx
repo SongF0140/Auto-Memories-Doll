@@ -97,7 +97,10 @@ export default function AiConfigForm({
   const [form, setForm] = useState<AiConfig>(() => ensureSlots(config));
   const providers = buildProviderOptions(providerCatalog, form.provider);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    llm: { ok: boolean; message: string };
+    embedding: { ok: boolean; message: string };
+  } | null>(null);
 
   // 测试 API 连接
   const handleTestConnection = async () => {
@@ -113,18 +116,29 @@ export default function AiConfigForm({
           baseURL: form.baseURL,
           apiKey: form.apiKey,
           model: form.standard?.model || form.flagship?.model || "gpt-4o-mini",
+          embedding: {
+            apiKey: form.embedding.apiKey,
+            baseURL: form.embedding.baseURL,
+            model: form.embedding.model || "text-embedding-3-small",
+          },
         }),
       });
 
       const data = await res.json();
 
-      if (res.ok && data.success !== false) {
-        setTestResult({ ok: true, message: data.message || "连接成功！API 可正常使用" });
-      } else {
-        setTestResult({ ok: false, message: data.error || data.message || "连接失败，请检查配置" });
-      }
+      setTestResult({
+        llm: data.llm
+          ? { ok: data.llm.success === true, message: data.llm.message }
+          : { ok: false, message: data.error || "未收到语言模型测试结果" },
+        embedding: data.embedding
+          ? { ok: data.embedding.success === true, message: data.embedding.message }
+          : { ok: false, message: "未收到 Embedding 测试结果" },
+      });
     } catch {
-      setTestResult({ ok: false, message: "网络错误，无法连接到服务器" });
+      setTestResult({
+        llm: { ok: false, message: "网络错误，无法连接到服务器" },
+        embedding: { ok: false, message: "网络错误，无法连接到服务器" },
+      });
     } finally {
       setTesting(false);
       // 5秒后自动清除结果
@@ -367,7 +381,7 @@ export default function AiConfigForm({
           <button
             type="button"
             onClick={handleTestConnection}
-            disabled={testing || !form.apiKey}
+            disabled={testing || (!form.apiKey && !form.embedding.apiKey)}
             className="btn btn-secondary text-sm px-4 py-2 disabled:opacity-50"
           >
             {testing ? (
@@ -392,36 +406,46 @@ export default function AiConfigForm({
 
         {/* 测试结果 */}
         {testResult && (
-          <div
-            className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
-              testResult.ok ? "bg-[#ECFDF5] text-[#059669]" : "bg-[#FEF2F2] text-[#DC2626]"
-            }`}
-          >
-            {testResult.ok ? (
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
-            ) : (
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M15 9l-6 6M9 9l6 6" />
-              </svg>
-            )}
-            {testResult.message}
+          <div className="space-y-2">
+            {(["llm", "embedding"] as const).map((kind) => {
+              const result = testResult[kind];
+              const label = kind === "llm" ? "语言模型" : "Embedding 模型";
+              return (
+                <div
+                  key={kind}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+                    result.ok ? "bg-[#ECFDF5] text-[#059669]" : "bg-[#FEF2F2] text-[#DC2626]"
+                  }`}
+                >
+                  {result.ok ? (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M15 9l-6 6M9 9l6 6" />
+                    </svg>
+                  )}
+                  <span className="font-medium">{label}：</span>
+                  {result.message}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -430,7 +454,7 @@ export default function AiConfigForm({
         <button
           type="button"
           onClick={handleTestConnection}
-          disabled={testing || !form.apiKey}
+          disabled={testing || (!form.apiKey && !form.embedding.apiKey)}
           className="btn btn-secondary"
         >
           测试后再保存

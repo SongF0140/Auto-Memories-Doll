@@ -12,6 +12,14 @@ export class AuditWorker {
 
   async start(): Promise<void> {
     this.isRunning = true;
+    // 上次进程退出时卡在 processing 的事件永远不会再被消费，启动时先恢复
+    try {
+      this.orchestrator.recoverStuckEvents();
+    } catch (error) {
+      logger.audit.error("僵尸事件恢复失败（不阻塞启动）:", {
+        error: (error as Error).message,
+      });
+    }
     await this.processLoop();
   }
 

@@ -173,13 +173,24 @@ export async function GET() {
   const stats = statsService.getStats();
   statsService.close();
 
+  // 动态 import：避免路由 bundle 在模块加载期触发 watcher 模块的启动副作用，
+  // 同时解决 dev 模式下 instrumentation 与路由模块实例隔离导致的状态不可见
+  const { getFileWatcherStatus } = await import("../../../server/watchers/file-watcher");
+  const { getActiveSources } = await import("../../../server/watchers/tool-dir-watcher");
+
   return NextResponse.json({
     status: "listening",
     uptime: process.uptime(),
     stats,
+    watchers: {
+      fileWatcher: getFileWatcherStatus(),
+      toolSources: getActiveSources(),
+    },
     endpoints: {
       post: "POST /api/listen - 发送对话数据",
       get: "GET  /api/listen - 查看监听状态",
+      scan: "POST /api/listen/scan - 手动重扫记忆库与监听源",
+      import: "POST /api/listen/import - 导入本地消息记录文件",
     },
     example: {
       method: "POST",
