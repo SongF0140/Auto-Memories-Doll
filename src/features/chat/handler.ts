@@ -8,18 +8,25 @@ import { MemoryService } from "../../server/services/memory-service";
 import { VectorRetriever } from "../../lib/vector/retriever";
 import { searchWithExpansion } from "../../lib/vector/query-expansion";
 import { Ranker } from "../../lib/vector/ranker";
-import { RETRIEVAL_CANDIDATE_LIMIT, RETRIEVAL_MAX_INJECTED_MEMORIES } from "../../config/constants";
+import {
+  RETRIEVAL_CANDIDATE_LIMIT,
+  RETRIEVAL_MAX_INJECTED_MEMORIES,
+  RETRIEVAL_CONTENT_BUDGET_CHARS,
+  RETRIEVAL_PER_CARD_CONTENT_MAX_CHARS,
+} from "../../config/constants";
 import { readProfileTags } from "../../lib/storage/index-writer";
 import { SkillManager } from "../../lib/skills/manager";
 import { McpManager } from "../../lib/mcp/manager";
 import { ToolCaller } from "../../lib/ai/tool-caller";
 import { registerDefaultTools } from "../../lib/ai/tool-registry";
 import { ProfileUpdater } from "../../server/services/profile-updater";
+import { ControlPlaneService } from "../../server/services/control-plane-service";
 import { WikiGraph } from "../../lib/graph/wiki-graph";
 import { ChatClassifier, IntentResult, ExtractedMemoryEntity } from "./classifier";
 import { logger } from "../../lib/logger";
 import { assembleSystemMessage, SystemBlocks } from "./system-prompt";
 import { compressConversation } from "../../lib/chat/conversation-compressor";
+import { buildBlogTemplateBlock, formatKnowledgeBrief } from "./blog-template";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
@@ -37,7 +44,11 @@ export class ChatHandler {
     this.templateManager = new TemplateManager();
     initializeTemplates(this.templateManager);
     this.memoryService = new MemoryService();
-    this.vectorRetriever = new VectorRetriever();
+    this.vectorRetriever = new VectorRetriever({
+      // I-8：把控制面与编译产物接进 overview 路由（零 embedding 调用）
+      overviewProvider: (query, limit) => this.searchOverview(query, limit),
+      topics: this.knownTopics(),
+    });
     this.ranker = new Ranker();
     this.skillManager = new SkillManager();
     this.mcpManager = new McpManager();
@@ -264,7 +275,21 @@ export class ChatHandler {
       intentBlock = parts.join("\n");
     }
 
-    return { systemPrefix, intentBlock, memoryBlock };
+    // I-5：控制面放在记忆块之前，作为模型的第一个导航点（token 预算内截断）
+    let controlPlaneBlock = "";
+    try {
+      const brief = new ControlPlaneService().readIndexBrief();
+      if (brief) {
+        controlPlaneBlock = `## 知识库导航（index.md 摘要）\n${brief}`;
+      }
+    } catch {
+      // 控制面尚未生成时不影响对话
+    }
+
+    // 博客写作模板：每次调用都注入（固定文本），配合按段落归位的知识素材
+    const blogTemplateBlock = buildBlogTemplateBlock();
+
+    return { systemPrefix, intentBlock, memoryBlock, controlPlaneBlock, blogTemplateBlock };
   }
 
   /**
@@ -310,6 +335,38 @@ ${blocks.memoryBlock}
     return processed;
   }
 
+  /** I-8 overview 路由：命中话题的 synthesis 卡优先，其次该话题近期卡片 */
+  private async searchOverview(
+    query: string,
+    limit: number,
+  ): Promise<{ memoryId: string; similarity: number }[]> {
+    const topic = (this.knownTopics() ?? []).find((t) => query.includes(t));
+    const all = this.memoryService.listMemories({ limit: 200, sortBy: "updatedAt" });
+    const scoped = topic ? all.filter((m) => m.topic === topic) : all;
+
+    const synthesis = scoped
+      .filter((m) => m.kind === "synthesis")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, Math.min(limit, 3))
+      .map((m) => ({ memoryId: m.id, similarity: 1 }));
+
+    const recent = scoped
+      .filter((m) => m.kind !== "synthesis")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, Math.max(limit - synthesis.length, 0))
+      .map((m, index) => ({ memoryId: m.id, similarity: 0.9 - index * 0.01 }));
+
+    return [...synthesis, ...recent];
+  }
+
+  private knownTopics(): string[] {
+    try {
+      return [...new Set(this.memoryService.listMemories({ limit: 200 }).map((m) => m.topic))];
+    } catch {
+      return [];
+    }
+  }
+
   private async retrieveRelevantMemories(
     messages: ChatMessage[],
     selectedMemoryIds?: string[],
@@ -334,7 +391,10 @@ ${blocks.memoryBlock}
 
     const targetMemories = this.memoryService.getMemoriesByIds(Array.from(candidateIds));
     if (targetMemories.length === 0) return "";
-    const memoryMap = new Map(targetMemories.map((m) => [m.id, m]));
+    // I-3：已被取代的旧主张不进注入上下文（取代链只供审计追溯）
+    const injectable = targetMemories.filter((m) => (m.status ?? "active") !== "superseded");
+    if (injectable.length === 0) return "";
+    const memoryMap = new Map(injectable.map((m) => [m.id, m]));
 
     // MMR 重排（相关性与多样性平衡，避免主题重复）
     const profileTags = await readProfileTags();
@@ -386,12 +446,25 @@ ${blocks.memoryBlock}
       }
     }
 
-    return relevantMemories
-      .map(
-        (m) =>
-          `标题: ${m.titleZh || m.title}\n摘要: ${m.summaryZh || m.summary}\n标签: ${(m.tagsZh && m.tagsZh.length > 0 ? m.tagsZh : m.tags).join(", ")}`,
-      )
-      .join("\n\n---\n\n");
+    // I-9：自动召回只累加弱信号 retrievalCount，绝不动 accessCount（防热度灌水红线）
+    try {
+      this.memoryService.incrementRetrieval(relevantMemories.map((m) => m.id));
+    } catch {
+      // 弱信号计数失败不影响对话
+    }
+
+    // 正文预算：按注入顺序（用户手动选中优先，其次按相关度排名）分配，
+    // 靠前的卡片带正文细节，预算耗尽后靠后的卡片退化为仅摘要
+    const budgetById = new Map<string, number>();
+    let remainingContentBudget = RETRIEVAL_CONTENT_BUDGET_CHARS;
+    for (const memory of relevantMemories) {
+      const budget = Math.min(RETRIEVAL_PER_CARD_CONTENT_MAX_CHARS, remainingContentBudget);
+      remainingContentBudget = Math.max(0, remainingContentBudget - budget);
+      budgetById.set(memory.id, budget);
+    }
+
+    // 博客模板归位：素材按段落分组注入，模型把对应类型的知识点放进对应小节
+    return formatKnowledgeBrief(relevantMemories, (memory) => budgetById.get(memory.id) ?? 0);
   }
 
   close(): void {
@@ -401,3 +474,6 @@ ${blocks.memoryBlock}
     this.mcpManager.close();
   }
 }
+
+// 注入格式与博客模板归位逻辑集中在 blog-template.ts（handler 只做编排）
+export { KIND_INJECTION_HINTS, formatInjectedMemory } from "./blog-template";

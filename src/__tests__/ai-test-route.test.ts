@@ -16,10 +16,9 @@ describe("POST /api/config/ai/test", () => {
   });
 
   it("returns independent chat and embedding connection results", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ model: "chat-model" }), { status: 200 }),
-      )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "chat-model" }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -65,8 +64,11 @@ describe("POST /api/config/ai/test", () => {
   it("keeps embedding failure visible when chat succeeds", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn()
-        .mockResolvedValueOnce(new Response(JSON.stringify({ model: "chat-model" }), { status: 200 }))
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ model: "chat-model" }), { status: 200 }),
+        )
         .mockResolvedValueOnce(
           new Response(JSON.stringify({ error: { message: "embedding model not found" } }), {
             status: 404,

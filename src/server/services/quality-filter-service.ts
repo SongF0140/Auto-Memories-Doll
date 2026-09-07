@@ -77,7 +77,14 @@ export class QualityFilterService {
     result: NonNullable<ReturnType<QualityFilterService["parseVerdict"]>>,
     candidate: MemoryRecord,
   ): QualityFilterResult {
-    const kind = result.kind ?? "fact";
+    let kind = result.kind ?? "fact";
+
+    // I-2 幻觉防护：chat 源是"模型读了自己过去的记忆再输出"的地方，
+    // 没有原文证据支撑的结论一律降级为 inference，由既有非 fact 闸门转人工裁决，
+    // 切断"幻觉入库 → 下次注入被当事实 → 再扩散"的自我强化闭环。
+    if (candidate.sourceType === "chat" && !candidate.evidence?.text?.trim() && kind === "fact") {
+      kind = "inference";
+    }
 
     if (result.verdict === "accept") {
       if (kind !== "fact") {

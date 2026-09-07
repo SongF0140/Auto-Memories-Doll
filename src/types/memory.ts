@@ -1,5 +1,11 @@
-/** 记忆类型：事实 / 推断 / 假设 / 待验证洞察（非 fact 必须人工裁决后才可入库） */
-export type MemoryKind = "fact" | "inference" | "hypothesis" | "insight";
+/**
+ * 记忆类型：事实 / 推断 / 假设 / 待验证洞察 / 综合（非 fact 必须人工裁决后才可入库）
+ * synthesis 为夜间编译产物（LLM Wiki 的派生知识层），引用来源卡但不取代它们。
+ */
+export type MemoryKind = "fact" | "inference" | "hypothesis" | "insight" | "synthesis";
+
+/** 记忆生命周期状态（缺省视为 active） */
+export type MemoryStatus = "active" | "superseded" | "archived";
 
 /** 来源证据：原文片段 + 可选位置（文件路径 / URL），事实类入库的证据约束 */
 export type MemoryEvidence = {
@@ -43,8 +49,33 @@ export type MemoryRecord = {
   createdAt: string;
   updatedAt: string;
   accessedAt: string;
+  /** 用户主动点击次数（热度强信号，仅用户行为可增，自动检索不得污染） */
   accessCount: number;
+  /** 被自动检索注入的次数（热度弱信号，与 accessCount 分离统计） */
+  retrievalCount?: number;
   heatScore: number;
+  /**
+   * 置信度 0-1：随时间按 kind 差异化衰减，随用户访问强化。
+   * 初值 = 质量闸门评分 × 证据系数。
+   */
+  confidence?: number;
+  /** 生命周期状态：active（默认）/ superseded（被取代）/ archived（已归档） */
+  status?: MemoryStatus;
+  /** 被哪条记忆取代（status = superseded 时必填） */
+  supersededBy?: string;
+  /** 取代了哪条记忆（新卡回指，与 supersededBy 共同构成取代链） */
+  supersedes?: string;
+  /**
+   * 使用场景："当用户问 X / 做 Y 时这条记忆有用"。
+   * 与 summary 共同构成 embedding 键（Rainy window-use 分离），使召回语义对齐查询。
+   */
+  windowUse?: string;
+  /** synthesis 卡引用的来源卡 id 列表（保证结论可回溯，避免"去出处化"） */
+  sources?: string[];
+  /** 来源卡被哪张 synthesis 卡综合（被综合 ≠ 被取代，来源卡不删） */
+  synthesizedBy?: string;
+  /** 来源卡集合指纹（SHA256），用于判断是否需增量重编译 */
+  compileSignature?: string;
   vectorId?: string;
   graphLinks: string[];
 };

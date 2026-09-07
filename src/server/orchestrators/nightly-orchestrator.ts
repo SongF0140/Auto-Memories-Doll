@@ -5,6 +5,9 @@ import { ContradictionDetector, ContradictionReport } from "./contradiction-dete
 import { LinkSupplementer, LinkSupplementReport } from "./link-supplementer";
 import { RouteOptimizer, RouteOptimizationReport } from "./route-optimizer";
 import { DailyReporter } from "./daily-reporter";
+import { StructureLintService, LintIssue } from "../services/structure-lint-service";
+import { ControlPlaneService } from "../services/control-plane-service";
+import { SynthesisCompiler, SynthesisReport } from "./synthesis-compiler";
 import { logger } from "../../lib/logger";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
 
@@ -19,6 +22,12 @@ export interface NightlyReport {
   contradiction: ContradictionReport | null;
   links: LinkSupplementReport | null;
   routing: RouteOptimizationReport | null;
+  /** I-1 结构化 Lint：死链 / 孤儿页 / 残缺卡 / 重复来源 */
+  lint?: { issues: LintIssue[]; added: number } | null;
+  /** I-6/I-7 编译层：综合页产出与验证结果 */
+  synthesis?: SynthesisReport | null;
+  /** I-5 控制面：生成的控制面文件名列表 */
+  controlPlane?: string[] | null;
   /** 所有任务是否成功 */
   allSucceeded: boolean;
   errors: string[];
@@ -43,6 +52,9 @@ export class NightlyOrchestrator {
   private linkSupplementer: LinkSupplementer;
   private routeOptimizer: RouteOptimizer;
   private dailyReporter: DailyReporter;
+  private lintService: StructureLintService;
+  private synthesisCompiler: SynthesisCompiler;
+  private controlPlaneService: ControlPlaneService;
 
   constructor() {
     this.memoryService = new MemoryService();
@@ -50,6 +62,9 @@ export class NightlyOrchestrator {
     this.linkSupplementer = new LinkSupplementer();
     this.routeOptimizer = new RouteOptimizer();
     this.dailyReporter = new DailyReporter();
+    this.lintService = new StructureLintService();
+    this.synthesisCompiler = new SynthesisCompiler();
+    this.controlPlaneService = new ControlPlaneService();
   }
 
   /** 执行完整深夜督查流程 */
@@ -68,6 +83,22 @@ export class NightlyOrchestrator {
       limit: 200,
     });
     logger.nightly.info(`当日记忆: ${todaysMemories.length}，全量: ${allMemories.length}`);
+
+    // ── 0. 结构化 Lint（I-1，零 LLM）──
+    // 放在最前：lint 结果供后续步骤跳过死链，且它最便宜、失败不影响主流程。
+    let lint: { issues: LintIssue[]; added: number } | null = null;
+    try {
+      const allForLint = this.memoryService.listMemories({ includeSuperseded: true });
+      lint = this.lintService.scanAndPersist(allForLint);
+      logger.nightly.info("结构化 Lint 完成", {
+        issues: lint.issues.length,
+        added: lint.added,
+      });
+    } catch (e) {
+      const msg = `结构化 Lint 失败: ${(e as Error).message}`;
+      logger.nightly.error(msg);
+      errors.push(msg);
+    }
 
     // ── 1. 知识矛盾检测 ──
     let contradiction: ContradictionReport | null = null;
@@ -119,7 +150,38 @@ export class NightlyOrchestrator {
       }
     }
 
-    // ── 5. 生成日报 ──
+    // ── 5. Synthesis 编译 + WiCER 验证（I-6 / I-7）──
+    let synthesis: SynthesisReport | null = null;
+    try {
+      synthesis = await this.synthesisCompiler.compile(allMemories);
+      logger.nightly.info("知识编译完成", {
+        clusters: synthesis.clusters,
+        created: synthesis.created.length,
+        failed: synthesis.failed.length,
+      });
+    } catch (e) {
+      const msg = `知识编译失败: ${(e as Error).message}`;
+      logger.nightly.error(msg);
+      errors.push(msg);
+    }
+
+    // ── 6. 控制面刷新（I-5）──
+    let controlPlane: string[] | null = null;
+    try {
+      controlPlane = await this.controlPlaneService.writeAll({
+        memories: allMemories,
+        lintIssues: lint?.issues ?? [],
+        contradictions: contradiction?.contradictions ?? [],
+        synthesis,
+      });
+      logger.nightly.info("控制面已刷新", { files: controlPlane.length });
+    } catch (e) {
+      const msg = `控制面刷新失败: ${(e as Error).message}`;
+      logger.nightly.error(msg);
+      errors.push(msg);
+    }
+
+    // ── 7. 生成日报 ──
     const completedAt = new Date().toISOString();
     const report: NightlyReport = {
       date,
@@ -129,6 +191,9 @@ export class NightlyOrchestrator {
       contradiction,
       links,
       routing,
+      lint,
+      synthesis,
+      controlPlane,
       allSucceeded: errors.length === 0,
       errors,
     };
@@ -169,5 +234,7 @@ export class NightlyOrchestrator {
     this.contradictionDetector.close();
     this.linkSupplementer.close();
     this.routeOptimizer.close();
+    this.lintService.close();
+    this.synthesisCompiler.close();
   }
 }

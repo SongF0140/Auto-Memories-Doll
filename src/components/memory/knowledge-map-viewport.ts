@@ -20,16 +20,18 @@ const clientToViewPoint = (svg: SVGSVGElement, clientX: number, clientY: number)
   return { x: clientX - rect.left, y: clientY - rect.top };
 };
 
-const zoomAround = (view: ViewState, point: { x: number; y: number }, factor: number): ViewState => {
+const zoomAround = (
+  view: ViewState,
+  point: { x: number; y: number },
+  factor: number,
+): ViewState => {
   const nextK = clampZoom(view.k * factor);
   const worldX = (point.x - view.x) / view.k;
   const worldY = (point.y - view.y) / view.k;
   return { x: point.x - worldX * nextK, y: point.y - worldY * nextK, k: nextK };
 };
 
-export const useKnowledgeMapViewport = (
-  setView: Dispatch<SetStateAction<ViewState>>,
-) => {
+export const useKnowledgeMapViewport = (setView: Dispatch<SetStateAction<ViewState>>) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState | null>(null);
 
@@ -47,7 +49,11 @@ export const useKnowledgeMapViewport = (
   const onPointerDown = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY };
+    dragRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
   }, []);
 
   const onPointerMove = useCallback(

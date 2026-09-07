@@ -3,9 +3,14 @@ import { buildMemoryRecord, buildPendingEvent, updateMemoryRecord } from "../../
 import { validateMemoryRecord } from "../../lib/memory/validator";
 import { MemoryClassifier } from "../../features/memory/classifier";
 import { VectorIndex } from "../../lib/vector/index";
-import { buildVectorRecord } from "../../lib/vector/generator";
+import { buildVectorRecord, buildEmbeddingKey } from "../../lib/vector/generator";
 import { getDatabase } from "../../lib/storage/database";
 import { withLock } from "../../lib/storage/lock";
+import {
+  CONFIDENCE_MAX,
+  CONFIDENCE_REINFORCE_STEP,
+  RETRIEVAL_COUNT_DAILY_DECAY,
+} from "../../config/constants";
 import { MemoryNotFoundError, MemoryValidationError } from "../../lib/errors";
 import { logger } from "../../lib/logger";
 import Database from "better-sqlite3";
@@ -64,6 +69,14 @@ export class MemoryService {
       "topicZh",
       "kind",
       "evidence",
+      // ── schema v2（I-3 取代链 / I-4 置信度 / I-6 编译 / I-9 弱信号 / I-11 检索键）──
+      "status",
+      "supersededBy",
+      "supersedes",
+      "windowUse",
+      "sources",
+      "synthesizedBy",
+      "compileSignature",
     ];
     for (const col of migrationColumns) {
       try {
@@ -72,6 +85,21 @@ export class MemoryService {
         // 列已存在，跳过
       }
     }
+
+    // 数值列单独迁移（默认值 0，避免 NULL 参与排序与运算）
+    const numericMigrationColumns = [
+      { name: "confidence", type: "REAL" },
+      { name: "retrievalCount", type: "INTEGER" },
+    ];
+    for (const col of numericMigrationColumns) {
+      try {
+        this.db.exec(`ALTER TABLE memories ADD COLUMN ${col.name} ${col.type} DEFAULT 0`);
+      } catch {
+        // 列已存在，跳过
+      }
+    }
+    // 检索侧高频过滤条件：默认注入排除已取代卡片
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status)`);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pending_events (
         eventId TEXT PRIMARY KEY,
@@ -156,8 +184,10 @@ export class MemoryService {
       INSERT INTO memories (
         id, version, source, sourceType, kind, evidence, title, titleZh, content, summary, summaryZh,
         tags, tagsZh, topic, topicZh,
-        createdAt, updatedAt, accessedAt, accessCount, heatScore, graphLinks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        createdAt, updatedAt, accessedAt, accessCount, heatScore, graphLinks,
+        status, supersededBy, supersedes, confidence, retrievalCount, windowUse,
+        sources, synthesizedBy, compileSignature
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
       stmt.run(
         memory.id,
@@ -181,10 +211,20 @@ export class MemoryService {
         memory.accessCount,
         memory.heatScore,
         JSON.stringify(memory.graphLinks),
+        memory.status || "active",
+        memory.supersededBy || null,
+        memory.supersedes || null,
+        memory.confidence ?? 0,
+        memory.retrievalCount ?? 0,
+        memory.windowUse || null,
+        memory.sources ? JSON.stringify(memory.sources) : null,
+        memory.synthesizedBy || null,
+        memory.compileSignature || null,
       );
 
       try {
-        const vectorRecord = await buildVectorRecord(memory.id, memory.content);
+        // I-11：embedding 键 = summary + windowUse（缺省回退全文）
+        const vectorRecord = await buildVectorRecord(memory.id, buildEmbeddingKey(memory));
         this.getVectorIndex().create(vectorRecord);
         this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memory.id, memory.id);
       } catch (vectorError) {
@@ -339,6 +379,17 @@ export class MemoryService {
         ? safeJsonParse(row.evidence, undefined, `memory ${row.id} evidence`)
         : undefined,
       graphLinks: safeJsonParse(row.graphLinks, [] as string[], `memory ${row.id} graphLinks`),
+      status: (row.status as MemoryRecord["status"]) || "active",
+      supersededBy: row.supersededBy || undefined,
+      supersedes: row.supersedes || undefined,
+      confidence: typeof row.confidence === "number" ? row.confidence : undefined,
+      retrievalCount: typeof row.retrievalCount === "number" ? row.retrievalCount : undefined,
+      windowUse: row.windowUse || undefined,
+      sources: row.sources
+        ? safeJsonParse(row.sources, undefined as string[] | undefined, `memory ${row.id} sources`)
+        : undefined,
+      synthesizedBy: row.synthesizedBy || undefined,
+      compileSignature: row.compileSignature || undefined,
     };
   }
 
@@ -361,6 +412,8 @@ export class MemoryService {
     sortOrder?: "asc" | "desc";
     tag?: string;
     topic?: string;
+    /** 是否包含已被取代（superseded）的卡片，默认排除——取代链仅供审计与追溯 */
+    includeSuperseded?: boolean;
   }): MemoryRecord[] {
     const limit = opts?.limit ?? -1;
     const offset = opts?.offset ?? 0;
@@ -379,6 +432,9 @@ export class MemoryService {
     if (topic) {
       conditions.push("topic = ?");
       params.push(topic);
+    }
+    if (!opts?.includeSuperseded) {
+      conditions.push("COALESCE(status, 'active') != 'superseded'");
     }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -445,7 +501,9 @@ export class MemoryService {
         title = ?, titleZh = ?, content = ?,
         summary = ?, summaryZh = ?, tags = ?, tagsZh = ?, topic = ?, topicZh = ?,
         updatedAt = ?, accessedAt = ?, accessCount = ?,
-        heatScore = ?, vectorId = ?, graphLinks = ?
+        heatScore = ?, vectorId = ?, graphLinks = ?,
+        status = ?, supersededBy = ?, supersedes = ?, confidence = ?, retrievalCount = ?,
+        windowUse = ?, sources = ?, synthesizedBy = ?, compileSignature = ?
       WHERE id = ?
     `);
     stmt.run(
@@ -469,8 +527,64 @@ export class MemoryService {
       updated.heatScore,
       updated.vectorId,
       JSON.stringify(updated.graphLinks),
+      updated.status || "active",
+      updated.supersededBy || null,
+      updated.supersedes || null,
+      updated.confidence ?? 0,
+      updated.retrievalCount ?? 0,
+      updated.windowUse || null,
+      updated.sources ? JSON.stringify(updated.sources) : null,
+      updated.synthesizedBy || null,
+      updated.compileSignature || null,
       id,
     );
+  }
+
+  /** 仅更新派生热度分，不递增业务版本、不改动 updatedAt（避免 recency 被重算自身重置）。 */
+  updateHeatScore(id: string, heatScore: number): void {
+    const result = this.db
+      .prepare("UPDATE memories SET heatScore = ? WHERE id = ?")
+      .run(heatScore, id);
+    if (result.changes === 0) throw new MemoryNotFoundError(id);
+  }
+
+  /** 仅更新派生置信度，不递增业务版本、不改动 updatedAt。 */
+  updateConfidence(id: string, confidence: number): void {
+    const result = this.db
+      .prepare("UPDATE memories SET confidence = ? WHERE id = ?")
+      .run(confidence, id);
+    if (result.changes === 0) throw new MemoryNotFoundError(id);
+  }
+
+  /**
+   * 读取取代链：从任一节点出发，沿 supersedes（向前）与 supersededBy（向后）
+   * 双向遍历，返回按时间正序的完整链路。用于审计 UI 的 A → B → C 时间线。
+   */
+  getSupersessionChain(memoryId: string): MemoryRecord[] {
+    const start = this.getMemory(memoryId);
+    if (!start) return [];
+
+    // 向前：找到最早的祖先（旧 → 新）
+    const ancestors: MemoryRecord[] = [];
+    let cursor: MemoryRecord | null = start;
+    while (cursor?.supersedes) {
+      const prev = this.getMemory(cursor.supersedes);
+      if (!prev || ancestors.some((a) => a.id === prev.id) || prev.id === start.id) break;
+      ancestors.unshift(prev);
+      cursor = prev;
+    }
+
+    // 向后：沿 supersededBy 走到最新
+    const successors: MemoryRecord[] = [];
+    cursor = start;
+    while (cursor?.supersededBy) {
+      const next = this.getMemory(cursor.supersededBy);
+      if (!next || successors.some((s) => s.id === next.id) || next.id === start.id) break;
+      successors.push(next);
+      cursor = next;
+    }
+
+    return [...ancestors, start, ...successors];
   }
 
   /** 更新派生向量引用，不递增记忆业务版本。 */
@@ -488,11 +602,45 @@ export class MemoryService {
     this.getVectorIndex().delete(id);
   }
 
+  /**
+   * 用户主动点击：热度强信号 +1，同时强化置信度（I-4）。
+   * 置信度上限封顶，避免反复点击刷满。
+   */
   incrementAccess(id: string): void {
     const stmt = this.db.prepare(`
-      UPDATE memories SET accessCount = accessCount + 1, accessedAt = ? WHERE id = ?
+      UPDATE memories SET
+        accessCount = accessCount + 1,
+        accessedAt = ?,
+        confidence = MIN(?, COALESCE(confidence, 0) + ?)
+      WHERE id = ?
     `);
-    stmt.run(new Date().toISOString(), id);
+    stmt.run(new Date().toISOString(), CONFIDENCE_MAX, CONFIDENCE_REINFORCE_STEP, id);
+  }
+
+  /**
+   * 自动检索注入：只增加弱信号 retrievalCount（I-9）。
+   * 红线——绝不动 accessCount，防止自动召回灌水热度。
+   */
+  incrementRetrieval(ids: string[]): void {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => "?").join(", ");
+    this.db
+      .prepare(
+        `UPDATE memories SET retrievalCount = COALESCE(retrievalCount, 0) + 1
+         WHERE id IN (${placeholders})`,
+      )
+      .run(...ids);
+  }
+
+  /** 检索弱信号日衰减（I-9）：防止历史高频卡永久霸榜，accessCount 不衰减。 */
+  decayRetrievalCounts(factor: number = RETRIEVAL_COUNT_DAILY_DECAY): number {
+    const result = this.db
+      .prepare(
+        `UPDATE memories SET retrievalCount = CAST(COALESCE(retrievalCount, 0) * ? AS INTEGER)
+         WHERE COALESCE(retrievalCount, 0) > 0`,
+      )
+      .run(factor);
+    return result.changes;
   }
 
   enqueueEvent(event: PendingEvent): void {

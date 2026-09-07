@@ -6,6 +6,7 @@ let vectorScheduler: { start: () => void; stop: () => void } | null = null;
 let retentionScheduler: { start: () => void; stop: () => void } | null = null;
 let mcpCollectScheduler: { start: () => void; stop: () => void } | null = null;
 let browserCollectScheduler: { start: () => void; stop: () => void } | null = null;
+let nightlyScheduler: { start: () => void; stop: () => void } | null = null;
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
@@ -21,6 +22,7 @@ export async function register() {
     const { McpCollectScheduler } = await import("./server/schedulers/mcp-collect-scheduler");
     const { BrowserCollectScheduler } =
       await import("./server/schedulers/browser-collect-scheduler");
+    const { NightlyScheduler } = await import("./server/schedulers/nightly-scheduler");
 
     auditScheduler = new AuditScheduler();
     cleanupScheduler = new CleanupScheduler();
@@ -28,6 +30,7 @@ export async function register() {
     retentionScheduler = new RetentionScheduler();
     mcpCollectScheduler = new McpCollectScheduler();
     browserCollectScheduler = new BrowserCollectScheduler();
+    nightlyScheduler = new NightlyScheduler();
 
     auditScheduler.start();
     cleanupScheduler.start();
@@ -35,9 +38,10 @@ export async function register() {
     retentionScheduler.start();
     mcpCollectScheduler.start();
     browserCollectScheduler.start();
+    nightlyScheduler.start();
 
     logger.ingest.info(
-      "[Instrumentation] 调度器已启动: audit / cleanup / vector / retention / mcp-collect / browser-collect",
+      "[Instrumentation] 调度器已启动: audit / cleanup / vector / retention / mcp-collect / browser-collect / nightly",
     );
 
     // 启动 AI API 健康检查（降级恢复）
@@ -63,6 +67,7 @@ export async function register() {
       retentionScheduler?.stop();
       mcpCollectScheduler?.stop();
       browserCollectScheduler?.stop();
+      nightlyScheduler?.stop();
       stopToolDirWatcher();
       ModelAdapter.stopHealthCheck();
       process.exit(0);

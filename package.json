@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "eval": "vitest run src/eval/retrieval-eval.test.ts"
+    "eval": "vitest run src/eval/retrieval-eval.test.ts",
+    "eval:locomo": "vitest run src/eval/locomo-eval.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",

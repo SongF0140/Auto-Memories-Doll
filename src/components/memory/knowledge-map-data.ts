@@ -48,9 +48,33 @@ export interface KnowledgeGraph {
 }
 
 export const categoryRegions: CategoryRegion[] = [
-  { id: "knowledge", label: "知识归纳", x: 100, y: 80, w: 480, h: 360, color: "rgba(166, 124, 0, 0.08)" },
-  { id: "work", label: "工作经验", x: 620, y: 80, w: 480, h: 360, color: "rgba(201, 162, 39, 0.08)" },
-  { id: "project", label: "项目沉淀", x: 360, y: 480, w: 480, h: 340, color: "rgba(160, 120, 60, 0.08)" },
+  {
+    id: "knowledge",
+    label: "知识归纳",
+    x: 100,
+    y: 80,
+    w: 480,
+    h: 360,
+    color: "rgba(166, 124, 0, 0.08)",
+  },
+  {
+    id: "work",
+    label: "工作经验",
+    x: 620,
+    y: 80,
+    w: 480,
+    h: 360,
+    color: "rgba(201, 162, 39, 0.08)",
+  },
+  {
+    id: "project",
+    label: "项目沉淀",
+    x: 360,
+    y: 480,
+    w: 480,
+    h: 340,
+    color: "rgba(160, 120, 60, 0.08)",
+  },
 ];
 
 const categoryNodeInsets: Record<KnowledgeCategory, { x: number; y: number }> = {
@@ -60,7 +84,10 @@ const categoryNodeInsets: Record<KnowledgeCategory, { x: number; y: number }> = 
 };
 
 const normalizeText = (values: Array<string | undefined>) =>
-  values.filter((value): value is string => Boolean(value)).join(" ").toLowerCase();
+  values
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
 
 const topicKey = (memory: MemoryRecord) => memory.topic?.trim() || "general";
 
@@ -70,9 +97,18 @@ const topicLabel = (topic: string) => {
 };
 
 export const inferCategory = (memory: MemoryRecord): KnowledgeCategory => {
-  const haystack = normalizeText([memory.topic, memory.title, memory.summary, ...(memory.tags ?? [])]);
-  if (/(project|planning|roadmap|architecture|release|milestone|需求|规划|架构|项目)/.test(haystack)) return "project";
-  if (/(work|job|meeting|review|bug|deploy|issue|workflow|任务|工作|会议|复盘|协作)/.test(haystack)) return "work";
+  const haystack = normalizeText([
+    memory.topic,
+    memory.title,
+    memory.summary,
+    ...(memory.tags ?? []),
+  ]);
+  if (
+    /(project|planning|roadmap|architecture|release|milestone|需求|规划|架构|项目)/.test(haystack)
+  )
+    return "project";
+  if (/(work|job|meeting|review|bug|deploy|issue|workflow|任务|工作|会议|复盘|协作)/.test(haystack))
+    return "work";
   return "knowledge";
 };
 
@@ -141,7 +177,8 @@ const buildEdges = (nodes: KnowledgeNode[]) => {
   for (let i = 0; i < nodes.length; i += 1) {
     for (let j = i + 1; j < nodes.length; j += 1) {
       const common = nodes[i].keywords.filter((keyword) => nodes[j].keywords.includes(keyword));
-      if (common.length > 0) edges.push({ from: nodes[i].id, to: nodes[j].id, strength: common.length });
+      if (common.length > 0)
+        edges.push({ from: nodes[i].id, to: nodes[j].id, strength: common.length });
     }
   }
   return edges;
@@ -178,7 +215,11 @@ export const countNodesByCategory = (nodes: KnowledgeNode[]) =>
     count: nodes.filter((node) => node.category === region.id).length,
   }));
 
-export const collectRelatedNodeIds = (nodes: KnowledgeNode[], edges: KnowledgeEdge[], focusId: string) => {
+export const collectRelatedNodeIds = (
+  nodes: KnowledgeNode[],
+  edges: KnowledgeEdge[],
+  focusId: string,
+) => {
   const related = new Set<string>([focusId]);
   const queue = [focusId];
   const visited = new Set<string>([focusId]);

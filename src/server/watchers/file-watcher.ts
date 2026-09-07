@@ -10,7 +10,22 @@ import { InputParser } from "../../features/ingest/parser";
 import { MemoryService } from "../services/memory-service";
 import { parseMemoryFromText } from "../../lib/storage/markdown-parser";
 import { isRecentWrite } from "../../lib/storage/write-tracker";
+import { CONTROL_PLANE_FILES } from "../../config/constants";
+import { FileIngestStateService } from "../services/file-ingest-state-service";
+import { ListenStatsService } from "../services/listen-stats-service";
+import { detectAppend, isDeltaWorthIngest, sha256Hex } from "../../lib/ingest/delta";
 import { logger } from "../../lib/logger";
+
+/**
+ * 系统元数据文件：不入库、不触发采集（I-5 红线）。
+ * 控制面由夜跑生成，若被 file-watcher 采走会变成"系统自己写记忆给自己读"的回写循环。
+ */
+export function isSystemMetadataFile(filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/");
+  const name = normalized.split("/").pop() ?? "";
+  if (name === "index-map.md" || name === "profile.md") return true;
+  return (CONTROL_PLANE_FILES as readonly string[]).includes(name);
+}
 
 let watcher: FSWatcher | null = null;
 const inFlightIngests = new Map<string, Promise<void>>();
@@ -42,13 +57,13 @@ export function startFileWatcher(): void {
 
   watcher.on("add", async (filePath) => {
     if (!filePath.endsWith(".md")) return;
-    if (filePath.endsWith("index-map.md") || filePath.endsWith("profile.md")) return;
+    if (isSystemMetadataFile(filePath)) return;
     await ingestMarkdownFile(filePath, "add");
   });
 
   watcher.on("change", async (filePath) => {
     if (!filePath.endsWith(".md")) return;
-    if (filePath.endsWith("index-map.md") || filePath.endsWith("profile.md")) return;
+    if (isSystemMetadataFile(filePath)) return;
     await ingestMarkdownFile(filePath, "change");
   });
 
@@ -94,7 +109,7 @@ export async function scanMemoryRoot(): Promise<number> {
       const normalized = rel.replace(/\\/g, "/");
       if (!normalized.endsWith(".md") && !normalized.endsWith(".markdown")) continue;
       if (normalized.split("/").some((seg) => seg === "archive" || seg === "notes")) continue;
-      if (normalized.endsWith("index-map.md") || normalized.endsWith("profile.md")) continue;
+      if (isSystemMetadataFile(normalized)) continue;
       await ingestMarkdownFile(join(root, rel), "scan");
       scanned++;
     }
@@ -133,6 +148,34 @@ function getFileUpdates(record: MemoryRecord, filePath: string): Partial<MemoryR
 }
 
 /**
+ * I-10 段级增量：把纯追加的 delta 文本作为**独立新卡**入队，旧卡完全不动。
+ * 相比"整文件重跑抽取管线"，这是把成本从 O(全文) 降到 O(delta)。
+ */
+function buildDeltaRecord(
+  anchor: MemoryRecord,
+  deltaId: string,
+  deltaText: string,
+  filePath: string,
+): MemoryRecord {
+  return {
+    ...anchor,
+    id: deltaId,
+    title: `${anchor.titleZh || anchor.title}（追加段落）`.slice(0, 60),
+    titleZh: `${anchor.titleZh || anchor.title}（追加段落）`.slice(0, 60),
+    content: deltaText,
+    summary: deltaText.slice(0, 100),
+    summaryZh: deltaText.slice(0, 100),
+    // delta 文本本身就是本次新增的原文
+    evidence: {
+      text: deltaText.slice(0, 500),
+      location: filePath,
+      sourceHash: sha256Hex(deltaText),
+    },
+    graphLinks: [],
+  };
+}
+
+/**
  * 处理外部 Markdown：add 创建；change 在记录存在时更新，不存在时按稳定 ID 创建。
  * 导出该边界以便集成测试直接验证文件事件与持久化队列的契约。
  */
@@ -167,10 +210,24 @@ async function ingestMarkdownFileOnce(
 
     // 来源原文哈希：入库内容是中文重写卡后与原文不可字面比对，靠它判断文件是否变更
     const contentHash = createHash("sha256").update(content).digest("hex");
+    const statePath = resolve(filePath).replace(/\\/g, "/");
 
     const memoryService = new MemoryService();
+    const stateService = new FileIngestStateService();
+    const statsService = new ListenStatsService();
 
     try {
+      const prev = stateService.get(statePath);
+
+      // 状态表命中且哈希一致（scan/change 重扫）→ 零成本跳过
+      if (prev && prev.contentHash === contentHash) return;
+
+      // I-10 段级增量：判定本次变更是否为纯追加
+      const append = prev
+        ? detectAppend(content, prev.contentHash, prev.contentLength)
+        : { isAppend: false, deltaText: "" };
+      const appendUsable = append.isAppend && isDeltaWorthIngest(append.deltaText);
+
       // 检测 LLMWiki frontmatter 格式
       if (content.startsWith("---")) {
         const record = parseMemoryFromText(content);
@@ -188,12 +245,30 @@ async function ingestMarkdownFileOnce(
           const existing = memoryService.getMemory(stableRecord.id);
 
           if (existing) {
-            // 内容未变更（scan/change 重扫）→ 零成本跳过
+            // 内容未变更 → 零成本跳过，并补齐状态表
             const unchanged = existing.evidence?.sourceHash
               ? existing.evidence.sourceHash === contentHash
               : existing.content === content;
-            if (unchanged) return;
-            // 有变更（或 add 时已存在）→ 统一走更新事件，由审计流程决定合并/冲突
+            if (unchanged) {
+              stateService.upsert(statePath, contentHash, content.length);
+              return;
+            }
+
+            if (appendUsable) {
+              // 纯追加：delta 独立成卡走抽取管线，旧卡完全不动
+              const deltaId = `${stableRecord.id}-a${(prev?.appendCount ?? 0) + 1}`;
+              memoryService.stageCreateMemoryRecord(
+                buildDeltaRecord(existing, deltaId, append.deltaText, filePath),
+              );
+              stateService.upsert(statePath, contentHash, content.length, 1);
+              statsService.recordDelta(append.deltaText.length, content.length);
+              logger.ingest.info(
+                `[FileWatcher] 追加增量入队 (${eventType}): ${filePath} → ${deltaId}（delta ${append.deltaText.length} 字符）`,
+              );
+              return;
+            }
+
+            // 非追加（编辑/重写）→ 全量更新，由审计流程决定合并/冲突
             memoryService.stageUpdateMemory(
               stableRecord.id,
               getFileUpdates(stableRecord, filePath),
@@ -202,6 +277,7 @@ async function ingestMarkdownFileOnce(
             memoryService.stageCreateMemoryRecord(stableRecord);
           }
 
+          stateService.upsert(statePath, contentHash, content.length);
           logger.ingest.info(
             `[FileWatcher] 已入队 (${eventType}, LLMWiki): ${filePath} → ${stableRecord.id}`,
           );
@@ -235,10 +311,25 @@ async function ingestMarkdownFileOnce(
             ? existing.evidence.sourceHash === contentHash
             : existing.content === content;
           if (unchanged) continue;
+
+          if (appendUsable) {
+            const deltaId = `${stableRecord.id}-a${(prev?.appendCount ?? 0) + 1}`;
+            memoryService.stageCreateMemoryRecord(
+              buildDeltaRecord(existing, deltaId, append.deltaText, filePath),
+            );
+            continue;
+          }
           memoryService.stageUpdateMemory(stableRecord.id, getFileUpdates(stableRecord, filePath));
         } else {
           memoryService.stageCreateMemoryRecord(stableRecord);
         }
+      }
+
+      if (appendUsable) {
+        stateService.upsert(statePath, contentHash, content.length, 1);
+        statsService.recordDelta(append.deltaText.length, content.length);
+      } else {
+        stateService.upsert(statePath, contentHash, content.length);
       }
 
       logger.ingest.info(
@@ -246,6 +337,8 @@ async function ingestMarkdownFileOnce(
       );
     } finally {
       memoryService.close();
+      stateService.close();
+      statsService.close();
     }
   } catch (error) {
     logger.ingest.error(`[FileWatcher] 导入失败 (${filePath}):`, {

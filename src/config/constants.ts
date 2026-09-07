@@ -1,4 +1,10 @@
-export const MEMORY_VERSION = 1;
+/**
+ * 记忆 schema 版本。
+ * v2：新增 status / supersededBy / supersedes / confidence / retrievalCount /
+ *     windowUse / sources / synthesizedBy / compileSignature 九个字段，
+ *     MemoryKind 新增 synthesis。迁移在 MemoryService.init() 内幂等执行。
+ */
+export const MEMORY_VERSION = 2;
 
 export const MAX_RETRY_COUNT = 3;
 
@@ -46,6 +52,49 @@ export const RANKER_WEIGHTS = {
 
 export const RANKER_DEFAULT_MMR_ALPHA = 0.7;
 
+/**
+ * 记忆类型权重（I-2 幻觉防护）：对基础多因子分数做乘性降权，
+ * 防止 AI 推断内容与已验证事实同权进入注入上下文。
+ */
+export const KIND_WEIGHTS: Record<string, number> = {
+  fact: 1,
+  insight: 0.9,
+  inference: 0.85,
+  hypothesis: 0.7,
+  synthesis: 1,
+};
+
+/** ranker heat 因子中 confidence 占比（剩余为 heatScore），权重总量保持不变 */
+export const RANKER_CONFIDENCE_IN_HEAT = 0.4;
+
+/** I-4 置信度：强化步长与上限 */
+export const CONFIDENCE_REINFORCE_STEP = 0.05;
+export const CONFIDENCE_MAX = 0.95;
+/** I-4 置信度：按 kind 差异化的艾宾浩斯衰减系数 λ（单位：1/小时） */
+export const CONFIDENCE_DECAY_LAMBDA: Record<string, number> = {
+  fact: 0.002,
+  insight: 0.004,
+  synthesis: 0.004,
+  inference: 0.008,
+  hypothesis: 0.012,
+};
+/** I-9 检索弱信号的日衰减系数（防止历史高频卡永久霸榜） */
+export const RETRIEVAL_COUNT_DAILY_DECAY = 0.9;
+
+/** I-5 控制面：注入 system prompt 的 index 片段 token 预算硬上限 */
+export const CONTROL_PLANE_TOKEN_BUDGET = 500;
+/** I-5 控制面文件（系统元数据，不入库、不被 file-watcher 采集） */
+export const CONTROL_PLANE_FILES = ["index.md", "overview.md", "log.md", "review_q.md"] as const;
+
+/** I-6 编译：可编译簇的最小卡片数与活跃窗口天数 */
+export const SYNTHESIS_MIN_CLUSTER_SIZE = 5;
+export const SYNTHESIS_ACTIVE_WINDOW_DAYS = 14;
+/** I-7 编译验证：最大重编译轮次（防夜间预算失控） */
+export const COMPILE_MAX_REFINEMENT_ROUNDS = 2;
+
+/** I-8 检索路由：RRF 融合常数 k */
+export const RRF_K = 60;
+
 /** 压缩与遗忘机制阈值 */
 export const MAX_TOTAL_MEMORIES = 2000;
 export const COMPRESSION_BATCH_SIZE = 10;
@@ -63,3 +112,10 @@ export const QUERY_REWRITE_MAX_CHARS = 80;
 export const RETRIEVAL_CANDIDATE_LIMIT = 12;
 /** 注入提示词的最大记忆条数（含图谱邻居扩展后的总量） */
 export const RETRIEVAL_MAX_INJECTED_MEMORIES = 12;
+/**
+ * 注入正文预算（修复"检索回来的记忆只有一句话摘要、写长文时细节全丢"）：
+ * 记忆卡片正文按排名顺序分配进上下文，靠前的（含用户手动选中的）拿满单卡上限，
+ * 预算耗尽后靠后的退化为仅摘要。
+ */
+export const RETRIEVAL_CONTENT_BUDGET_CHARS = 8000;
+export const RETRIEVAL_PER_CARD_CONTENT_MAX_CHARS = 2000;

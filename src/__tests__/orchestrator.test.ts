@@ -130,6 +130,10 @@ vi.mock("../lib/storage/file-manager", () => ({
 
 // ── mock: vector/generator ──
 vi.mock("../lib/vector/generator", () => ({
+  buildEmbeddingKey: (input: { summary?: string; windowUse?: string; content?: string }) => {
+    const parts = [input.summary?.trim(), input.windowUse?.trim()].filter(Boolean) as string[];
+    return parts.length > 0 ? parts.join("\n") : (input.content ?? "").trim();
+  },
   buildVectorRecord: vi.fn((id: string) =>
     Promise.resolve({
       memoryId: id,
@@ -291,8 +295,9 @@ describe("Orchestrator", () => {
   });
 
   describe("resolveConflict", () => {
-    it("接受候选内容后真正更新记忆正文并同步派生存储", async () => {
-      let stored = {
+    it("接受候选内容后生成取代卡片：旧卡标记 superseded 而非被覆盖（I-3）", async () => {
+      const store = new Map<string, any>();
+      const stored = {
         ...builderMock.memoryRecord,
         content: "旧正文",
         accessedAt: "2026-01-01",
@@ -300,6 +305,8 @@ describe("Orchestrator", () => {
         heatScore: 0,
         vectorId: "test-id",
       } as any;
+      store.set(stored.id, stored);
+
       auditServiceStub.getConflict.mockReturnValue({
         conflictId: "conflict-1",
         memoryId: stored.id,
@@ -310,22 +317,37 @@ describe("Orchestrator", () => {
         status: "pending",
         createdAt: "2026-01-01",
       });
-      memoryServiceStub.getMemory.mockImplementation(() => stored);
-      memoryServiceStub.updateMemory.mockImplementation((_id, updates) => {
-        stored = { ...stored, ...updates, version: stored.version + 1 };
+      memoryServiceStub.getMemory.mockImplementation((id: string) => store.get(id) ?? null);
+      memoryServiceStub.createMemoryRecord.mockImplementation((record: any) => {
+        store.set(record.id, { ...record });
+        return Promise.resolve(record.id);
       });
-      memoryServiceStub.listMemories.mockImplementation(() => [stored]);
+      memoryServiceStub.updateMemory.mockImplementation((id: string, updates: any) => {
+        const current = store.get(id);
+        store.set(id, { ...current, ...updates, version: (current?.version ?? 0) + 1 });
+      });
+      memoryServiceStub.listMemories.mockImplementation(() => [...store.values()]);
 
       const result = await orchestrator.resolveConflict("conflict-1", "accept");
 
+      // 新卡承载新主张，且回指旧卡
       expect(result.content).toBe("候选正文");
-      expect(stored.content).toBe("候选正文");
+      expect(result.id).not.toBe(stored.id);
+      expect(result.supersedes).toBe(stored.id);
+      expect(result.status).toBe("active");
+
+      // 旧卡不删、不覆盖，只标记被取代
+      const oldCard = store.get(stored.id);
+      expect(oldCard.content).toBe("旧正文");
+      expect(oldCard.status).toBe("superseded");
+      expect(oldCard.supersededBy).toBe(result.id);
+
+      // 旧值快照总是留存（此前仅同版本首次裁决才补）
       expect(createSnapshotMock).toHaveBeenCalledWith(
         expect.objectContaining({ content: "旧正文" }),
         2,
       );
-      expect(memoryServiceStub.setVectorId).toHaveBeenCalledWith(stored.id, stored.id);
-      expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith(stored.id, "候选正文");
+      expect(memoryServiceStub.classifyMemory).toHaveBeenCalledWith(result.id, "候选正文");
       expect(auditServiceStub.markConflictResolved).toHaveBeenCalledWith(
         "conflict-1",
         "accept",
@@ -338,9 +360,36 @@ describe("Orchestrator", () => {
       );
       expect(memoryWriter.updateAgentMarkdown).toHaveBeenCalled();
       const indexWriter = await import("../lib/storage/index-writer");
-      expect(indexWriter.updateIndexMap).toHaveBeenCalledWith([
-        expect.objectContaining({ content: "候选正文" }),
-      ]);
+      expect(indexWriter.updateIndexMap).toHaveBeenCalled();
+    });
+
+    it("元数据字段裁决仍就地更新，不产生取代链", async () => {
+      const store = new Map<string, any>();
+      const stored = { ...builderMock.memoryRecord, title: "原标题" } as any;
+      store.set(stored.id, stored);
+
+      auditServiceStub.getConflict.mockReturnValue({
+        conflictId: "conflict-meta",
+        memoryId: stored.id,
+        eventId: "evt-meta",
+        field: "title",
+        existingValue: JSON.stringify("原标题"),
+        candidateValue: JSON.stringify("候选标题"),
+        status: "pending",
+        createdAt: "2026-01-01",
+      });
+      memoryServiceStub.getMemory.mockImplementation((id: string) => store.get(id) ?? null);
+      memoryServiceStub.updateMemory.mockImplementation((id: string, updates: any) => {
+        store.set(id, { ...store.get(id), ...updates });
+      });
+      memoryServiceStub.listMemories.mockImplementation(() => [...store.values()]);
+
+      const result = await orchestrator.resolveConflict("conflict-meta", "accept");
+
+      expect(result.id).toBe(stored.id);
+      expect(result.title).toBe("候选标题");
+      expect(memoryServiceStub.createMemoryRecord).not.toHaveBeenCalled();
+      expect(store.get(stored.id).status).toBeUndefined();
     });
 
     it("保留现有值时不改正文，但仍完成投影同步后标记解决", async () => {

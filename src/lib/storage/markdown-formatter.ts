@@ -28,8 +28,22 @@ export function formatFrontmatter(record: MemoryRecord): string {
     record.evidence?.location ? `evidenceLocation: "${escapeYaml(record.evidence.location)}"` : "",
     `createdAt: "${record.createdAt}"`,
     `updatedAt: "${record.updatedAt}"`,
+    // 补齐 accessedAt / accessCount：parser 会读取，缺失会导致 round-trip 丢数据
+    `accessedAt: "${record.accessedAt}"`,
+    `accessCount: ${record.accessCount}`,
     `version: ${record.version}`,
     record.heatScore > 0 ? `heatScore: ${record.heatScore.toFixed(2)}` : `heatScore: 0`,
+    // ── schema v2：生命周期、置信度与编译溯源 ──
+    record.status && record.status !== "active" ? `status: "${record.status}"` : "",
+    record.supersededBy ? `supersededBy: "${record.supersededBy}"` : "",
+    record.supersedes ? `supersedes: "${record.supersedes}"` : "",
+    typeof record.confidence === "number" ? `confidence: ${record.confidence.toFixed(3)}` : "",
+    typeof record.retrievalCount === "number" && record.retrievalCount > 0
+      ? `retrievalCount: ${record.retrievalCount}`
+      : "",
+    record.windowUse ? `windowUse: "${escapeYaml(record.windowUse)}"` : "",
+    record.synthesizedBy ? `synthesizedBy: "${record.synthesizedBy}"` : "",
+    record.compileSignature ? `compileSignature: "${record.compileSignature}"` : "",
   ].filter((l) => l !== "");
 
   // tags
@@ -56,6 +70,11 @@ export function formatFrontmatter(record: MemoryRecord): string {
   const relatedIds = record.graphLinks.filter((id) => id && id !== record.id);
   if (relatedIds.length > 0) {
     lines.push(`related: [${relatedIds.map((id) => `"${id}"`).join(", ")}]`);
+  }
+
+  // synthesis 卡的来源卡引用：保证结论可回溯，避免"去出处化"
+  if (record.sources && record.sources.length > 0) {
+    lines.push(`sources: [${record.sources.map((id) => `"${id}"`).join(", ")}]`);
   }
 
   lines.push(FRONTMATTER_DELIMITER);

@@ -237,10 +237,34 @@ describe("Ranker", () => {
     );
     // max=100，m1 accessCount=0 → accessScore = ln(1)/ln(101) = 0
     // m2 accessCount=100 → accessScore = ln(101)/ln(101) = 1
+    // I-9 双信号：弱信号 retrievalCount=0 不贡献，强信号权重 0.7
     const m1Result = results.find((r) => r.memoryId === "m1")!;
     const m2Result = results.find((r) => r.memoryId === "m2")!;
     expect(m1Result.factors.access).toBe(0);
-    expect(m2Result.factors.access).toBeCloseTo(1, 5);
+    expect(m2Result.factors.access).toBeCloseTo(0.7, 5);
+  });
+
+  it("I-9: 冷启动卡可凭弱信号 retrievalCount 进入候选池，但权重低于用户认可", () => {
+    const ranker = new Ranker();
+    const coldStart = makeMemory({ id: "cold", accessCount: 0, retrievalCount: 100 });
+    const userClicked = makeMemory({ id: "hot", accessCount: 100, retrievalCount: 0 });
+    const results = ranker.rank(
+      [
+        { memoryId: "cold", similarity: 0.5 },
+        { memoryId: "hot", similarity: 0.5 },
+      ],
+      new Map([
+        ["cold", coldStart],
+        ["hot", userClicked],
+      ]),
+      [],
+    );
+    const cold = results.find((r) => r.memoryId === "cold")!;
+    const hot = results.find((r) => r.memoryId === "hot")!;
+    // 弱信号满格也只能拿到 0.3，强信号满格拿到 0.7
+    expect(cold.factors.access).toBeCloseTo(0.3, 5);
+    expect(hot.factors.access).toBeCloseTo(0.7, 5);
+    expect(hot.factors.access).toBeGreaterThan(cold.factors.access);
   });
 
   it("computes tagAffinityScore via Jaccard similarity", () => {
@@ -261,7 +285,7 @@ describe("Ranker", () => {
     expect(results[0].factors.tagAffinity).toBe(0);
   });
 
-  it("weighted sum: 0.4*relevance + 0.25*heat + 0.2*recency + 0.1*access + 0.05*tag", () => {
+  it("weighted sum: 0.4*relevance + 0.25*heat + 0.2*recency + 0.1*access + 0.05*tag（乘 kindWeight）", () => {
     const ranker = new Ranker();
     const mem = makeMemory({
       id: "m1",
@@ -275,12 +299,51 @@ describe("Ranker", () => {
     const results = ranker.rank([{ memoryId: "m1", similarity: 0.8 }], memories, ["a"]);
     const r = results[0];
     const expected =
-      0.8 * 0.4 +
-      0.6 * 0.25 +
-      r.factors.recency * 0.2 + // recency ≈ 1（刚刚更新）
-      r.factors.access * 0.1 +
-      r.factors.tagAffinity * 0.05;
+      (0.8 * 0.4 +
+        r.factors.heat * 0.25 + // heat 已包含 confidence 合成结果
+        r.factors.recency * 0.2 + // recency ≈ 1（刚刚更新）
+        r.factors.access * 0.1 +
+        r.factors.tagAffinity * 0.05) *
+      r.factors.kindWeight;
     expect(r.score).toBeCloseTo(expected, 5);
+  });
+
+  it("I-4: heat 因子由 heatScore 与 confidence 合成（权重总量不变）", () => {
+    const ranker = new Ranker();
+    const mem = makeMemory({ id: "m1", heatScore: 0.6, confidence: 0.5 });
+    const results = ranker.rank([{ memoryId: "m1", similarity: 0 }], new Map([["m1", mem]]), []);
+    // 0.6 * 0.6(heatScore) + 0.5 * 0.4(confidence)
+    expect(results[0].factors.heat).toBeCloseTo(0.36 + 0.2, 5);
+  });
+
+  it("I-2: 非事实类记忆按 kind 乘性降权（fact > insight > inference > hypothesis）", () => {
+    const ranker = new Ranker();
+    const make = (id: string, kind: MemoryRecord["kind"]) =>
+      makeMemory({ id, kind, heatScore: 0, accessCount: 0, tags: [] });
+    const memories = new Map(
+      (["fact", "insight", "inference", "hypothesis"] as const).map((kind) => [
+        kind,
+        make(kind, kind),
+      ]),
+    );
+
+    const results = ranker.rank(
+      (["fact", "insight", "inference", "hypothesis"] as const).map((kind) => ({
+        memoryId: kind,
+        similarity: 1,
+      })),
+      memories,
+      [],
+    );
+
+    const scoreOf = (kind: string) => results.find((r) => r.memoryId === kind)!.score;
+    expect(scoreOf("fact")).toBeGreaterThan(scoreOf("insight"));
+    expect(scoreOf("insight")).toBeGreaterThan(scoreOf("inference"));
+    expect(scoreOf("inference")).toBeGreaterThan(scoreOf("hypothesis"));
+    expect(results.find((r) => r.memoryId === "hypothesis")!.factors.kindWeight).toBeCloseTo(
+      0.7,
+      5,
+    );
   });
 
   it("sorts results by score descending", () => {

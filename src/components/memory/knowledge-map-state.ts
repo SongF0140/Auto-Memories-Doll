@@ -49,21 +49,24 @@ export const useKnowledgeMapState = (memories: MemoryRecord[]): KnowledgeMapStat
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<KnowledgeCategory | null>(null);
 
-  const filteredNodes = useMemo(() => filterKnowledgeNodes(nodes, query, activeCategory), [nodes, query, activeCategory]);
+  const filteredNodes = useMemo(
+    () => filterKnowledgeNodes(nodes, query, activeCategory),
+    [nodes, query, activeCategory],
+  );
   const categoryCounts = useMemo(() => countNodesByCategory(nodes), [nodes]);
-  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedId) ?? null, [nodes, selectedId]);
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedId) ?? null,
+    [nodes, selectedId],
+  );
   const relatedNodeIds = useMemo(() => {
     const focusId = selectedId ?? hoveredId;
     return focusId ? collectRelatedNodeIds(nodes, edges, focusId) : null;
   }, [edges, hoveredId, nodes, selectedId]);
 
   const toggleFinder = useCallback(() => setFinderOpen((open) => !open), []);
-  const toggleCategory = useCallback(
-    (category: KnowledgeCategory) => {
-      setActiveCategory((current) => (current === category ? null : category));
-    },
-    [],
-  );
+  const toggleCategory = useCallback((category: KnowledgeCategory) => {
+    setActiveCategory((current) => (current === category ? null : category));
+  }, []);
   const clearFilters = useCallback(() => {
     setQuery("");
     setActiveCategory(null);

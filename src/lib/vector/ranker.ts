@@ -1,5 +1,10 @@
 import { MemoryRecord } from "../../types/memory";
-import { RANKER_DEFAULT_MMR_ALPHA, RANKER_WEIGHTS } from "../../config/constants";
+import {
+  KIND_WEIGHTS,
+  RANKER_CONFIDENCE_IN_HEAT,
+  RANKER_DEFAULT_MMR_ALPHA,
+  RANKER_WEIGHTS,
+} from "../../config/constants";
 
 export type RankResult = {
   memoryId: string;
@@ -11,6 +16,8 @@ export type RankResult = {
     recency: number;
     access: number;
     tagAffinity: number;
+    /** I-2 记忆类型降权系数（fact 1.0 / inference 0.85 / hypothesis 0.7 …） */
+    kindWeight: number;
   };
 };
 
@@ -113,7 +120,9 @@ export class Ranker {
     profileTags: string[],
   ): RankResult[] {
     const now = Date.now();
-    const maxAccess = Math.max(...Array.from(memories.values()).map((m) => m.accessCount), 1);
+    const allMemories = Array.from(memories.values());
+    const maxAccess = Math.max(...allMemories.map((m) => m.accessCount), 1);
+    const maxRetrieval = Math.max(...allMemories.map((m) => m.retrievalCount ?? 0), 1);
 
     return candidates
       .map((candidate) => {
@@ -123,18 +132,31 @@ export class Ranker {
         const hoursSinceUpdate = (now - new Date(memory.updatedAt).getTime()) / (1000 * 60 * 60);
         const recencyScore = Math.exp(-0.01 * hoursSinceUpdate);
 
-        const accessScore = Math.log(1 + memory.accessCount) / Math.log(1 + maxAccess);
+        // I-9 双信号热度：强信号（用户点击 accessCount）为主，弱信号（自动召回 retrievalCount）
+        // 为辅。冷启动卡可凭弱信号进入候选池，但自动召回永远无法超越用户认可。
+        const accessScore =
+          0.3 * (Math.log(1 + (memory.retrievalCount ?? 0)) / Math.log(1 + maxRetrieval)) +
+          0.7 * (Math.log(1 + memory.accessCount) / Math.log(1 + maxAccess));
 
         const intersection = memory.tags.filter((t) => profileTags.includes(t)).length;
         const union = memory.tags.length + profileTags.length - intersection;
         const tagAffinityScore = union > 0 ? intersection / union : 0;
 
+        // I-4：heat 因子由热度与置信度合成（权重总量不变，保持既有红线）
+        const heatScore = (1 - RANKER_CONFIDENCE_IN_HEAT) * memory.heatScore;
+        const confidenceScore = RANKER_CONFIDENCE_IN_HEAT * (memory.confidence ?? 0);
+        const heatFactor = heatScore + confidenceScore;
+
+        // I-2：记忆类型乘性降权，防止 AI 推断与已验证事实同权
+        const kindWeight = KIND_WEIGHTS[memory.kind ?? "fact"] ?? 1;
+
         const score =
-          candidate.similarity * RANKER_WEIGHTS.relevance +
-          memory.heatScore * RANKER_WEIGHTS.heat +
-          recencyScore * RANKER_WEIGHTS.recency +
-          accessScore * RANKER_WEIGHTS.access +
-          tagAffinityScore * RANKER_WEIGHTS.tagAffinity;
+          (candidate.similarity * RANKER_WEIGHTS.relevance +
+            heatFactor * RANKER_WEIGHTS.heat +
+            recencyScore * RANKER_WEIGHTS.recency +
+            accessScore * RANKER_WEIGHTS.access +
+            tagAffinityScore * RANKER_WEIGHTS.tagAffinity) *
+          kindWeight;
 
         return {
           memoryId: candidate.memoryId,
@@ -142,10 +164,11 @@ export class Ranker {
           originalScore: candidate.similarity,
           factors: {
             relevance: candidate.similarity,
-            heat: memory.heatScore,
+            heat: heatFactor,
             recency: recencyScore,
             access: accessScore,
             tagAffinity: tagAffinityScore,
+            kindWeight,
           },
         };
       })

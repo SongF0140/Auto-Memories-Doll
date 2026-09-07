@@ -42,6 +42,11 @@ vi.mock("../lib/vector/generator", () => ({
     }
     return vectorMock.build(memoryId, text);
   },
+  // I-11：embedding 键 = summary + windowUse（缺省回退全文）
+  buildEmbeddingKey: (input: { summary?: string; windowUse?: string; content?: string }) => {
+    const parts = [input.summary?.trim(), input.windowUse?.trim()].filter(Boolean) as string[];
+    return parts.length > 0 ? parts.join("\n") : (input.content ?? "").trim();
+  },
   generateEmbedding: async () => [0.1, 0.2, 0.3],
   isEmbeddingEmpty: (e: number[]) => e.length === 0,
 }));

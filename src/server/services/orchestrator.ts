@@ -3,7 +3,12 @@ import { AuditService } from "./audit-service";
 import { AuditReportWriter } from "./audit-report-writer";
 import { Auditor } from "../../features/audit/auditor";
 import { AuditReporter } from "../../features/audit/reporter";
-import { QualityFilterService, SimilarMemoryHint } from "./quality-filter-service";
+import {
+  QualityFilterService,
+  QualityFilterResult,
+  SimilarMemoryHint,
+} from "./quality-filter-service";
+import { ConfidenceService } from "./confidence-service";
 import { MemoryExtractionService, ExtractedCard } from "./memory-extraction-service";
 import { MemoryCardHygieneService } from "./memory-card-hygiene-service";
 import { TopicClassificationService } from "./topic-classification-service";
@@ -13,7 +18,7 @@ import { MemoryRecord, MemoryKind, MemoryEvidence, PendingEvent } from "../../ty
 import { buildMemoryRecord, buildPendingEvent } from "../../lib/memory/builder";
 import { validateMemoryRecord } from "../../lib/memory/validator";
 import { generateZhFields } from "../../lib/memory/translator";
-import { buildVectorRecord } from "../../lib/vector/generator";
+import { buildVectorRecord, buildEmbeddingKey } from "../../lib/vector/generator";
 import { VectorIndex } from "../../lib/vector/index";
 import { updateIndexMap } from "../../lib/storage/index-writer";
 import { writeMemoryMarkdown, updateAgentMarkdown } from "../../lib/storage/memory-writer";
@@ -52,6 +57,13 @@ function sourceHashOf(content: string): string {
 
 /** 向量召回的单条相似命中 */
 type SimilarHit = { memoryId: string; similarity: number; title: string; summary: string };
+
+/**
+ * 会触发取代链（Supersession）的字段：这些字段承载"知识主张"本身。
+ * 它们被裁决改写时，旧主张不能就地消失，必须留一条 superseded 卡片形成 A → B → C 版本轨迹。
+ * 标题/标签/话题等元数据字段仍走就地更新（不影响知识主张，且需保持 memoryId 稳定）。
+ */
+const SUPERSEDING_MEMORY_FIELDS = new Set<keyof MemoryRecord>(["content", "summary", "summaryZh"]);
 
 const RESOLVABLE_MEMORY_FIELDS = new Set<keyof MemoryRecord>([
   "source",
@@ -335,6 +347,7 @@ export class Orchestrator {
           );
           return;
         }
+        this.applyQualityResult(candidate, filterResult);
         if (filterResult.verdict === "review") {
           updateQualityReview = true;
           logger.audit.warn("更新内容质量存疑，禁用 auto_merge，转人工冲突裁决", {
@@ -391,9 +404,13 @@ export class Orchestrator {
           const merged = resolution.merged;
           this.memoryService.updateMemory(event.memoryId, merged);
 
-          // 内容发生变更时重新生成向量
+          // 内容发生变更时重新生成向量（I-11：键为 summary + windowUse）
           if (event.changedFields.includes("content") && merged.content) {
-            await this.refreshVector(event.memoryId, merged.content);
+            await this.refreshVector(event.memoryId, {
+              summary: merged.summary,
+              windowUse: merged.windowUse,
+              content: merged.content,
+            });
           }
 
           // SQLite 已更新（真源）；派生物同步失败不阻塞事件完成
@@ -747,8 +764,8 @@ export class Orchestrator {
       return;
     }
 
-    // 闸门判定的记忆类型回填到候选（非 fact 已在闸门内转为 review，不会走到这里）
-    candidate.kind = filterResult.kind;
+    // 闸门判定的记忆类型与置信度回填到候选（非 fact 已在闸门内转为 review，不会走到这里）
+    this.applyQualityResult(candidate, filterResult);
 
     // 中文抽取拆卡：原文直存会是英文/raw markdown 大杂烩，这里按话题拆分并全文重写为中文。
     // 抽取失败 fail-closed 转人工，绝不把原文大杂烩静默落盘。
@@ -806,6 +823,8 @@ export class Orchestrator {
         content: card.content,
         tags: card.tags.length > 0 ? card.tags : candidate.tags,
         tagsZh: card.tags.length > 0 ? card.tags : candidate.tagsZh,
+        // I-11：使用场景随卡落库，与 summary 共同构成 embedding 键
+        windowUse: card.windowUse,
         evidence: {
           text: candidate.evidence?.text ?? candidate.content.slice(0, 500),
           location: candidate.evidence?.location,
@@ -942,10 +961,13 @@ export class Orchestrator {
     return event;
   }
 
-  private async refreshVector(memoryId: string, content: string): Promise<void> {
+  private async refreshVector(
+    memoryId: string,
+    keyInput: { summary?: string; windowUse?: string; content?: string },
+  ): Promise<void> {
     const vectorIndex = new VectorIndex();
     try {
-      const vectorRecord = await buildVectorRecord(memoryId, content);
+      const vectorRecord = await buildVectorRecord(memoryId, buildEmbeddingKey(keyInput));
       vectorIndex.create(vectorRecord);
       this.memoryService.setVectorId(memoryId, memoryId);
     } catch (vectorError) {
@@ -1000,25 +1022,91 @@ export class Orchestrator {
       }
 
       if (JSON.stringify(existing[field]) !== JSON.stringify(selectedValue)) {
+        // 总是留存旧值快照（此前仅"同版本首次裁决"才补，重复裁决会丢失历史）
         const versionManager = new VersionManager();
         try {
-          if (!versionManager.getSnapshot(existing.id, existing.version)) {
-            versionManager.createSnapshot(existing, existing.version);
-          }
+          versionManager.createSnapshot(existing, existing.version);
         } finally {
           versionManager.close();
         }
-        this.memoryService.updateMemory(existing.id, {
-          [field]: selectedValue,
-          updatedAt: candidate.updatedAt,
-        } as Partial<MemoryRecord>);
-        updated = this.memoryService.getMemory(existing.id)!;
+
+        if (SUPERSEDING_MEMORY_FIELDS.has(field)) {
+          updated = await this.createSupersedingMemory(
+            existing,
+            field,
+            selectedValue,
+            candidate.updatedAt,
+          );
+        } else {
+          this.memoryService.updateMemory(existing.id, {
+            [field]: selectedValue,
+            updatedAt: candidate.updatedAt,
+          } as Partial<MemoryRecord>);
+          updated = this.memoryService.getMemory(existing.id)!;
+        }
       }
     }
 
     updated = await this.syncResolvedMemory(existing, updated);
     this.auditService.markConflictResolved(conflictId, resolution, manualValue);
     return updated;
+  }
+
+  /**
+   * 创建取代卡片（I-3 Supersession）：
+   * 新主张落成一张独立记忆（新 id、supersedes 回指旧卡），旧卡标记 superseded 保留可追溯，
+   * 不删除、不覆盖。检索与矛盾检测默认跳过 superseded 卡，但在审计 UI 中链仍可见。
+   */
+  private async createSupersedingMemory(
+    existing: MemoryRecord,
+    field: keyof MemoryRecord,
+    value: unknown,
+    updatedAt: string,
+  ): Promise<MemoryRecord> {
+    const newId = generateId();
+    const superseding = {
+      ...existing,
+      id: newId,
+      [field]: value,
+      status: "active",
+      supersedes: existing.id,
+      supersededBy: undefined,
+      version: 1,
+      createdAt: updatedAt,
+      updatedAt,
+      // 新主张不继承旧卡的用户点击与自动召回计数（热度随新卡重新积累）
+      accessCount: 0,
+      retrievalCount: 0,
+      vectorId: undefined,
+      graphLinks: [...new Set([...existing.graphLinks, existing.id])],
+    } as MemoryRecord;
+
+    if (!validateMemoryRecord(superseding)) {
+      throw new MemoryValidationError(String(field), "取代后的记忆记录无效");
+    }
+
+    await this.memoryService.createMemoryRecord(superseding);
+    this.memoryService.updateMemory(existing.id, {
+      status: "superseded",
+      supersededBy: newId,
+      updatedAt,
+    } as Partial<MemoryRecord>);
+
+    await writeMemoryMarkdown(this.memoryService.getMemory(existing.id) ?? existing);
+
+    return this.memoryService.getMemory(newId) ?? superseding;
+  }
+
+  /** 闸门结果回填（F-3）：kind 与 confidence。质量分此前被丢弃，导致置信度没有初值来源。 */
+  private applyQualityResult(candidate: MemoryRecord, result: QualityFilterResult): void {
+    if (result.kind) candidate.kind = result.kind;
+    if (typeof result.score === "number") {
+      candidate.confidence = ConfidenceService.initial({
+        qualityScore: result.score / 10,
+        kind: candidate.kind ?? result.kind,
+        hasSourceHash: Boolean(candidate.evidence?.sourceHash),
+      });
+    }
   }
 
   private parseConflictValue(raw: string): unknown {
@@ -1034,7 +1122,11 @@ export class Orchestrator {
     updated: MemoryRecord,
   ): Promise<MemoryRecord> {
     if (previous.content !== updated.content) {
-      await this.refreshVector(updated.id, updated.content);
+      await this.refreshVector(updated.id, {
+        summary: updated.summary,
+        windowUse: updated.windowUse,
+        content: updated.content,
+      });
       this.memoryService.classifyMemory(updated.id, updated.content);
       updated = this.memoryService.getMemory(updated.id)!;
     }

@@ -380,11 +380,7 @@ export class HnswVectorSearchBackend implements VectorSearchBackend {
       }
 
       if (keys.length > 0) {
-        index.add(
-          BigUint64Array.from(keys),
-          Float32Array.from(vectors),
-          1,
-        );
+        index.add(BigUint64Array.from(keys), Float32Array.from(vectors), 1);
       }
     }
 

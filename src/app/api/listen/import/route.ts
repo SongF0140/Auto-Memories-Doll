@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
     const importsDir = join(getMemoryRoot(), "imports");
     await mkdir(importsDir, { recursive: true });
 
-    const results: { fileName: string; success: boolean; savedPath?: string; error?: string }[] = [];
+    const results: { fileName: string; success: boolean; savedPath?: string; error?: string }[] =
+      [];
 
     for (const file of files) {
       const fileName = file.name || "import.md";

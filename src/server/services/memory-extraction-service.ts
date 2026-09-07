@@ -9,14 +9,19 @@ export type ExtractedCard = {
   summary: string;
   content: string;
   tags: string[];
+  /**
+   * I-11 使用场景："当用户问 X / 做 Y 时这条记忆有用"。
+   * 与 summary 共同构成 embedding 键（Rainy window-use 分离），使召回语义对齐查询。
+   */
+  windowUse?: string;
 };
 
 /** 单次抽取最多产出的卡片数：防止 LLM 失控拆出几十张导致成本爆炸 */
 const MAX_CARDS = 8;
-/** 送入 LLM 的原文上限（与采集侧 SESSION_CONTENT_MAX_CHARS 对齐后留余量） */
-const PROMPT_CONTENT_LIMIT = 12_000;
-/** 单卡正文的硬上限：保留长日志，但避免单条记忆无限膨胀。 */
-const CARD_CONTENT_LIMIT = 10_000;
+/** 送入 LLM 的原文上限：需要完整保留博客/长文档级别的细节，24k 字符以内不截断 */
+const PROMPT_CONTENT_LIMIT = 24_000;
+/** 单卡正文的硬上限：保留长日志与长文，但避免单条记忆无限膨胀。 */
+const CARD_CONTENT_LIMIT = 20_000;
 /** 非标准输出时的最大重试次数 */
 const MAX_PARSE_ATTEMPTS = 2;
 
@@ -85,6 +90,8 @@ export class MemoryExtractionService {
           summary: (summary || content.slice(0, 80)).slice(0, 160),
           content: this.limitExtractedContent(content, sourceContent),
           tags: tags.slice(0, 5),
+          windowUse:
+            typeof item.windowUse === "string" ? item.windowUse.trim().slice(0, 120) : undefined,
         });
       }
 
@@ -135,8 +142,9 @@ ${similar.map((s, i) => `${i + 1}. 《${s.title}》：${s.summary}`).join("\n")}
 4. 每张卡片：
    - title：中文标题，20 字以内，概括该卡话题
    - summary：中文一句话摘要，80 字以内
-   - content：中文详细日志，优先 1,500-10,000 字；必须保留笔记、坑点、问题与回答、数字、配置值、结论和必要的原始上下文。原文较短时按实际长度输出，不要编造内容。
+   - content：中文详细日志，优先 1,500-20,000 字；必须保留笔记、坑点、问题与回答、数字、配置值、结论、段落结构和必要的原始上下文——这些细节会在后续对话中被检索并注入上下文，写长文（博客/报告）时全靠它，宁可长也不要概括丢细节。原文较短时按实际长度输出，不要编造内容。
    - tags：2-5 个中文标签
+   - windowUse：这条记忆在什么场景下有用，120 字以内。格式如"当用户问 X / 需要做 Y / 排查 Z 问题时"。检索时用它匹配用户查询。
 5. 只整理原文确实包含的信息，不要编造或补充原文没有的内容。
 ${similarBlock}
 来源：${candidate.source}
@@ -145,7 +153,7 @@ ${similarBlock}
 原始内容：
 ${candidate.content.slice(0, PROMPT_CONTENT_LIMIT)}
 
-只回复 JSON，不要多余解释：{"memories": [{"title": "...", "summary": "...", "content": "...", "tags": ["..."]}]}`;
+只回复 JSON，不要多余解释：{"memories": [{"title": "...", "summary": "...", "content": "...", "tags": ["..."], "windowUse": "..."}]}`;
   }
 
   private limitExtractedContent(extracted: string, source: string): string {

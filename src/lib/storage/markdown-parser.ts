@@ -75,6 +75,16 @@ export function parseMemoryFromText(text: string): MemoryRecord | null {
     accessCount: parseInt(frontmatter.accessCount) || 0,
     heatScore: parseFloat(frontmatter.heatScore) || 0,
     graphLinks: allGraphLinks,
+    // ── schema v2 ──
+    status: (frontmatter.status as MemoryRecord["status"]) || undefined,
+    supersededBy: frontmatter.supersededBy || undefined,
+    supersedes: frontmatter.supersedes || undefined,
+    confidence: frontmatter.confidence ? parseFloat(frontmatter.confidence) : undefined,
+    retrievalCount: frontmatter.retrievalCount ? parseInt(frontmatter.retrievalCount) : undefined,
+    windowUse: frontmatter.windowUse || undefined,
+    sources: frontmatter.sources ? parseYamlArray(frontmatter.sources) : undefined,
+    synthesizedBy: frontmatter.synthesizedBy || undefined,
+    compileSignature: frontmatter.compileSignature || undefined,
   };
 }
 

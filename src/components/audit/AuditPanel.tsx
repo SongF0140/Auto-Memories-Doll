@@ -154,7 +154,11 @@ export default function AuditPanel() {
   };
 
   const handleRebuild = async () => {
-    if (!confirm("重建将删除所有文件采集的记忆卡片（对话/手动创建的不受影响），然后全量重扫重新生成中文卡片。继续？")) {
+    if (
+      !confirm(
+        "重建将删除所有文件采集的记忆卡片（对话/手动创建的不受影响），然后全量重扫重新生成中文卡片。继续？",
+      )
+    ) {
       return;
     }
     setRebuilding(true);
@@ -186,7 +190,9 @@ export default function AuditPanel() {
         if (res.ok && result?.success) {
           lines.push(`「${file.name}」导入成功，已保存到 ${result.savedPath}`);
         } else {
-          lines.push(`「${file.name}」导入失败：${result?.error || data.error?.message || "未知错误"}`);
+          lines.push(
+            `「${file.name}」导入失败：${result?.error || data.error?.message || "未知错误"}`,
+          );
         }
       }
       setImportMessage(lines.join("\n"));

@@ -97,7 +97,7 @@ ${profileContent || "暂无用户画像，在对话中将逐步了解用户偏�
     const cached = this.cache.get(key);
     if (cached) return cached.content;
 
-    const content = `## 相关记忆\n${memoryContent}\n\n## 回答格式\n- 使用 Markdown 格式使回答更清晰易读\n- 若引用了某条记忆，用引用块标注 [来自记忆]\n- 保持回答简洁，避免冗长，重点突出`;
+    const content = `## 相关记忆\n${memoryContent}\n\n## 回答格式\n- 使用 Markdown 格式使回答更清晰易读\n- 若引用了某条记忆，用引用块标注 [来自记忆]\n- 每条记忆包含摘要和正文："摘要"是一句话概括，"内容"才是完整细节。写博客、报告、总结等长文时，必须基于"内容"展开具体细节，绝不能只根据摘要复述\n- 保持回答简洁，避免冗长，重点突出`;
 
     this.cache.set(key, {
       content,

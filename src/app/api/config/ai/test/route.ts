@@ -130,9 +130,7 @@ async function testChatConnection(options: TestConnectionOptions): Promise<Conne
   return { success: true, message: `模型 ${actualModel} 响应正常`, model: actualModel };
 }
 
-async function testEmbeddingConnection(
-  options: TestConnectionOptions,
-): Promise<ConnectionResult> {
+async function testEmbeddingConnection(options: TestConnectionOptions): Promise<ConnectionResult> {
   const testModel = options.model || "text-embedding-3-small";
   if (!options.apiKey?.trim()) {
     return { success: false, message: "Embedding API Key 不能为空", model: testModel };

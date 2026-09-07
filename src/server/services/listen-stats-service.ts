@@ -70,6 +70,35 @@ export class ListenStatsService {
     // shared connection - closed by closeDatabase()
   }
 
+  /**
+   * I-10 段级增量节省统计：追加型文件只处理新增部分时，
+   * 记录 delta 字符数与全量本应处理的字符数，用于"节省率报表"。
+   */
+  recordDelta(deltaChars: number, fullChars: number): void {
+    if (!Number.isFinite(deltaChars) || !Number.isFinite(fullChars)) return;
+    this.db
+      .prepare(
+        `UPDATE listen_stats
+         SET deltaSavedChars = deltaSavedChars + ?,
+             deltaTotalChars = deltaTotalChars + ?
+         WHERE id = 1`,
+      )
+      .run(Math.max(0, Math.round(deltaChars)), Math.max(0, Math.round(fullChars)));
+  }
+
+  getDeltaSavings(): { deltaSavedChars: number; deltaTotalChars: number; savedRatio: number } {
+    const row = this.db
+      .prepare("SELECT deltaSavedChars, deltaTotalChars FROM listen_stats WHERE id = 1")
+      .get() as { deltaSavedChars?: number; deltaTotalChars?: number } | undefined;
+    const saved = row?.deltaSavedChars ?? 0;
+    const total = row?.deltaTotalChars ?? 0;
+    return {
+      deltaSavedChars: saved,
+      deltaTotalChars: total,
+      savedRatio: total > 0 ? Math.round((saved / total) * 10000) / 10000 : 0,
+    };
+  }
+
   private init(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS listen_stats (
@@ -85,6 +114,14 @@ export class ListenStatsService {
         id, totalReceived, totalProcessed, lastReceivedAt, sources, topics
       ) VALUES (1, 0, 0, NULL, '{}', '{}');
     `);
+    // I-10：旧库补列（幂等）
+    for (const col of ["deltaSavedChars", "deltaTotalChars"]) {
+      try {
+        this.db.exec(`ALTER TABLE listen_stats ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
+      } catch {
+        // 列已存在，跳过
+      }
+    }
   }
 
   private save(stats: ListenStats): void {
