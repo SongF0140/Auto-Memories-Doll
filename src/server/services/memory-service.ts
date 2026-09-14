@@ -489,6 +489,24 @@ export class MemoryService {
     return row?.cnt ?? 0;
   }
 
+  /** I-11 迁移：还缺 windowUse 的卡片数（回填进度的天然断点指标） */
+  countMissingWindowUse(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) as cnt FROM memories WHERE windowUse IS NULL OR windowUse = ''")
+      .get() as { cnt: number };
+    return row?.cnt ?? 0;
+  }
+
+  /** I-11 迁移：取一批缺 windowUse 的卡片（按 id 稳定排序，保证分批遍历不重不漏） */
+  getMemoriesMissingWindowUse(limit: number): MemoryRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM memories WHERE windowUse IS NULL OR windowUse = '' ORDER BY id LIMIT ?`,
+      )
+      .all(limit) as any[];
+    return rows.map((row) => this.mapMemoryRow(row));
+  }
+
   updateMemory(id: string, updates: Partial<MemoryRecord>): void {
     const existing = this.getMemory(id);
     if (!existing) throw new MemoryNotFoundError(id);

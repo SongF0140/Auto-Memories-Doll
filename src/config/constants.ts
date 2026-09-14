@@ -84,7 +84,13 @@ export const RETRIEVAL_COUNT_DAILY_DECAY = 0.9;
 /** I-5 控制面：注入 system prompt 的 index 片段 token 预算硬上限 */
 export const CONTROL_PLANE_TOKEN_BUDGET = 500;
 /** I-5 控制面文件（系统元数据，不入库、不被 file-watcher 采集） */
-export const CONTROL_PLANE_FILES = ["index.md", "overview.md", "log.md", "review_q.md"] as const;
+export const CONTROL_PLANE_FILES = [
+  "index.md",
+  "overview.md",
+  "log.md",
+  "review_q.md",
+  "purpose.md",
+] as const;
 
 /** I-6 编译：可编译簇的最小卡片数与活跃窗口天数 */
 export const SYNTHESIS_MIN_CLUSTER_SIZE = 5;

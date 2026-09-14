@@ -54,16 +54,24 @@ export class VectorWorker {
       const cursor = state.lastMemoryId;
 
       while (true) {
+        // 只重建已有 windowUse 的卡片：缺 windowUse 的存量卡由
+        // WindowUseBackfillService 先补齐再重嵌——否则 buildEmbeddingKey
+        // 回退 content 键，重嵌等于原样重算，白烧配额且键分布不变。
         const rows = (
           cursor
             ? this.db
                 .prepare(
                   `SELECT id, summary, windowUse, content FROM memories
-                   WHERE id > ? ORDER BY id LIMIT ?`,
+                   WHERE id > ? AND windowUse IS NOT NULL AND windowUse != ''
+                   ORDER BY id LIMIT ?`,
                 )
                 .all(cursor, batchSize)
             : this.db
-                .prepare(`SELECT id, summary, windowUse, content FROM memories ORDER BY id LIMIT ?`)
+                .prepare(
+                  `SELECT id, summary, windowUse, content FROM memories
+                   WHERE windowUse IS NOT NULL AND windowUse != ''
+                   ORDER BY id LIMIT ?`,
+                )
                 .all(batchSize)
         ) as Array<{
           id: string;
@@ -108,7 +116,9 @@ export class VectorWorker {
         }
 
         // 达到单次调用的配额上限：保留锚点，剩余部分留给下次调用
-        const more = this.db.prepare("SELECT 1 FROM memories WHERE id > ? LIMIT 1").get(lastId);
+        const more = this.db
+          .prepare("SELECT 1 FROM memories WHERE id > ? AND windowUse IS NOT NULL AND windowUse != '' LIMIT 1")
+          .get(lastId);
         if (!more) {
           this.saveRebuildState(null);
           break;
@@ -123,11 +133,12 @@ export class VectorWorker {
     }
   }
 
-  async updateVector(memoryId: string, content: string): Promise<void> {
+  /** 用给定 embedding 键重建单条向量（windowUse 回填后按新键重嵌时调用） */
+  async updateVector(memoryId: string, embeddingKey: string): Promise<void> {
     const vectorIndex = new VectorIndex();
 
     try {
-      const vectorRecord = await buildVectorRecord(memoryId, content);
+      const vectorRecord = await buildVectorRecord(memoryId, embeddingKey);
       vectorIndex.create(vectorRecord);
       this.db.prepare("UPDATE memories SET vectorId = ? WHERE id = ?").run(memoryId, memoryId);
     } finally {

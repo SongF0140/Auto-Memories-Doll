@@ -10,7 +10,7 @@
  * 否则路由开销会吃掉融合带来的收益。
  */
 
-export type QueryRoute = "single-hop" | "multi-hop" | "overview";
+export type QueryRoute = "single-hop" | "multi-hop" | "overview" | "temporal";
 
 /** 对比/关系/演进类：需要跨多条记忆做关联推理 */
 const MULTI_HOP_PATTERNS = [
@@ -47,6 +47,26 @@ const OVERVIEW_PATTERNS = [
 ];
 
 /**
+ * 时序/时间定位类：需要按时间定位记忆（阶段二新增，Locomo 跑分显示
+ * temporal 组 Recall@1 仅 0.67，根因是时间问句被当普通 single-hop 处理，
+ * "在 X 之前最后一次 Y"的锚定语义完全丢失）。
+ * 模式保持高精度：只收明确的时间意图词，避免劫持 multi-hop 的"为什么"问句。
+ */
+const TEMPORAL_PATTERNS = [
+  /哪一天/,
+  /哪天/,
+  /什么时候/,
+  /何时/,
+  /多久/,
+  /最近一次/,
+  /最后一次/,
+  /上一次/,
+  /最早/,
+  /最晚/,
+  /时间线/,
+];
+
+/**
  * 判定查询应走哪条检索管线。
  *
  * @param query 用户查询
@@ -57,6 +77,12 @@ const OVERVIEW_PATTERNS = [
 export function classifyQuery(query: string, topics: string[] = []): QueryRoute {
   const normalized = (query || "").trim();
   if (normalized.length === 0) return "single-hop";
+
+  // temporal 优先级最高：时间意图词比对比/总览词更特异，
+  // 且时序问题的正确解法（锚定过滤 + 时间感知排序）与相似度排序根本不同。
+  if (TEMPORAL_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "temporal";
+  }
 
   if (MULTI_HOP_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return "multi-hop";

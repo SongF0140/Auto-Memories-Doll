@@ -156,7 +156,15 @@ async function runVectorOnly(): Promise<RankedHit[]> {
 }
 
 async function runImprovedPipeline(): Promise<RankedHit[]> {
-  const retriever = new VectorRetriever();
+  const retriever = new VectorRetriever({
+    // 阶段二：时序路由的记忆元数据，与生产 handler 的接线方式一致
+    temporalMetaProvider: async (ids) =>
+      LOCOMO_MEMORIES.filter((m) => ids.includes(m.id)).map((m) => ({
+        memoryId: m.id,
+        createdAt: m.createdAt,
+        text: `${m.summary}\n${m.content}`,
+      })),
+  });
   try {
     const hits: RankedHit[] = [];
     for (const q of LOCOMO_QUESTIONS) {

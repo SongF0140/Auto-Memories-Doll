@@ -21,6 +21,22 @@ type AuditReport = {
   conflicts: number;
 };
 
+type RouteStatsData = {
+  since: string;
+  days: number;
+  total: number;
+  totals: Record<string, number>;
+  distribution: Record<string, number>;
+};
+
+/** 路由标识 → 展示名 */
+const ROUTE_LABELS: Record<string, string> = {
+  "single-hop": "单跳事实",
+  "multi-hop": "多跳关联",
+  overview: "总览",
+  temporal: "时序",
+};
+
 type ReviewEvent = {
   eventId: string;
   memoryId: string | null;
@@ -37,6 +53,7 @@ type ReviewEvent = {
 
 export default function AuditPanel() {
   const [report, setReport] = useState<AuditReport | null>(null);
+  const [routeStats, setRouteStats] = useState<RouteStatsData | null>(null);
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [reviewEvents, setReviewEvents] = useState<ReviewEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,10 +70,11 @@ export default function AuditPanel() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [reportRes, conflictRes, reviewRes] = await Promise.all([
+      const [reportRes, conflictRes, reviewRes, routeRes] = await Promise.all([
         fetch("/api/audit"),
         fetch("/api/audit/conflicts"),
         fetch("/api/audit/review-events"),
+        fetch("/api/stats/routes"),
       ]);
       if (reportRes.ok) setReport(await reportRes.json());
       if (conflictRes.ok) setConflicts(await conflictRes.json());
@@ -64,6 +82,7 @@ export default function AuditPanel() {
         const data = await reviewRes.json();
         setReviewEvents(data.items || []);
       }
+      if (routeRes.ok) setRouteStats(await routeRes.json());
     } catch (e) {
       console.error("获取审计数据失败:", e);
     } finally {
@@ -319,6 +338,63 @@ export default function AuditPanel() {
                   待解决冲突
                 </div>
               </div>
+            </div>
+
+            <div
+              className="bg-white border rounded-xl p-5"
+              style={{
+                borderColor: "var(--color-border-default)",
+                boxShadow: "var(--shadow-card)",
+              }}
+            >
+              <h3
+                className="text-base font-semibold mb-3"
+                style={{ color: "var(--color-text-primary)" }}
+              >
+                检索路由分布
+                <span className="ml-2 text-xs font-normal" style={{ color: "var(--color-text-tertiary)" }}>
+                  {routeStats ? `近 ${routeStats.days} 天 · 共 ${routeStats.total} 次` : ""}
+                </span>
+              </h3>
+              {routeStats && routeStats.total > 0 ? (
+                <div className="space-y-2">
+                  {Object.entries(routeStats.totals).map(([route, count]) => {
+                    const ratio = routeStats.distribution[route] ?? 0;
+                    return (
+                      <div key={route} className="flex items-center gap-3">
+                        <span
+                          className="text-sm w-20 shrink-0"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
+                          {ROUTE_LABELS[route] ?? route}
+                        </span>
+                        <div
+                          className="flex-1 h-2 rounded-full overflow-hidden"
+                          style={{ background: "var(--color-border-default)" }}
+                        >
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.min(100, ratio)}%`,
+                              background: "var(--color-brand-blue)",
+                            }}
+                          />
+                        </div>
+                        <span
+                          className="text-xs w-24 shrink-0 text-right"
+                          style={{ color: "var(--color-text-tertiary)" }}
+                        >
+                          {count} 次 · {ratio}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm" style={{ color: "var(--color-text-tertiary)" }}>
+                  暂无检索记录（发起对话或搜索后这里会显示各路由的占比）
+                </p>
+              )}
             </div>
 
             <div

@@ -4,7 +4,15 @@ import { MemoryRecord } from "../../types/memory";
 import { KeywordIndex, rankByKeywords } from "./keyword-index";
 import { classifyQuery, QueryRoute } from "./query-classifier";
 import { reciprocalRankFusion, RankedHit } from "./fusion";
+import {
+  extractDate,
+  extractTemporalAnchor,
+  rankTemporal,
+  stripTemporalClause,
+  TemporalMeta,
+} from "./temporal";
 import { WikiGraph } from "../graph/wiki-graph";
+import { recordRouteStat } from "./route-stats";
 
 /**
  * 默认相似度阈值：cosine similarity 低于此值的记忆视为噪声，不返回。
@@ -16,7 +24,7 @@ const DEFAULT_MIN_SIMILARITY = 0.3;
 /** 每路召回的候选池下限：给 RRF 留出跨路重排空间（最终仍截断到 limit） */
 const MIN_FUSION_POOL = 20;
 
-export type RetrievalMode = "vector" | "keyword" | "hybrid" | "graph" | "overview";
+export type RetrievalMode = "vector" | "keyword" | "hybrid" | "graph" | "overview" | "temporal";
 
 export type RetrievalSearchResponse = {
   results: { memoryId: string; similarity: number }[];
@@ -35,6 +43,11 @@ export type VectorRetrieverOptions = {
   overviewProvider?: (query: string, limit: number) => Promise<RankedHit[]>;
   /** 话题白名单：用于 overview 路由的话题命中判断 */
   topics?: string[];
+  /**
+   * 时序检索的记忆元数据提供器（createdAt + 文本），供锚定日期解析与时间感知排序。
+   * 缺省时 temporal 查询退化为常规混合检索，保证功能不缺失。
+   */
+  temporalMetaProvider?: (memoryIds: string[]) => Promise<TemporalMeta[]>;
 };
 
 export class VectorRetriever {
@@ -74,6 +87,8 @@ export class VectorRetriever {
     minSimilarity: number = DEFAULT_MIN_SIMILARITY,
   ): Promise<RetrievalSearchResponse> {
     const route = classifyQuery(query, this.options.topics ?? []);
+    // 健康度面板·路由分布：记录分类器决策（旁路统计，失败不影响检索）
+    recordRouteStat(route);
 
     // overview：知识已编译，直接读编译产物与控制面，不做向量检索
     if (route === "overview" && this.options.overviewProvider) {
@@ -87,6 +102,16 @@ export class VectorRetriever {
       }
     }
 
+    // temporal：时间感知检索（阶段二）。锚定解析失败或元数据缺失时
+    // 落回下方常规混合检索，保证功能不缺失。
+    const pool = Math.max(limit, MIN_FUSION_POOL);
+    if (route === "temporal" && this.options.temporalMetaProvider) {
+      const temporal = await this.searchTemporal(query, pool);
+      if (temporal) {
+        return { results: temporal.slice(0, limit), mode: "temporal", route };
+      }
+    }
+
     const embedding = await generateEmbedding(query);
     if (isEmbeddingEmpty(embedding)) {
       return {
@@ -96,7 +121,6 @@ export class VectorRetriever {
       };
     }
 
-    const pool = Math.max(limit, MIN_FUSION_POOL);
     const vectorHits = this.getIndex()
       .search(embedding, pool)
       .filter((r) => minSimilarity <= 0 || r.similarity >= minSimilarity);
@@ -172,6 +196,62 @@ export class VectorRetriever {
     this.index = null;
     this.keywordIndex = null;
     this.wikiGraph = null;
+  }
+
+  /**
+   * temporal 路由：时间感知检索（阶段二）。
+   *
+   * 流程：
+   * 1. 解析"在 X 之前/之后"锚定子句，剥离得到聚焦意图的查询
+   *    （锚定实体是时间参照物，不剥离会成为相似度检索的干扰项）
+   * 2. 意图查询走 vector + keyword 双路 RRF
+   * 3. 锚定子句存在时：锚文本关键词反查锚定记忆 → 解析锚定日期 → 按方向过滤候选
+   * 4. rankTemporal 排序：相似度优先，并列时新者优先
+   *
+   * 返回 null 表示策略无法落地（无候选 / 锚定无法解析），调用方退化到常规检索。
+   */
+  private async searchTemporal(query: string, pool: number): Promise<RankedHit[] | null> {
+    const metaProvider = this.options.temporalMetaProvider;
+    if (!metaProvider) return null;
+
+    const anchor = extractTemporalAnchor(query);
+    const intentQuery = anchor ? stripTemporalClause(query) : query;
+    if (!intentQuery.trim()) return null;
+
+    // 锚定子句会稀释语义，用意图查询重新生成向量（普通时序问句不变）
+    const embedding = await generateEmbedding(intentQuery);
+    const vectorHits = isEmbeddingEmpty(embedding)
+      ? []
+      : this.getIndex().search(embedding, pool);
+    const keywordHits = this.getKeywordIndex().search(intentQuery, pool);
+
+    const lists = [vectorHits, keywordHits].filter((list) => list.length > 0);
+    if (lists.length === 0) return null;
+    const fused = reciprocalRankFusion(lists);
+
+    // 锚定日期解析：锚文本关键词反查命中的记忆，取其 createdAt 或正文日期
+    let anchorDate: string | null = null;
+    if (anchor) {
+      const anchorHits = this.getKeywordIndex().search(anchor.text, 1);
+      const anchorMeta = anchorHits.length
+        ? (await metaProvider([anchorHits[0].memoryId]))[0]
+        : undefined;
+      if (anchorMeta) {
+        anchorDate =
+          anchorMeta.createdAt && anchorMeta.createdAt.length >= 10
+            ? anchorMeta.createdAt.slice(0, 10)
+            : extractDate(anchorMeta.text ?? "");
+      }
+      if (!anchorDate) return null;
+    }
+
+    const ids = fused.map((hit) => hit.memoryId);
+    const metaMap = new Map<string, TemporalMeta>();
+    for (const meta of await metaProvider(ids)) {
+      metaMap.set(meta.memoryId, meta);
+    }
+
+    return rankTemporal(fused, metaMap, anchor, anchorDate);
   }
 
   /**

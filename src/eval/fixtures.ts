@@ -12,6 +12,8 @@ export type EvalMemory = {
   title: string;
   content: string;
   summary: string;
+  /** I-11 window-use：与 summary 共同构成 embedding 键（与生产 generator 对齐） */
+  windowUse: string;
   tags: string[];
   topic: string;
 };
@@ -31,6 +33,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "unique_ptr 独占所有权，适合 RAII 场景；shared_ptr 用引用计数共享所有权，注意循环引用要用 weak_ptr 打破。",
     summary: "unique_ptr 与 shared_ptr 的区别和典型用法",
+    windowUse: "当用户问起 C++ 智能指针、unique_ptr、shared_ptr、循环引用或内存管理时有用。",
     tags: ["c++", "智能指针", "shared_ptr"],
     topic: "cpp-learning",
   },
@@ -40,6 +43,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "CMakeLists 里用 target_link_libraries 管理依赖，file(COPY) 会在 configure 阶段复制配置文件到构建目录。",
     summary: "CMake 依赖管理与文件复制的坑",
+    windowUse: "当用户问起 CMake 配置、依赖链接或构建目录文件复制时有用。",
     tags: ["cmake", "构建"],
     topic: "cpp-learning",
   },
@@ -49,6 +53,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "基类指针调用虚函数走虚表查找实现运行时多态，析构函数必须声明为 virtual 防止派生类泄漏。",
     summary: "虚函数表机制与多态的条件",
+    windowUse: "当用户问起虚函数、多态、虚表机制或析构函数声明时有用。",
     tags: ["c++", "多态", "虚函数"],
     topic: "cpp-learning",
   },
@@ -57,6 +62,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "STL容器选择指南",
     content: "vector 连续内存适合随机访问，list 适合频繁插拔，unordered_map 哈希查找平均 O(1)。",
     summary: "常用 STL 容器的适用场景对比",
+    windowUse: "当用户问起 STL 容器选择、vector、list 或 unordered_map 时有用。",
     tags: ["stl", "容器"],
     topic: "cpp-learning",
   },
@@ -66,6 +72,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "用 valgrind 或 AddressSanitizer 定位泄漏点，重点检查 new 之后有没有配对的 delete 路径。",
     summary: "内存泄漏的定位工具与常见原因",
+    windowUse: "当用户问起内存泄漏排查、valgrind 或 AddressSanitizer 时有用。",
     tags: ["内存泄漏", "valgrind"],
     topic: "cpp-learning",
   },
@@ -77,6 +84,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "树莓派5 8GB 做边缘节点，Camera Module 3 采集车位画面，选用 YOLOv8n 模型做车位检测，实现智能泊车引导。",
     summary: "边缘计算泊车引导的整体技术方案",
+    windowUse: "当用户问起树莓派泊车引导系统、边缘节点或车位检测方案时有用。",
     tags: ["树莓派", "泊车", "边缘计算"],
     topic: "edge-parking",
   },
@@ -86,6 +94,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "YOLOv8n 导出 ONNX 后做 INT8 量化，用 onnxruntime 在树莓派上推理，帧率能满足实时车位检测。",
     summary: "模型量化与 ONNXRuntime 部署细节",
+    windowUse: "当用户问起模型量化、INT8、ONNX 导出或树莓派推理部署时有用。",
     tags: ["yolo", "量化", "onnx"],
     topic: "edge-parking",
   },
@@ -95,6 +104,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "边缘端通过 MQTT 把车位状态发布到 broker，JavaWeb 后端订阅主题更新数据库，QoS 设为 1 保证送达。",
     summary: "边缘到后端的 MQTT 消息链路",
+    windowUse: "当用户问起 MQTT 通信、车位状态上报或后端订阅消息时有用。",
     tags: ["mqtt", "通信"],
     topic: "edge-parking",
   },
@@ -103,6 +113,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "Camera Module 3调试记录",
     content: "摄像头排线要插紧，libcamera 预览正常后再调曝光参数，逆光场景需要开启 HDR 模式。",
     summary: "树莓派摄像头模组调试踩坑",
+    windowUse: "当用户问起摄像头调试、画面调不出来、曝光参数或相机排线时有用。",
     tags: ["摄像头", "树莓派"],
     topic: "edge-parking",
   },
@@ -112,6 +123,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "检测到乱停后生成工单，通知车主挪车，超时未处理则推送给管理员，形成检测-通知-处置闭环。",
     summary: "乱停车辆从发现到处置的闭环",
+    windowUse: "当用户问起乱停治理、挪车通知或检测处置闭环时有用。",
     tags: ["泊车", "治理"],
     topic: "edge-parking",
   },
@@ -122,6 +134,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "CRM客户管理模块设计",
     content: "客户管理模块包含客户档案、跟进记录、商机漏斗三个子功能，权限按角色划分。",
     summary: "CRM 客户管理的功能拆分",
+    windowUse: "当用户问起 CRM 客户管理模块、客户档案或商机漏斗时有用。",
     tags: ["crm", "客户管理"],
     topic: "crm-project",
   },
@@ -130,6 +143,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "CRM答辩PPT要点",
     content: "答辩先讲需求背景和系统架构图，再演示核心流程，最后准备老师可能问的并发与安全问题。",
     summary: "项目答辩的讲述结构",
+    windowUse: "当用户问起答辩怎么讲、PPT 讲述结构或答辩准备时有用。",
     tags: ["答辩", "crm"],
     topic: "crm-project",
   },
@@ -138,6 +152,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "数据库表结构设计",
     content: "MySQL 里客户表与跟进记录是一对多，跟进记录加联合索引加速按时间查询，外键保证一致性。",
     summary: "CRM 的表关系与索引设计",
+    windowUse: "当用户问起数据库表结构设计、一对多关系或联合索引时有用。",
     tags: ["数据库", "mysql"],
     topic: "crm-project",
   },
@@ -149,6 +164,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "用 streamText 驱动 agent 循环，前端消费 ReadableStream 事件增量渲染，isStepCount 限制最大轮次。",
     summary: "AI SDK 流式 agent 循环的实现方式",
+    windowUse: "当用户问起流式输出怎么实现、streamText 或 agent 循环时有用。",
     tags: ["ai-sdk", "流式"],
     topic: "agent-dev",
   },
@@ -158,6 +174,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "候选记忆先写入 pending_events 待审计队列，按 memoryId 串行消费，冲突三级分级后再落盘。",
     summary: "审计队列的写入治理机制",
+    windowUse: "当用户问起审计队列设计、pending_events 或冲突分级时有用。",
     tags: ["审计队列", "记忆"],
     topic: "agent-dev",
   },
@@ -166,6 +183,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "向量检索MMR重排",
     content: "向量召回后用 MMR 在相关性与多样性之间平衡，避免注入提示词的记忆主题重复。",
     summary: "检索结果的重排策略",
+    windowUse: "当用户问起 MMR 重排、检索多样性或结果去重时有用。",
     tags: ["检索", "mmr", "重排"],
     topic: "agent-dev",
   },
@@ -175,6 +193,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     content:
       "stdio 型 MCP 服务器要在连接器页面手动粘贴 JSON 配置，mcp.json 格式是 mcpServers 包裹 name 与 command。",
     summary: "MCP 服务器的接入方式",
+    windowUse: "当用户问起 MCP 服务器配置、连接器页面或 mcp.json 格式时有用。",
     tags: ["mcp", "配置"],
     topic: "agent-dev",
   },
@@ -183,6 +202,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "提示词模板管理",
     content: "系统提示词拆成模板加动态区块，模板内容哈希变更时缓存自动失效，支持热重载。",
     summary: "提示词模板的组织与缓存失效",
+    windowUse: "当用户问起提示词模板管理、缓存失效或热重载时有用。",
     tags: ["提示词", "模板"],
     topic: "agent-dev",
   },
@@ -193,6 +213,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "暑期学习计划安排",
     content: "暑期按 C++、Python、Agent 三个方向推进，每个方向配具体链接、建议时长和项目要求。",
     summary: "暑期三方向学习任务书",
+    windowUse: "当用户问起暑期学习计划、三方向任务或项目要求时有用。",
     tags: ["学习计划", "暑期"],
     topic: "daily-notes",
   },
@@ -201,6 +222,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "湖北文理学院课程表",
     content: "本学期周一有数据结构，周三下午是操作系统实验，周五上午选修课。",
     summary: "本学期课程时间安排",
+    windowUse: "当用户问起本学期课程安排、上课时间或实验课时段时有用。",
     tags: ["课程", "学校"],
     topic: "daily-notes",
   },
@@ -209,6 +231,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "大创项目申报材料清单",
     content: "大创申报需要项目申请书、成员信息表、指导老师意见，团队负责人谭迦木负责汇总。",
     summary: "大创申报要准备的材料",
+    windowUse: "当用户问起大创申报材料、成员分工或负责人时有用。",
     tags: ["大创", "申报"],
     topic: "daily-notes",
   },
@@ -217,6 +240,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "软著申报流程记录",
     content: "软著申报要提交源代码文档和说明书，样例模板在参考文件夹，成品输出到 mine 目录。",
     summary: "软件著作权申报的步骤",
+    windowUse: "当用户问起软著申报流程、所需文档或输出目录时有用。",
     tags: ["软著", "申报"],
     topic: "daily-notes",
   },
@@ -225,6 +249,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "读书笔记原子习惯",
     content: "原子习惯讲行为改变的四个定律：让它显而易见、有吸引力、简便易行、令人愉悦。",
     summary: "原子习惯的核心框架",
+    windowUse: "当用户问起原子习惯、习惯养成或行为改变定律时有用。",
     tags: ["读书", "习惯"],
     topic: "daily-notes",
   },
@@ -233,6 +258,7 @@ export const EVAL_MEMORIES: EvalMemory[] = [
     title: "周末徒步路线收藏",
     content: "城郊那条徒步路线全程八公里，沿途有溪水补给点，适合周末户外活动。",
     summary: "收藏的户外徒步路线",
+    windowUse: "当用户问起周末徒步路线、户外活动或补给点时有用。",
     tags: ["徒步", "户外"],
     topic: "daily-notes",
   },

@@ -7,6 +7,7 @@ import { LintIssue } from "./structure-lint-service";
 import { ContradictionItem } from "../orchestrators/contradiction-detector";
 import { SynthesisReport } from "../orchestrators/synthesis-compiler";
 import { CONTROL_PLANE_FILES, CONTROL_PLANE_TOKEN_BUDGET } from "../../config/constants";
+import { SYSTEM_PURPOSE, PURPOSE_FILE_NAME } from "../../config/purpose.config";
 import { logger } from "../../lib/logger";
 
 /**
@@ -15,13 +16,14 @@ import { logger } from "../../lib/logger";
  * 成熟的知识系统"不是有页面，而是有运行面板"：模型进来的**第一个导航点**是 index.md。
  * 在约 100 个来源、几百页的规模下，一个内容目录就足够好用。
  *
- * 生成四个文件到 memory-root：
+ * 生成五个文件到 memory-root：
  * - index.md    内容目录（topic × 卡片数 × 最近更新 × 一句话摘要）
  * - overview.md 当前认知快照（当前结论 / 已知矛盾 / 开放问题）
  * - log.md      时间线（当日 ingest / lint / synthesis / review 事件）
  * - review_q.md 人工判断入口（AI 可读的待裁决清单）
+ * - purpose.md  系统目的（静态配置，见 src/config/purpose.config.ts）
  *
- * 红线：这四个文件是系统元数据，必须排除在 file-watcher 采集之外（见 CONTROL_PLANE_FILES）。
+ * 红线：这些文件是系统元数据，必须排除在 file-watcher 采集之外（见 CONTROL_PLANE_FILES）。
  */
 export type ControlPlaneInput = {
   memories: MemoryRecord[];
@@ -46,6 +48,7 @@ export class ControlPlaneService {
       ["overview.md", this.buildOverview(input)],
       ["log.md", this.buildLog(input)],
       ["review_q.md", this.buildReviewQueue()],
+      [PURPOSE_FILE_NAME, SYSTEM_PURPOSE],
     ];
 
     for (const [name, content] of files) {

@@ -47,6 +47,13 @@ export class ChatHandler {
     this.vectorRetriever = new VectorRetriever({
       // I-8：把控制面与编译产物接进 overview 路由（零 embedding 调用）
       overviewProvider: (query, limit) => this.searchOverview(query, limit),
+      // 阶段二：时序路由的记忆元数据（锚定日期解析 + 时间感知排序）
+      temporalMetaProvider: async (ids) =>
+        this.memoryService.getMemoriesByIds(ids).map((m) => ({
+          memoryId: m.id,
+          createdAt: m.createdAt,
+          text: `${m.summary}\n${m.content}`,
+        })),
       topics: this.knownTopics(),
     });
     this.ranker = new Ranker();
