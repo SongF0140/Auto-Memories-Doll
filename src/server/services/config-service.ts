@@ -8,6 +8,8 @@ import {
   ToolType,
 } from "../../types/config";
 import { env } from "../../config/env";
+import { expandSourcePath, getToolPresets } from "../../config/tool-presets";
+import { existsSync } from "fs";
 import Database from "better-sqlite3";
 
 export class ConfigService {
@@ -75,6 +77,68 @@ export class ConfigService {
         updatedAt TEXT NOT NULL
       )
     `);
+
+    this.seedDefaultToolSources();
+  }
+
+  /**
+   * 首次初始化时自动 seed 本地工具预设（I：监听源零配置）。
+   *
+   * 用户诉求：换一台电脑不需要手动配置路径——Claude Code 等工具的会话目录
+   * 固定在 ~/ 下（~/.claude/projects 等），用主目录展开即可定位，无需用户输入。
+   * 因此建表后把预设源直接写进库：目录存在则启用，不存在则禁用（留档，装上工具后
+   * 用户在 UI 一键启用即可）。
+   *
+   * 幂等与迁移：flag 带版本号。v1→v2 时预设路径做过跨平台修正
+   * （Codex 的 %APPDATA%、Cursor 的 ~/.cursor/projects），因此对已存在的
+   * preset-* 行更新 path/filePattern/name/topic，但保留用户的 enabled——
+   * 用户改路径请复制条目修改，preset-* 条目始终跟随系统预设版本。
+   */
+  private seedDefaultToolSources(): void {
+    const flagKey = "tool_sources_seeded_v2";
+    const seeded = this.db.prepare("SELECT 1 FROM config WHERE key = ?").get(flagKey);
+    if (seeded) return;
+
+    const now = new Date().toISOString();
+    const insert = this.db.prepare(`
+      INSERT INTO tool_watch_sources
+        (id, name, toolType, path, filePattern, enabled, topic, description, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const update = this.db.prepare(`
+      UPDATE tool_watch_sources
+      SET name = ?, path = ?, filePattern = ?, topic = ?, description = ?, updatedAt = ?
+      WHERE id = ?
+    `);
+
+    for (const [key, preset] of Object.entries(getToolPresets())) {
+      const id = `preset-${key}`;
+      const dirExists = existsSync(expandSourcePath(preset.path));
+      const description = dirExists
+        ? "首次启动自动添加（检测到本机已安装该工具），可在下方禁用或删除"
+        : "首次启动自动添加（本机未检测到该工具目录，装好后启用即可），可删除";
+      const existing = this.db.prepare("SELECT 1 FROM tool_watch_sources WHERE id = ?").get(id);
+      if (existing) {
+        update.run(preset.name, preset.path, preset.filePattern, preset.topic, description, now, id);
+      } else {
+        insert.run(
+          id,
+          preset.name,
+          preset.toolType,
+          preset.path,
+          preset.filePattern,
+          dirExists ? 1 : 0,
+          preset.topic,
+          description,
+          now,
+          now,
+        );
+      }
+    }
+
+    this.db
+      .prepare("INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES (?, ?, ?)")
+      .run(flagKey, now, now);
   }
 
   // ── 存储路径配置（笔记根目录，运行时可热重载） ──

@@ -95,14 +95,74 @@ function extractRole(obj: unknown): string {
   return "user";
 }
 
+/**
+ * 提取"人可读"的对话内容：与 extractContent 的区别是识别 content 数组里的
+ * tool_result / tool_use 块（工具调用与输出回灌），这类块不是对话文本，返回空串。
+ */
+function extractUserVisibleContent(obj: unknown): string {
+  if (Array.isArray(obj)) {
+    return (obj as unknown[])
+      .filter((part) => !isToolBlock(part))
+      .map((part) => extractUserVisibleContent(part))
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (typeof obj !== "object" || obj === null) {
+    return typeof obj === "string" ? obj : "";
+  }
+  const o = obj as Record<string, unknown>;
+  if (isToolBlock(o)) return "";
+  // content 数组走过滤路径，否则会退回 extractContent 把 tool_result 一起拼进来
+  if (Array.isArray(o.content)) return extractUserVisibleContent(o.content);
+  return extractContent(o);
+}
+
+function isToolBlock(obj: unknown): boolean {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    ((obj as Record<string, unknown>).type === "tool_result" ||
+      (obj as Record<string, unknown>).type === "tool_use")
+  );
+}
+
 // ── 各工具类型的解析器 ──
 
 /**
  * Codex CLI 会话文件解析。
- * ~/.codex/sessions/ 下的 jsonl 文件，每行一个 JSON 事件。
+ * ~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl（Windows 为 %APPDATA%/codex/sessions），
+ * 每行 {timestamp, type, payload}。
+ *
+ * 过滤规则（2026-09 核实 rollout 格式）：
+ * - session_meta 内嵌完整系统提示（20KB+），turn_context 是每轮快照——都不是对话
+ * - function_call / function_call_output / reasoning 等是工具调用与思考块，与人可读对话分离
+ * - 同一条消息可能同时记在 response_item 与 event_msg 里，按 角色+内容 去重
  */
+const CODEX_SKIP_LINE_TYPES = new Set(["session_meta", "turn_context"]);
+const CODEX_SKIP_PAYLOAD_TYPES = new Set([
+  "function_call",
+  "function_call_output",
+  "local_shell_call",
+  "local_shell_output",
+  "custom_tool_call",
+  "custom_tool_call_output",
+  "web_search_call",
+  "reasoning",
+  "token_count",
+  "turn_completed",
+  "turn_failed",
+  "task_started",
+  "task_complete",
+]);
+const CODEX_ROLE_ALIASES: Record<string, string> = {
+  user_message: "user",
+  agent_message: "assistant",
+  compacted: "assistant",
+};
+
 async function parseCodex(fileContent: string, filePath: string): Promise<ParsedSession> {
   const messages: RawMessage[] = [];
+  const seen = new Set<string>();
   const lines = fileContent.split("\n");
 
   for (const line of lines) {
@@ -110,13 +170,23 @@ async function parseCodex(fileContent: string, filePath: string): Promise<Parsed
     if (!obj || typeof obj !== "object") continue;
 
     const o = obj as Record<string, unknown>;
-    // codex 事件格式: {type: "message"|"response"|"function_call", payload: {...}}
-    // 也兼容 {role, content} 直接格式
-    const role = extractRole(o.payload || o);
-    const content = extractContent(o.payload || o);
-    if (content.trim()) {
-      messages.push({ role, content });
-    }
+    if (CODEX_SKIP_LINE_TYPES.has(String(o.type))) continue;
+
+    const payload = (o.payload && typeof o.payload === "object" ? o.payload : o) as Record<
+      string,
+      unknown
+    >;
+    if (CODEX_SKIP_PAYLOAD_TYPES.has(String(payload.type))) continue;
+
+    const roleRaw = extractRole(payload);
+    const role = CODEX_ROLE_ALIASES[roleRaw] ?? roleRaw;
+    const content = extractContent(payload).trim();
+    if (!content) continue;
+
+    const dedupKey = `${role}:${content}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+    messages.push({ role, content });
   }
 
   const title = extractTitle(messages, basename(filePath, extname(filePath)));
@@ -133,6 +203,11 @@ async function parseCodex(fileContent: string, filePath: string): Promise<Parsed
 /**
  * Claude Code 会话文件解析。
  * ~/.claude/projects/ 下的 jsonl 文件，每行一个消息。
+ *
+ * 过滤规则（减少抽卡噪声）：
+ * - isMeta: true 的 user 行是 Claude Code 自动注入的系统提示（如 slash 命令展开），非真实用户输入
+ * - type 为 summary / file-history-snapshot / system 的是会话元数据行，不是对话内容
+ * - user 消息 content 数组中 type: "tool_result" 的是工具输出回灌，混进用户发言会污染卡片
  */
 async function parseClaudeCode(fileContent: string, filePath: string): Promise<ParsedSession> {
   const messages: RawMessage[] = [];
@@ -143,10 +218,20 @@ async function parseClaudeCode(fileContent: string, filePath: string): Promise<P
     if (!obj || typeof obj !== "object") continue;
 
     const o = obj as Record<string, unknown>;
+    if (o.isMeta === true) continue;
+    if (
+      o.type === "summary" ||
+      o.type === "file-history-snapshot" ||
+      o.type === "system" ||
+      o.type === "progress"
+    ) {
+      continue;
+    }
+
     // claude-code 格式: {type: "user"|"assistant", message: {role, content}}
     const msgObj = o.message || o;
     const role = extractRole(msgObj);
-    const content = extractContent(msgObj);
+    const content = extractUserVisibleContent(msgObj);
     if (content.trim()) {
       messages.push({ role, content });
     }
@@ -165,13 +250,16 @@ async function parseClaudeCode(fileContent: string, filePath: string): Promise<P
 
 /**
  * Cursor 对话文件解析。
- * 通常为 JSON 数组或包含 messages 字段的对象。
+ * 两种格式：
+ * - JSON 数组或含 messages 字段的对象（手动导出等场景）
+ * - Cursor Agent transcript（~/.cursor/projects/<项目>/agent-transcripts/ 下
+ *   的 .jsonl，每行一个事件）——整体 JSON.parse 失败时逐行解析兜底
  */
 async function parseCursor(fileContent: string, filePath: string): Promise<ParsedSession> {
   const messages: RawMessage[] = [];
   const obj = tryParseJson(fileContent);
 
-  if (obj && typeof obj === "object") {
+  if (obj) {
     let msgList: unknown[] = [];
     if (Array.isArray(obj)) {
       msgList = obj;
@@ -182,6 +270,19 @@ async function parseCursor(fileContent: string, filePath: string): Promise<Parse
     for (const m of msgList) {
       const role = extractRole(m);
       const content = extractContent(m);
+      if (content.trim()) {
+        messages.push({ role, content });
+      }
+    }
+  } else {
+    // jsonl 兜底：逐行解析事件，过滤工具块（tool_use / tool_result）
+    for (const line of fileContent.split("\n")) {
+      const row = tryParseJson(line);
+      if (!row || typeof row !== "object") continue;
+      const o = row as Record<string, unknown>;
+      const msgObj = o.message && typeof o.message === "object" ? o.message : o;
+      const role = extractRole(msgObj);
+      const content = extractUserVisibleContent(msgObj);
       if (content.trim()) {
         messages.push({ role, content });
       }

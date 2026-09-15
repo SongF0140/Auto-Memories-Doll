@@ -11,6 +11,7 @@ import { isRecentWrite } from "../../lib/storage/write-tracker";
 import { logger } from "../../lib/logger";
 import { buildKnowledgeLogFromText } from "../../features/ingest/knowledge-log";
 import { getMemoryRoot } from "../../lib/storage/path-resolver";
+import { defaultTopicForTool, expandSourcePath } from "../../config/tool-presets";
 
 /**
  * 本地工具工作目录监听器。
@@ -100,13 +101,11 @@ export async function startToolDirWatcher(): Promise<void> {
 
 async function startSingleSource(source: ToolWatchSource): Promise<void> {
   try {
-    // 展开 ~ 为用户主目录（chokidar/fs 在 Windows 上不识别 ~ 前缀）。
+    // 展开 ~ / %APPDATA% 占位符为真实路径（chokidar/fs 不识别这些前缀）。
     // 直接读取环境变量，避免 Next.js 文件追踪器在构建时递归扫描整个用户目录。
-    let watchPath = source.path;
-    if (source.path.startsWith("~")) {
-      const homeDir = process.env.USERPROFILE || process.env.HOME;
-      if (!homeDir) throw new Error(`无法展开监听路径: ${source.path}`);
-      watchPath = join(homeDir, source.path.slice(1));
+    const watchPath = expandSourcePath(source.path);
+    if (watchPath === source.path && !isAbsolute(watchPath)) {
+      throw new Error(`无法展开监听路径: ${source.path}`);
     }
     if (isMemoryRootPath(watchPath)) {
       logger.ingest.warn(`[ToolDirWatcher] 跳过应用自身记忆目录: ${watchPath}`);
@@ -294,12 +293,7 @@ export async function scanToolSources(): Promise<number> {
   processedFiles.clear();
   let scanned = 0;
   for (const entry of [...entries]) {
-    let watchPath = entry.source.path;
-    if (watchPath.startsWith("~")) {
-      const homeDir = process.env.USERPROFILE || process.env.HOME;
-      if (!homeDir) continue;
-      watchPath = join(homeDir, watchPath.slice(1));
-    }
+    const watchPath = expandSourcePath(entry.source.path);
     const allowedExts = patternToExtensions(entry.source.filePattern || "*.jsonl");
     try {
       const all = await readdir(watchPath, { recursive: true });
@@ -318,19 +312,6 @@ export async function scanToolSources(): Promise<number> {
     }
   }
   return scanned;
-}
-
-function defaultTopicForTool(toolType: string): string {
-  switch (toolType) {
-    case "codex":
-      return "codex-sessions";
-    case "claude-code":
-      return "claude-code-sessions";
-    case "cursor":
-      return "cursor-sessions";
-    default:
-      return "tool-sessions";
-  }
 }
 
 /**

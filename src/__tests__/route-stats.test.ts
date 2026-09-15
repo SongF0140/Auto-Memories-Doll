@@ -37,12 +37,15 @@ describe("RouteStatsService（路由分布统计）", () => {
   });
 
   it("窗口快照只统计 since 之后的日期", () => {
-    service.record("temporal", "2026-09-01");
-    service.record("temporal", "2026-09-13");
-    service.record("overview", "2026-09-14");
+    // 动态构造日期，避免跨天导致硬编码日期失效
+    const day = (offset: number) =>
+      new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
+    service.record("temporal", day(30)); // 窗口外
+    service.record("temporal", day(1)); // 窗口内
+    service.record("overview", day(0)); // 今天
 
     const stats = service.getStats(3); // 近 3 天（含今天）
-    expect(stats.since).toBe("2026-09-12");
+    expect(stats.since).toBe(day(2));
     expect(stats.totals).toEqual({ temporal: 1, overview: 1 });
   });
 

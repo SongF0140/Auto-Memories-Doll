@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConfigService } from "../../../../server/services/config-service";
 import { restartToolDirWatcher } from "../../../../server/watchers/tool-dir-watcher";
-import { TOOL_PRESETS } from "../../../../config/tool-presets";
+import { getToolPresets } from "../../../../config/tool-presets";
 import { logger } from "../../../../lib/logger";
 import { toolSourceCreateSchema } from "../../../../lib/validation";
 
@@ -13,7 +13,7 @@ export async function GET() {
   const service = new ConfigService();
   try {
     const sources = service.listToolSources();
-    return NextResponse.json({ sources, presets: TOOL_PRESETS });
+    return NextResponse.json({ sources, presets: getToolPresets() });
   } finally {
     service.close();
   }
