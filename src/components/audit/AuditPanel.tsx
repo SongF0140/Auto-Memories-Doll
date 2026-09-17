@@ -352,7 +352,10 @@ export default function AuditPanel() {
                 style={{ color: "var(--color-text-primary)" }}
               >
                 检索路由分布
-                <span className="ml-2 text-xs font-normal" style={{ color: "var(--color-text-tertiary)" }}>
+                <span
+                  className="ml-2 text-xs font-normal"
+                  style={{ color: "var(--color-text-tertiary)" }}
+                >
                   {routeStats ? `近 ${routeStats.days} 天 · 共 ${routeStats.total} 次` : ""}
                 </span>
               </h3>
