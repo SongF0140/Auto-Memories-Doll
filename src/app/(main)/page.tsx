@@ -475,7 +475,7 @@ export default function DashboardPage() {
                 { label: "开始对话", href: "/chat", icon: "chat" as const },
                 { label: "浏览全部记忆", href: "/memory", icon: "library" as const },
                 { label: "配置 AI 模型", href: "/settings/ai", icon: "settings" as const },
-                { label: "查看用户画像", href: "/profile", icon: "profile" as const },
+                { label: "查看用户画像", href: "/settings/profile", icon: "profile" as const },
                 { label: "审计日志", href: "/audit", icon: "audit" as const },
               ].map((item) => (
                 <Link
