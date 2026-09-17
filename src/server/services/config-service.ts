@@ -119,7 +119,15 @@ export class ConfigService {
         : "首次启动自动添加（本机未检测到该工具目录，装好后启用即可），可删除";
       const existing = this.db.prepare("SELECT 1 FROM tool_watch_sources WHERE id = ?").get(id);
       if (existing) {
-        update.run(preset.name, preset.path, preset.filePattern, preset.topic, description, now, id);
+        update.run(
+          preset.name,
+          preset.path,
+          preset.filePattern,
+          preset.topic,
+          description,
+          now,
+          id,
+        );
       } else {
         insert.run(
           id,
