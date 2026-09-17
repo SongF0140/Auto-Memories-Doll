@@ -56,7 +56,9 @@ describe("expandSourcePath（路径占位符展开）", () => {
     const { expandSourcePath } = await loadPresets();
     vi.stubEnv("USERPROFILE", "C:\\Users\\alice");
     vi.stubEnv("HOME", "/home/alice");
-    expect(expandSourcePath("~/.claude/projects")).toBe("C:\\Users\\alice\\.claude\\projects");
+    expect(expandSourcePath("~/.claude/projects")).toBe(
+      join("C:\\Users\\alice", ".claude/projects"),
+    );
 
     vi.stubEnv("USERPROFILE", "");
     // 分隔符随平台（join 在 Windows 上用反斜杠），用 join 计算期望值保持跨平台
