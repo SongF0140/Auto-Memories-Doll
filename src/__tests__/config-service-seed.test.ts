@@ -39,8 +39,8 @@ function listSources(): Array<{
   filePattern: string;
   topic: string | null;
 }> {
-  return dbRef.current!
-    .prepare("SELECT id, enabled, path, filePattern, topic FROM tool_watch_sources")
+  return dbRef
+    .current!.prepare("SELECT id, enabled, path, filePattern, topic FROM tool_watch_sources")
     .all() as Array<{
     id: string;
     enabled: number;
@@ -51,7 +51,9 @@ function listSources(): Array<{
 }
 
 function flagExists(): boolean {
-  return !!dbRef.current!.prepare("SELECT 1 FROM config WHERE key = ?").get("tool_sources_seeded_v2");
+  return !!dbRef
+    .current!.prepare("SELECT 1 FROM config WHERE key = ?")
+    .get("tool_sources_seeded_v2");
 }
 
 beforeEach(() => {
@@ -97,19 +99,21 @@ describe("ConfigService.seedDefaultToolSources（监听源零配置）", () => {
     new ConfigService();
 
     // 把 flag 降级为 v1，模拟 v1 时代装机的存量库（否则第二次初始化会被 v2 flag 短路）
-    dbRef.current!
-      .prepare("UPDATE config SET key = 'tool_sources_seeded_v1' WHERE key = 'tool_sources_seeded_v2'")
+    dbRef
+      .current!.prepare(
+        "UPDATE config SET key = 'tool_sources_seeded_v1' WHERE key = 'tool_sources_seeded_v2'",
+      )
       .run();
 
     // 模拟 v1 时代的旧预设行 + 用户自定义行 + 用户禁用了 claude-code
-    dbRef.current!
-      .prepare("UPDATE tool_watch_sources SET path = ?, filePattern = ? WHERE id = ?")
+    dbRef
+      .current!.prepare("UPDATE tool_watch_sources SET path = ?, filePattern = ? WHERE id = ?")
       .run("~/.codex/sessions", "*.jsonl", "preset-codex");
-    dbRef.current!
-      .prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
+    dbRef
+      .current!.prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
       .run("preset-claude-code");
-    dbRef.current!
-      .prepare(
+    dbRef
+      .current!.prepare(
         "INSERT INTO tool_watch_sources (id, name, toolType, path, filePattern, enabled, topic, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run("user-custom", "我的笔记", "markdown", "~/notes", "*.md", 1, null, null, "t", "t");
