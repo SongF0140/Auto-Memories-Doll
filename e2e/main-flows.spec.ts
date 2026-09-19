@@ -86,6 +86,12 @@ test("检索库可以进入唯一知识图谱页面", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/memory\/map$/);
   await expect(page.getByRole("heading", { name: "知识图谱" })).toBeVisible();
+  await expect(page.getByPlaceholder("搜索知识节点...")).toBeHidden();
+  await page.getByRole("button", { name: /显示筛选/ }).click();
+  await expect(page.getByRole("button", { name: /隐藏筛选/ })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   await expect(page.getByPlaceholder("搜索知识节点...")).toBeVisible();
   expect(diagnostics).toEqual([]);
 });

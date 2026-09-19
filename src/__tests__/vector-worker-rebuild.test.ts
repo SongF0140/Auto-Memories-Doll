@@ -86,7 +86,9 @@ describe("VectorWorker.rebuildAllVectors（I-11 迁移）", () => {
     );
     expect(rebuiltKeys).toEqual(["摘要2\n当用户问 X 时", "摘要3\n当用户问 Y 时"]);
     // vectorId 回写
-    const row = dbRef.current!.prepare("SELECT vectorId FROM memories WHERE id = ?").get("mem-new-1") as {
+    const row = dbRef
+      .current!.prepare("SELECT vectorId FROM memories WHERE id = ?")
+      .get("mem-new-1") as {
       vectorId: string;
     };
     expect(row.vectorId).toBeTruthy();
@@ -108,7 +110,9 @@ describe("VectorWorker.rebuildAllVectors（I-11 迁移）", () => {
     await worker.updateVector("mem-old-1", "摘要1\n当用户问 Z 时");
 
     expect(buildVectorRecordMock).toHaveBeenCalledWith("mem-old-1", "摘要1\n当用户问 Z 时");
-    const row = dbRef.current!.prepare("SELECT vectorId FROM memories WHERE id = ?").get("mem-old-1") as {
+    const row = dbRef
+      .current!.prepare("SELECT vectorId FROM memories WHERE id = ?")
+      .get("mem-old-1") as {
       vectorId: string;
     };
     expect(row.vectorId).toBeTruthy();

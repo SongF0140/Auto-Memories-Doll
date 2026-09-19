@@ -117,7 +117,9 @@ export class VectorWorker {
 
         // 达到单次调用的配额上限：保留锚点，剩余部分留给下次调用
         const more = this.db
-          .prepare("SELECT 1 FROM memories WHERE id > ? AND windowUse IS NOT NULL AND windowUse != '' LIMIT 1")
+          .prepare(
+            "SELECT 1 FROM memories WHERE id > ? AND windowUse IS NOT NULL AND windowUse != '' LIMIT 1",
+          )
           .get(lastId);
         if (!more) {
           this.saveRebuildState(null);

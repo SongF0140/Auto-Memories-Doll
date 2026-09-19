@@ -220,9 +220,7 @@ export class VectorRetriever {
 
     // 锚定子句会稀释语义，用意图查询重新生成向量（普通时序问句不变）
     const embedding = await generateEmbedding(intentQuery);
-    const vectorHits = isEmbeddingEmpty(embedding)
-      ? []
-      : this.getIndex().search(embedding, pool);
+    const vectorHits = isEmbeddingEmpty(embedding) ? [] : this.getIndex().search(embedding, pool);
     const keywordHits = this.getKeywordIndex().search(intentQuery, pool);
 
     const lists = [vectorHits, keywordHits].filter((list) => list.length > 0);

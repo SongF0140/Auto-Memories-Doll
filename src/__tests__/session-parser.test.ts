@@ -76,7 +76,10 @@ describe("parseSession toolType=claude-code（元数据与工具块过滤）", (
         JSON.stringify({
           type: "user",
           isMeta: true,
-          message: { role: "user", content: [{ type: "text", text: "<command-name>/clear</command-name>" }] },
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "<command-name>/clear</command-name>" }],
+          },
         }),
         // 真实用户消息
         JSON.stringify({
@@ -127,9 +130,10 @@ describe("parseSession toolType=claude-code（元数据与工具块过滤）", (
   it("全部是元数据行时产出空会话（调用方按 messageCount=0 跳过）", async () => {
     const filePath = await writeTempFile(
       "meta-only.jsonl",
-      [JSON.stringify({ type: "summary", summary: "x" }), JSON.stringify({ type: "file-history-snapshot" })].join(
-        "\n",
-      ),
+      [
+        JSON.stringify({ type: "summary", summary: "x" }),
+        JSON.stringify({ type: "file-history-snapshot" }),
+      ].join("\n"),
     );
 
     const parsed = await parseSession(filePath, "claude-code");

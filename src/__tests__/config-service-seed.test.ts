@@ -76,7 +76,7 @@ describe("ConfigService.seedDefaultToolSources（监听源零配置）", () => {
     expect(sources.find((s) => s.id === "preset-claude-code")?.topic).toBe("claude-code-sessions");
     expect(sources.find((s) => s.id === "preset-claude-code")?.path).toBe("~/.claude/projects");
     expect(sources.find((s) => s.id === "preset-cursor")?.path).toBe("~/.cursor/projects");
-    // Codex 路径随平台变化（Windows %APPDATA%，Unix ~/.codex），共同后缀断言
+    // Codex 预设在所有平台都是 ~/.codex/sessions（CODEX_HOME 默认主目录）
     expect(sources.find((s) => s.id === "preset-codex")?.path).toContain("codex/sessions");
     expect(sources.find((s) => s.id === "preset-codex")?.enabled).toBe(1);
     expect(sources.find((s) => s.id === "preset-trae")?.enabled).toBe(0);
@@ -111,8 +111,8 @@ describe("ConfigService.seedDefaultToolSources（监听源零配置）", () => {
     dbRef.current!
       .prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
       .run("preset-claude-code");
-    dbRef.current!
-      .prepare(
+    dbRef
+      .current!.prepare(
         "INSERT INTO tool_watch_sources (id, name, toolType, path, filePattern, enabled, topic, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run("user-custom", "我的笔记", "markdown", "~/notes", "*.md", 1, null, null, "t", "t");

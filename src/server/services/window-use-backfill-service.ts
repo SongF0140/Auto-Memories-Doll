@@ -101,11 +101,11 @@ export class WindowUseBackfillService {
    */
   private async generateWindowUse(memory: MemoryRecord): Promise<string | null> {
     const prompt = [
-      "为下面这张知识卡生成一行\"使用场景\"（windowUse），说明它在什么场景下对用户有用。",
+      '为下面这张知识卡生成一行"使用场景"（windowUse），说明它在什么场景下对用户有用。',
       "要求：",
       `1. 120 字以内，格式如"当用户问 X / 需要做 Y / 排查 Z 问题时"。`,
       "2. 只用卡片确实包含的信息，不要编造。",
-      "3. 只回复 JSON，不要多余解释：{\"windowUse\": \"...\"}",
+      '3. 只回复 JSON，不要多余解释：{"windowUse": "..."}',
       "",
       `标题：${memory.title}`,
       `摘要：${memory.summary}`,

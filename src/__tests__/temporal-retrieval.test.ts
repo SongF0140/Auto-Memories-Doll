@@ -166,9 +166,27 @@ describe("VectorRetriever temporal 路由集成", () => {
       provider: "openai-compatible",
       baseURL: "https://api.openai.com/v1",
       apiKey: "",
-      flagship: { model: "gpt-4o", maxTokens: 8192, temperature: 0.3, timeout: 60000, maxRetries: 3 },
-      standard: { model: "gpt-4o-mini", maxTokens: 4096, temperature: 0.7, timeout: 30000, maxRetries: 2 },
-      budget: { model: "gpt-4o-mini", maxTokens: 2048, temperature: 0.6, timeout: 15000, maxRetries: 1 },
+      flagship: {
+        model: "gpt-4o",
+        maxTokens: 8192,
+        temperature: 0.3,
+        timeout: 60000,
+        maxRetries: 3,
+      },
+      standard: {
+        model: "gpt-4o-mini",
+        maxTokens: 4096,
+        temperature: 0.7,
+        timeout: 30000,
+        maxRetries: 2,
+      },
+      budget: {
+        model: "gpt-4o-mini",
+        maxTokens: 2048,
+        temperature: 0.6,
+        timeout: 15000,
+        maxRetries: 1,
+      },
       embedding: {
         model: "text-embedding-3-small",
         dimensions: 1536,
@@ -297,7 +315,10 @@ describe("VectorRetriever temporal 路由集成", () => {
     try {
       const response = await retriever.searchDetailed("部署平台最后一次调整是什么时候？", 5);
       expect(response.mode).toBe("temporal");
-      expect(response.results.map((r) => r.memoryId)).toEqual(["m-deploy-netlify", "m-deploy-vercel"]);
+      expect(response.results.map((r) => r.memoryId)).toEqual([
+        "m-deploy-netlify",
+        "m-deploy-vercel",
+      ]);
     } finally {
       retriever.close();
     }
