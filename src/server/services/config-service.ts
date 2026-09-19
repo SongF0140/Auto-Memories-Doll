@@ -12,6 +12,17 @@ import { expandSourcePath, getToolPresets } from "../../config/tool-presets";
 import { existsSync } from "fs";
 import Database from "better-sqlite3";
 
+/**
+ * 预设监听源的描述文案与"自动禁用"标记。
+ * seed 时目录不存在的预设写入 MISSING 文案（含标记）；之后目录就绪时，
+ * revalidatePresetSources 依据标记区分"seed 自动禁用"与"用户手动禁用"，
+ * 只自动恢复前者——用户手动禁用（无标记）永不触碰。
+ */
+const PRESET_MISSING_MARKER = "本机未检测到该工具目录";
+const PRESET_DIR_READY_TEXT = "首次启动自动添加（检测到本机已安装该工具），可在下方禁用或删除";
+const PRESET_DIR_MISSING_TEXT =
+  "首次启动自动添加（本机未检测到该工具目录，装好后自动启用），可删除";
+
 export class ConfigService {
   private db: Database.Database;
 
@@ -79,6 +90,7 @@ export class ConfigService {
     `);
 
     this.seedDefaultToolSources();
+    this.revalidatePresetSources();
   }
 
   /**
@@ -86,16 +98,20 @@ export class ConfigService {
    *
    * 用户诉求：换一台电脑不需要手动配置路径——Claude Code 等工具的会话目录
    * 固定在 ~/ 下（~/.claude/projects 等），用主目录展开即可定位，无需用户输入。
-   * 因此建表后把预设源直接写进库：目录存在则启用，不存在则禁用（留档，装上工具后
-   * 用户在 UI 一键启用即可）。
+   * 因此建表后把预设源直接写进库：目录存在则启用，不存在则禁用（留档，装好
+   * 工具后由 revalidatePresetSources 自动启用）。
    *
-   * 幂等与迁移：flag 带版本号。v1→v2 时预设路径做过跨平台修正
-   * （Codex 的 %APPDATA%、Cursor 的 ~/.cursor/projects），因此对已存在的
-   * preset-* 行更新 path/filePattern/name/topic，但保留用户的 enabled——
-   * 用户改路径请复制条目修改，preset-* 条目始终跟随系统预设版本。
+   * 幂等与迁移：flag 带版本号。
+   * - v1→v2：预设路径跨平台修正（Cursor 的 ~/.cursor/projects）。
+   * - v2→v3：Codex 路径纠错——%APPDATA%\codex 为误记，Windows 上同样是
+   *   ~/.codex/sessions（2026-09-19 实机核验）。存量 v2 库的 preset-codex
+   *   因此被错误禁用，本版迁移更新路径并对"带自动禁用标记"的行恢复启用。
+   *
+   * 对已存在的 preset-* 行更新 path/filePattern/name/topic，但尊重用户
+   * enabled——用户改路径请复制条目修改，preset-* 条目始终跟随系统预设版本。
    */
   private seedDefaultToolSources(): void {
-    const flagKey = "tool_sources_seeded_v2";
+    const flagKey = "tool_sources_seeded_v3";
     const seeded = this.db.prepare("SELECT 1 FROM config WHERE key = ?").get(flagKey);
     if (seeded) return;
 
@@ -107,19 +123,34 @@ export class ConfigService {
     `);
     const update = this.db.prepare(`
       UPDATE tool_watch_sources
-      SET name = ?, path = ?, filePattern = ?, topic = ?, description = ?, updatedAt = ?
+      SET name = ?, path = ?, filePattern = ?, topic = ?, description = ?, enabled = ?, updatedAt = ?
       WHERE id = ?
     `);
 
     for (const [key, preset] of Object.entries(getToolPresets())) {
       const id = `preset-${key}`;
       const dirExists = existsSync(expandSourcePath(preset.path));
-      const description = dirExists
-        ? "首次启动自动添加（检测到本机已安装该工具），可在下方禁用或删除"
-        : "首次启动自动添加（本机未检测到该工具目录，装好后启用即可），可删除";
-      const existing = this.db.prepare("SELECT 1 FROM tool_watch_sources WHERE id = ?").get(id);
+      const description = dirExists ? PRESET_DIR_READY_TEXT : PRESET_DIR_MISSING_TEXT;
+      const existing = this.db
+        .prepare("SELECT enabled, description FROM tool_watch_sources WHERE id = ?")
+        .get(id) as { enabled: number; description: string | null } | undefined;
       if (existing) {
-        update.run(preset.name, preset.path, preset.filePattern, preset.topic, description, now, id);
+        // 曾因"目录不存在"被 seed 自动禁用（带标记）且目录现已就绪 → 恢复启用；
+        // 用户手动禁用（无标记）保持禁用
+        const shouldEnable =
+          dirExists &&
+          existing.enabled === 0 &&
+          (existing.description ?? "").includes(PRESET_MISSING_MARKER);
+        update.run(
+          preset.name,
+          preset.path,
+          preset.filePattern,
+          preset.topic,
+          description,
+          shouldEnable ? 1 : existing.enabled,
+          now,
+          id,
+        );
       } else {
         insert.run(
           id,
@@ -139,6 +170,61 @@ export class ConfigService {
     this.db
       .prepare("INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES (?, ?, ?)")
       .run(flagKey, now, now);
+  }
+
+  /**
+   * 预设监听源的自愈（每次初始化都跑，5 次 existsSync，成本可忽略，仅在实际变更时写库）：
+   * 1. 路径跟随：preset-* 行的 name/path/filePattern/topic 始终以当前系统预设为准——
+   *    覆盖环境变量（CODEX_HOME / CLAUDE_CONFIG_DIR）后设、库被拷贝到别的机器、
+   *    以及任何历史版本残留的错误路径。用户想自定义路径请复制条目修改。
+   * 2. 目录就绪自愈：seed 时目录不存在的预设被禁用并带标记，用户之后装好工具，
+   *    检测到目录出现即恢复启用。只处理带自动禁用标记的行——用户手动禁用（无标记）
+   *    永不触碰。
+   * watcher 启动（startToolDirWatcher）内部会构造 ConfigService，因此应用启动时
+   * 变更当次即生效；运行中变更则由 watcher 的周期对账捕捉。
+   */
+  private revalidatePresetSources(): void {
+    const rows = this.db
+      .prepare("SELECT * FROM tool_watch_sources WHERE id LIKE 'preset-%'")
+      .all() as Array<{
+      id: string;
+      name: string;
+      enabled: number;
+      path: string;
+      filePattern: string;
+      topic: string | null;
+      description: string | null;
+    }>;
+
+    for (const row of rows) {
+      const preset = getToolPresets()[row.id.slice("preset-".length)];
+      if (!preset) continue;
+
+      // 1. 预设行路径/元数据跟随系统预设版本
+      if (
+        row.path !== preset.path ||
+        row.filePattern !== preset.filePattern ||
+        row.name !== preset.name ||
+        (row.topic ?? null) !== preset.topic
+      ) {
+        this.db
+          .prepare(
+            "UPDATE tool_watch_sources SET name = ?, path = ?, filePattern = ?, topic = ?, updatedAt = ? WHERE id = ?",
+          )
+          .run(preset.name, preset.path, preset.filePattern, preset.topic, new Date().toISOString(), row.id);
+      }
+
+      // 2. 目录就绪自愈（带自动禁用标记才恢复）
+      if (row.enabled !== 0) continue;
+      if (!(row.description ?? "").includes(PRESET_MISSING_MARKER)) continue;
+      if (!existsSync(expandSourcePath(preset.path))) continue;
+
+      this.db
+        .prepare(
+          "UPDATE tool_watch_sources SET enabled = 1, description = ?, updatedAt = ? WHERE id = ?",
+        )
+        .run(PRESET_DIR_READY_TEXT, new Date().toISOString(), row.id);
+    }
   }
 
   // ── 存储路径配置（笔记根目录，运行时可热重载） ──

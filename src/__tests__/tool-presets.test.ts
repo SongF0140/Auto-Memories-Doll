@@ -24,15 +24,27 @@ async function loadPresets() {
 }
 
 describe("getToolPresets（跨平台预设路径）", () => {
-  it("Windows 上 Codex 走 %APPDATA%/codex/sessions，其余平台走 ~/.codex/sessions", async () => {
+  it("默认路径：Codex/Claude Code 在所有平台都走主目录（未设覆盖环境变量时）", async () => {
+    vi.stubEnv("CODEX_HOME", "");
+    vi.stubEnv("CLAUDE_CONFIG_DIR", "");
     setPlatform("win32");
     let presets = (await loadPresets()).getToolPresets();
-    expect(presets.codex.path).toBe("%APPDATA%/codex/sessions");
+    expect(presets.codex.path).toBe("~/.codex/sessions");
+    expect(presets["claude-code"].path).toBe("~/.claude/projects");
 
     setPlatform("linux");
     vi.resetModules();
     presets = (await loadPresets()).getToolPresets();
     expect(presets.codex.path).toBe("~/.codex/sessions");
+  });
+
+  it("CODEX_HOME / CLAUDE_CONFIG_DIR 环境变量覆盖默认路径", async () => {
+    vi.stubEnv("CODEX_HOME", "D:\\tools\\codex-home");
+    vi.stubEnv("CLAUDE_CONFIG_DIR", "/custom/claude");
+    const presets = (await loadPresets()).getToolPresets();
+    // join 计算期望值保持跨平台（Windows 反斜杠、POSIX 正斜杠）
+    expect(presets.codex.path).toBe(join("D:\\tools\\codex-home", "sessions"));
+    expect(presets["claude-code"].path).toBe(join("/custom/claude", "projects"));
   });
 
   it("五个预设齐全，filePattern 均为递归 jsonl（日期嵌套/项目子目录）", async () => {

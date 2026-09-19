@@ -1,6 +1,6 @@
 import { watch, FSWatcher } from "chokidar";
 import { readdir } from "fs/promises";
-import { statSync } from "fs";
+import { existsSync, statSync } from "fs";
 import { isAbsolute, join, relative, resolve } from "path";
 import { createHash } from "crypto";
 import { ConfigService } from "../services/config-service";
@@ -31,6 +31,8 @@ import { defaultTopicForTool, expandSourcePath } from "../../config/tool-presets
 const DEBOUNCE_QUIET_MS = 90_000;
 /** 会话内容入库上限：超大会话全文 embedding+LLM 闸门耗时数分钟，会拖死队列 */
 const SESSION_CONTENT_MAX_CHARS = 10_000;
+/** 目录未就绪的重试间隔：源已启用但目录尚未创建（工具后装）时周期重试 */
+const DIR_RETRY_MS = 60_000;
 
 interface WatcherEntry {
   source: ToolWatchSource;
@@ -40,8 +42,13 @@ interface WatcherEntry {
 const globalStore = globalThis as typeof globalThis & {
   __amdToolDirEntries?: WatcherEntry[];
   __amdToolDirStarted?: boolean;
+  __amdToolDirPending?: Map<string, { source: ToolWatchSource; timer: NodeJS.Timeout }>;
+  __amdToolDirReconciler?: NodeJS.Timeout;
 };
 const entries: WatcherEntry[] = (globalStore.__amdToolDirEntries ??= []);
+/** 目录未就绪的挂起源：sourceId → 源与重试定时器 */
+const pendingStarts: Map<string, { source: ToolWatchSource; timer: NodeJS.Timeout }> =
+  (globalStore.__amdToolDirPending ??= new Map());
 
 /** 防抖定时器：`${sourceId}:${filePath}` → timer */
 const pendingTimers = new Map<string, NodeJS.Timeout>();
@@ -96,6 +103,12 @@ export async function startToolDirWatcher(): Promise<void> {
     await startSingleSource(source);
   }
 
+  // 周期对账：捕捉两类延迟——目录后来才创建的挂起源、以及运行中被
+  // revalidatePresetSources 翻转启用的预设（ConfigService 无法反向通知 watcher）
+  globalStore.__amdToolDirReconciler ??= setInterval(() => {
+    void reconcileSources();
+  }, DIR_RETRY_MS);
+
   logger.ingest.info(`[ToolDirWatcher] 已启动 ${entries.length} 个监听源`);
 }
 
@@ -109,6 +122,12 @@ async function startSingleSource(source: ToolWatchSource): Promise<void> {
     }
     if (isMemoryRootPath(watchPath)) {
       logger.ingest.warn(`[ToolDirWatcher] 跳过应用自身记忆目录: ${watchPath}`);
+      return;
+    }
+    // 目录尚未创建（工具后装/首次启动）：chokidar 对不存在的目录无法建立底层
+    // 监听且目录出现后不会恢复，挂起周期重试，就绪后自动转为真实监听
+    if (!existsSync(watchPath)) {
+      scheduleSourceRetry(source);
       return;
     }
     const pattern = source.filePattern || "*.jsonl";
@@ -158,6 +177,53 @@ async function startSingleSource(source: ToolWatchSource): Promise<void> {
     logger.ingest.error(`[ToolDirWatcher] 启动监听源 "${source.name}" 失败:`, {
       error: (error as Error).message,
     });
+  }
+}
+
+/** 目录未就绪：挂起周期重试（同一源只挂一个定时器，重复启动调用幂等） */
+function scheduleSourceRetry(source: ToolWatchSource): void {
+  if (pendingStarts.has(source.id)) return;
+  logger.ingest.info(`[ToolDirWatcher] 监听源 "${source.name}" 目录尚未创建，${DIR_RETRY_MS / 1000}s 后重试`, {
+    path: source.path,
+  });
+  const timer = setTimeout(() => {
+    pendingStarts.delete(source.id);
+    void tryStartSource(source);
+  }, DIR_RETRY_MS);
+  pendingStarts.set(source.id, { source, timer });
+}
+
+/** 重试前复核源仍处于启用状态（用户可能在等待期间禁用了它），再尝试真实启动 */
+async function tryStartSource(source: ToolWatchSource): Promise<void> {
+  const configService = new ConfigService();
+  try {
+    if (!configService.listEnabledToolSources().some((s) => s.id === source.id)) return;
+  } finally {
+    configService.close();
+  }
+  await startSingleSource(source);
+}
+
+/**
+ * 周期对账：把"已启用但既不在监听也不在挂起"的源补启动。
+ * 覆盖两个场景：revalidatePresetSources 在运行中翻转启用预设、
+ * 挂起源的重试定时器被 stop 后重建等状态漂移。
+ */
+async function reconcileSources(): Promise<void> {
+  try {
+    const configService = new ConfigService();
+    let enabled: ToolWatchSource[];
+    try {
+      enabled = configService.listEnabledToolSources();
+    } finally {
+      configService.close();
+    }
+    const known = new Set<string>([...entries.map((e) => e.source.id), ...pendingStarts.keys()]);
+    for (const source of enabled) {
+      if (!known.has(source.id)) await startSingleSource(source);
+    }
+  } catch (error) {
+    logger.ingest.error("[ToolDirWatcher] 对账失败:", { error: (error as Error).message });
   }
 }
 
@@ -320,6 +386,12 @@ export async function scanToolSources(): Promise<number> {
 export function stopToolDirWatcher(): void {
   for (const timer of pendingTimers.values()) clearTimeout(timer);
   pendingTimers.clear();
+  for (const { timer } of pendingStarts.values()) clearTimeout(timer);
+  pendingStarts.clear();
+  if (globalStore.__amdToolDirReconciler) {
+    clearInterval(globalStore.__amdToolDirReconciler);
+    globalStore.__amdToolDirReconciler = undefined;
+  }
   for (const entry of entries) {
     try {
       entry.watcher.close();
