@@ -748,9 +748,15 @@ export class Orchestrator {
     }
 
     // 质量闸门：注入相似记忆上下文，让 LLM 能判断新颖性（是否与库内已有知识重合）
+    // memoryId 一并带给抽取层：LLM 若引用某条相似条目为前提，据此解析跨源因果边
     const hints: SimilarMemoryHint[] = similarHits
       .filter((h) => h.similarity >= SIMILAR_HINT_MIN_SIMILARITY)
-      .map((h) => ({ title: h.title, summary: h.summary, similarity: h.similarity }));
+      .map((h) => ({
+        memoryId: h.memoryId,
+        title: h.title,
+        summary: h.summary,
+        similarity: h.similarity,
+      }));
     const filterResult = await this.qualityFilter.filter(candidate, hints);
     if (filterResult.verdict !== "accept") {
       // reject → 终态拒绝不重试；review → 挂起待人工裁决（均不进 failed 重试循环）
@@ -781,7 +787,7 @@ export class Orchestrator {
       return;
     }
 
-    const anchorId = await this.commitExtractedCards(event, candidate, cards);
+    const anchorId = await this.commitExtractedCards(event, candidate, cards, hints);
 
     event.status = "done";
     this.memoryService.updateEvent(event);
@@ -807,6 +813,7 @@ export class Orchestrator {
     event: PendingEvent,
     candidate: MemoryRecord,
     cards: ExtractedCard[],
+    hints: SimilarMemoryHint[] = [],
   ): Promise<string> {
     const hash = sourceHashOf(candidate.content);
     let anchorId = "";
@@ -844,7 +851,49 @@ export class Orchestrator {
       await this.syncDerivedStores(this.memoryService.getMemory(id) ?? record);
       if (i === 0) anchorId = id;
     }
+
+    await this.commitEntitiesAndRelations(event, cards, hints);
     return anchorId;
+  }
+
+  /**
+   * 实体层落库（对标 Hindsight entity + causal link）：
+   * 每卡实体写入 entities/memory_entities；causedBy 卡序号解析为本批卡片 id，
+   * causedByExisting 相似条目编号经 hints 解析为存量 memoryId（跨源因果边，v2）——
+   * 两类合并为一次 setMemoryCauses 写入（先删后插语义，分开调用会互相覆盖）。
+   * 派生信息失败只记日志，不回滚已入库的卡片。
+   * 全部卡片创建完成后执行，保证关系两端 id 均已存在。
+   */
+  private async commitEntitiesAndRelations(
+    event: PendingEvent,
+    cards: ExtractedCard[],
+    hints: SimilarMemoryHint[] = [],
+  ): Promise<void> {
+    for (let i = 0; i < cards.length; i++) {
+      const id = i === 0 ? event.memoryId : `${event.memoryId}-p${i + 1}`;
+      try {
+        if (cards[i].entities.length > 0) {
+          this.memoryService.setMemoryEntities(id, cards[i].entities);
+        }
+        // batch 内：causedBy 序号（1 起始）→ 卡片 id；自引用与越界序号在解析层已过滤，这里再兜底
+        const batchCauses = cards[i].causedBy
+          .filter((n) => n >= 1 && n <= cards.length && n !== i + 1)
+          .map((n) => (n === 1 ? event.memoryId : `${event.memoryId}-p${n}`));
+        // 跨源：causedByExisting 编号（1 起始）→ hints 对应的存量 memoryId（缺 id 的 hint 丢弃）
+        const existingCauses = cards[i].causedByExisting
+          .map((n) => hints[n - 1]?.memoryId)
+          .filter((mid): mid is string => Boolean(mid) && mid !== id);
+        const causes = [...new Set([...batchCauses, ...existingCauses])];
+        if (causes.length > 0) {
+          this.memoryService.setMemoryCauses(id, causes);
+        }
+      } catch (err) {
+        logger.ingest.error("实体/因果边写入失败（不阻塞入库）", {
+          memoryId: id,
+          error: (err as Error).message,
+        });
+      }
+    }
   }
 
   /**

@@ -32,6 +32,9 @@ docs-zh/.obsidian/workspace.json
 架构改进.md
 修补.md
 
+# 参考项目（第三方源码，严禁上传）
+参考项目/
+
 # 用户话题自定义配置（可能含个人偏好）
 **/topics.json
 !src/config/topics.example.json
@@ -93,3 +96,6 @@ e2e/.tmp/
 
 # 检索评测报告（每次 npm run eval 重新生成）
 evals/reports/
+
+# LoComo 真实数据集（第三方数据 + 衍生 fixture，npm run eval:prepare-locomo 生成）
+evals/fixtures/

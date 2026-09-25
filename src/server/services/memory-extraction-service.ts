@@ -14,6 +14,23 @@ export type ExtractedCard = {
    * 与 summary 共同构成 embedding 键（Rainy window-use 分离），使召回语义对齐查询。
    */
   windowUse?: string;
+  /**
+   * 实体层（对标 Hindsight entity 抽取）：卡片涉及的关键实体
+   * （工具名、库名、技术、文件路径、命令、配置项等），保留原文写法。
+   * 实体共现边在检索 multi-hop 时用于跨卡扩展。
+   */
+  entities: string[];
+  /**
+   * batch 内因果依赖（对标 Hindsight causal link）：本卡结论建立在本次抽取的
+   * 第几张卡之上（1 起始的序号）。commit 时由 orchestrator 解析为 memoryId。
+   */
+  causedBy: number[];
+  /**
+   * 跨源因果依赖（v2）：本卡结论建立在知识库已有条目之上，引用注入 prompt 的
+   * 相似条目编号（1 起始）。commit 时由 orchestrator 经 hints 解析为存量 memoryId。
+   * 老输出缺失时容错为空数组。
+   */
+  causedByExisting: number[];
 };
 
 /** 单次抽取最多产出的卡片数：防止 LLM 失控拆出几十张导致成本爆炸 */
@@ -47,7 +64,7 @@ export class MemoryExtractionService {
     for (let attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
       try {
         const response = await ModelAdapter.generate(prompt, "flagship");
-        const cards = this.parseCards(response.content, candidate.content);
+        const cards = this.parseCards(response.content, candidate.content, similar.length);
         if (cards) return cards;
         logger.quality.warn("抽取输出非标准 JSON，重试", {
           attempt,
@@ -66,7 +83,7 @@ export class MemoryExtractionService {
    * 解析 LLM 输出：{"memories": [{"title","summary","content","tags"}]}
    * 逐卡校验（空标题/空正文丢弃），返回空数组或结构异常时返回 null（由调用方转人工）。
    */
-  private parseCards(text: string, sourceContent: string): ExtractedCard[] | null {
+  private parseCards(text: string, sourceContent: string, similarCount = 0): ExtractedCard[] | null {
     const json = this.extractJsonObject(text);
     if (!json) return null;
 
@@ -92,6 +109,9 @@ export class MemoryExtractionService {
           tags: tags.slice(0, 5),
           windowUse:
             typeof item.windowUse === "string" ? item.windowUse.trim().slice(0, 120) : undefined,
+          entities: this.parseEntities(item.entities),
+          causedBy: this.parseCausedBy(item.causedBy, MAX_CARDS),
+          causedByExisting: this.parseCausedBy(item.causedByExisting, similarCount),
         });
       }
 
@@ -126,9 +146,35 @@ export class MemoryExtractionService {
     return null;
   }
 
+  /** 实体列表容错解析：非字符串/空串丢弃，去重，最多 8 个，单个限 60 字符 */
+  private parseEntities(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    for (const raw of value) {
+      if (typeof raw !== "string") continue;
+      const name = raw.trim();
+      if (!name || name.length > 60) continue;
+      seen.add(name);
+      if (seen.size >= 8) break;
+    }
+    return [...seen];
+  }
+
+  /** 因果引用解析（batch 内序号与跨源条目编号共用）：字符串数字转整数、去重、越界与重复丢弃 */
+  private parseCausedBy(value: unknown, max: number): number[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<number>();
+    for (const raw of value) {
+      const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+      if (!Number.isInteger(n) || n < 1 || n > max || seen.has(n)) continue;
+      seen.add(n);
+    }
+    return [...seen];
+  }
+
   private buildPrompt(candidate: MemoryRecord, similar: SimilarMemoryHint[]): string {
     const similarBlock = similar.length
-      ? `\n知识库中已有的相似条目（若某话题与它们完全等价，不要再输出该话题）：
+      ? `\n知识库中已有的相似条目（编号 1-${similar.length}，用于 causedByExisting 引用；若某话题与它们完全等价，不要再输出该话题）：
 ${similar.map((s, i) => `${i + 1}. 《${s.title}》：${s.summary}`).join("\n")}
 `
       : "";
@@ -145,6 +191,9 @@ ${similar.map((s, i) => `${i + 1}. 《${s.title}》：${s.summary}`).join("\n")}
    - content：中文详细日志，优先 1,500-20,000 字；必须保留笔记、坑点、问题与回答、数字、配置值、结论、段落结构和必要的原始上下文——这些细节会在后续对话中被检索并注入上下文，写长文（博客/报告）时全靠它，宁可长也不要概括丢细节。原文较短时按实际长度输出，不要编造内容。
    - tags：2-5 个中文标签
    - windowUse：这条记忆在什么场景下有用，120 字以内。格式如"当用户问 X / 需要做 Y / 排查 Z 问题时"。检索时用它匹配用户查询。
+   - entities：这张卡片涉及的关键实体（工具名、库名、框架、技术、文件路径、命令、配置项等原文专有名词），保留原文写法，0-8 个；没有就给空数组。
+   - causedBy：若本卡的结论/修复方法建立在本次整理的另一张卡之上（前因后果、前提依赖），填那张卡的序号（从 1 开始）；可多个；没有依赖就给空数组。
+   - causedByExisting：若本卡的结论建立在上方"知识库中已有的相似条目"某条之上（本卡是该条的后续、修复或推翻），填那条的编号；只引用确实相关的条目，没有就给空数组。
 5. 只整理原文确实包含的信息，不要编造或补充原文没有的内容。
 ${similarBlock}
 来源：${candidate.source}
@@ -153,7 +202,7 @@ ${similarBlock}
 原始内容：
 ${candidate.content.slice(0, PROMPT_CONTENT_LIMIT)}
 
-只回复 JSON，不要多余解释：{"memories": [{"title": "...", "summary": "...", "content": "...", "tags": ["..."], "windowUse": "..."}]}`;
+只回复 JSON，不要多余解释：{"memories": [{"title": "...", "summary": "...", "content": "...", "tags": ["..."], "windowUse": "...", "entities": ["..."], "causedBy": [], "causedByExisting": []}]}`;
   }
 
   private limitExtractedContent(extracted: string, source: string): string {

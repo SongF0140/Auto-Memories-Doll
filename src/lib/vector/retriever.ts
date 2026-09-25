@@ -12,6 +12,7 @@ import {
   TemporalMeta,
 } from "./temporal";
 import { WikiGraph } from "../graph/wiki-graph";
+import { EntityIndex } from "../graph/entity-index";
 import { recordRouteStat } from "./route-stats";
 
 /**
@@ -37,6 +38,11 @@ export type VectorRetrieverOptions = {
   /** 图谱邻接扩展（multi-hop 路由用），可注入以便测试 */
   wikiGraph?: Pick<WikiGraph, "getNeighbors">;
   /**
+   * 实体/因果扩展（multi-hop 路由用）：种子 → 共享实体或存在 caused_by 关系的邻居。
+   * 缺省时惰性构造默认 EntityIndex，可注入以便测试。
+   */
+  entityIndex?: Pick<EntityIndex, "getExpandedNeighbors">;
+  /**
    * overview 路由的结果提供器（读控制面 index.md 与 synthesis 卡）。
    * 缺省时 overview 查询退化为 single-hop，保证无控制面时功能不缺失。
    */
@@ -54,9 +60,11 @@ export class VectorRetriever {
   private index: VectorIndex | null = null;
   private keywordIndex: KeywordIndex | null = null;
   private wikiGraph: Pick<WikiGraph, "getNeighbors"> | null = null;
+  private entityIndex: Pick<EntityIndex, "getExpandedNeighbors"> | null = null;
 
   constructor(private readonly options: VectorRetrieverOptions = {}) {
     if (options.wikiGraph) this.wikiGraph = options.wikiGraph;
+    if (options.entityIndex) this.entityIndex = options.entityIndex;
   }
 
   /**
@@ -196,6 +204,7 @@ export class VectorRetriever {
     this.index = null;
     this.keywordIndex = null;
     this.wikiGraph = null;
+    this.entityIndex = null;
   }
 
   /**
@@ -253,8 +262,10 @@ export class VectorRetriever {
   }
 
   /**
-   * multi-hop 路由：以向量命中的高分段为种子，沿 wikilink 扩 1 跳邻居。
-   * 邻居自身没有相似度分值，用"距离种子的排名"衰减生成一个可与余弦分融合的伪分值。
+   * multi-hop 路由：以向量命中的高分段为种子，沿两条边扩展 1 跳邻居——
+   * 1) wikilink（人写关系，WikiGraph）；2) 实体共现 + caused_by（机器算关系，EntityIndex）。
+   * 邻居自身没有相似度分值，用"距离种子的排名"衰减生成一个可与余弦分融合的伪分值；
+   * 实体/因果邻居统一取种子最强相似度 × 0.7（略低于 1 跳 wikilink，避免灌水）。
    */
   private async expandByGraph(
     vectorHits: { memoryId: string; similarity: number }[],
@@ -285,6 +296,20 @@ export class VectorRetriever {
       }
     }
 
+    // 实体共现 + 因果扩展：批量一次，按种子强度赋伪分
+    const entityMap = this.getEntityIndex().getExpandedNeighbors(seeds.map((hit) => hit.memoryId));
+    for (let depth = 0; depth < seeds.length; depth++) {
+      const neighbors = entityMap.get(seeds[depth].memoryId) ?? [];
+      for (const neighborId of neighbors) {
+        if (seen.has(neighborId)) continue;
+        seen.add(neighborId);
+        hits.push({
+          memoryId: neighborId,
+          similarity: Math.min(seeds[depth].similarity * 0.7, 0.95),
+        });
+      }
+    }
+
     return hits.sort((a, b) => b.similarity - a.similarity).slice(0, pool);
   }
 
@@ -301,5 +326,10 @@ export class VectorRetriever {
   private getWikiGraph(): Pick<WikiGraph, "getNeighbors"> {
     this.wikiGraph ??= new WikiGraph();
     return this.wikiGraph;
+  }
+
+  private getEntityIndex(): Pick<EntityIndex, "getExpandedNeighbors"> {
+    this.entityIndex ??= new EntityIndex();
+    return this.entityIndex;
   }
 }

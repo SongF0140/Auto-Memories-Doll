@@ -38,6 +38,9 @@ const mocks = vi.hoisted(() => ({
   ranker: {
     rankWithMMR: vi.fn(),
   },
+  reranker: {
+    rerank: vi.fn(),
+  },
   wikiGraph: {
     getNeighbors: vi.fn(),
   },
@@ -77,6 +80,9 @@ vi.mock("../lib/vector/query-expansion", () => ({
   searchWithExpansion: mocks.searchWithExpansion,
 }));
 vi.mock("../lib/vector/ranker", () => ({ Ranker: vi.fn(() => mocks.ranker) }));
+vi.mock("../lib/vector/reranker", () => ({
+  CrossEncoderReranker: vi.fn(() => mocks.reranker),
+}));
 vi.mock("../lib/skills/manager", () => ({ SkillManager: vi.fn(() => mocks.skillManager) }));
 vi.mock("../lib/mcp/manager", () => ({ McpManager: vi.fn(() => mocks.mcpManager) }));
 vi.mock("../lib/graph/wiki-graph", () => ({ WikiGraph: vi.fn(() => mocks.wikiGraph) }));
@@ -140,6 +146,7 @@ describe("ChatHandler", () => {
     mocks.vectorRetriever.search.mockResolvedValue([]);
     mocks.readProfileTags.mockResolvedValue([]);
     mocks.ranker.rankWithMMR.mockReturnValue([]);
+    mocks.reranker.rerank.mockResolvedValue(null);
     mocks.wikiGraph.getNeighbors.mockResolvedValue([]);
     mocks.mcpManager.listAllTools.mockResolvedValue([]);
     mocks.toolCaller.getToolDescriptions.mockReturnValue([]);
@@ -397,6 +404,37 @@ describe("ChatHandler", () => {
       const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
       expect(callArgs.readonly).toBe(true);
       expect(callArgs.messages[0].content).toContain("知识A");
+    });
+
+    it("rerank 分数与原相似度混合后喂给 rankWithMMR", async () => {
+      const memoryA = { id: "m1", title: "A", summary: "摘要A", content: "", tags: [], titleZh: "", summaryZh: "", tagsZh: [] };
+      const memoryB = { id: "m2", title: "B", summary: "摘要B", content: "", tags: [], titleZh: "", summaryZh: "", tagsZh: [] };
+      mocks.searchWithExpansion.mockResolvedValue([
+        { memoryId: "m1", similarity: 0.8 },
+        { memoryId: "m2", similarity: 0.6 },
+      ]);
+      mocks.memoryService.getMemoriesByIds.mockReturnValue([memoryA, memoryB]);
+      mocks.ranker.rankWithMMR.mockReturnValue([]);
+      // cross-encoder 判定 B 更相关：m1 → 1.0，m2 → 0.0
+      mocks.reranker.rerank.mockResolvedValue(
+        new Map([
+          ["m1", 1.0],
+          ["m2", 0.0],
+        ]),
+      );
+
+      await handler.generateResponse([{ role: "user", content: "查记忆" }], "memory", "sess-1");
+
+      expect(mocks.reranker.rerank).toHaveBeenCalledWith("查记忆", [
+        expect.objectContaining({ memoryId: "m1", text: "A\n摘要A\n" }),
+        expect.objectContaining({ memoryId: "m2", text: "B\n摘要B\n" }),
+      ]);
+      // blended = 0.5 * rerank + 0.5 * similarity：m1 → 0.9，m2 → 0.3
+      const candidates = mocks.ranker.rankWithMMR.mock.calls[0][0];
+      expect(candidates).toEqual([
+        { memoryId: "m1", similarity: 0.9 },
+        { memoryId: "m2", similarity: 0.3 },
+      ]);
     });
   });
 

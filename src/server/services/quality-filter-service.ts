@@ -4,6 +4,8 @@ import { logger } from "../../lib/logger";
 
 /** 相似记忆提示：给闸门提供"库里已有什么"的参考上下文，用于判断新颖性 */
 export type SimilarMemoryHint = {
+  /** 库内已有记忆的 id：跨源因果边（causedByExisting）据此解析，缺省则无法建边 */
+  memoryId?: string;
   title: string;
   summary: string;
   similarity: number;

@@ -125,3 +125,14 @@ export const RETRIEVAL_MAX_INJECTED_MEMORIES = 12;
  */
 export const RETRIEVAL_CONTENT_BUDGET_CHARS = 8000;
 export const RETRIEVAL_PER_CARD_CONTENT_MAX_CHARS = 2000;
+
+/**
+ * Cross-Encoder 精排（对标 Hindsight reranking）：MMR 之前对候选池做本地
+ * cross-encoder 精排，rerank 分数与原相似度混合后喂给 base score 的 relevance 因子。
+ */
+/** 模型未就绪时单次检索最多等待的毫秒数（首次是边下载边等，超时放行走原排序，后台继续下载） */
+export const RERANK_WAIT_MODEL_MS = 2000;
+/** 送入 cross-encoder 前单卡文本的最大字符数（控制 batch 推理延迟） */
+export const RERANK_TEXT_MAX_CHARS = 800;
+/** rerank 分数与原相似度的混合权重：blended = w * rerank + (1 - w) * similarity */
+export const RERANK_SCORE_WEIGHT = 0.5;

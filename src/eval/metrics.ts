@@ -77,3 +77,53 @@ export function groupMetrics(hits: RankedHit[]): Record<string, RetrievalMetrics
 function round4(value: number): number {
   return Math.round(value * 10000) / 10000;
 }
+
+// ─────────────────────────────────────────────────────────────
+// 多标准答案版（真实 LoComo：一道题有多条 evidence，任一命中即算召回）
+// ─────────────────────────────────────────────────────────────
+
+export type MultiRankedHit = Omit<RankedHit, "expected"> & { expected: string[] };
+
+/** top-k 内命中任一标准答案 */
+export function hitAtKMulti(hit: MultiRankedHit, k: number): boolean {
+  const topK = new Set(hit.ranked.slice(0, k));
+  return hit.expected.some((id) => topK.has(id));
+}
+
+/** 倒数排名取所有标准答案中最先命中的那个 */
+export function reciprocalRankMulti(hit: MultiRankedHit): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (const id of hit.expected) {
+    const index = hit.ranked.indexOf(id);
+    if (index !== -1 && index < best) best = index;
+  }
+  return best === Number.POSITIVE_INFINITY ? 0 : 1 / (best + 1);
+}
+
+export function computeMetricsMulti(hits: MultiRankedHit[]): RetrievalMetrics {
+  if (hits.length === 0) {
+    return { total: 0, recallAt1: 0, recallAt5: 0, recallAt10: 0, mrr: 0 };
+  }
+  return {
+    total: hits.length,
+    recallAt1: round4(hits.filter((h) => hitAtKMulti(h, 1)).length / hits.length),
+    recallAt5: round4(hits.filter((h) => hitAtKMulti(h, 5)).length / hits.length),
+    recallAt10: round4(hits.filter((h) => hitAtKMulti(h, 10)).length / hits.length),
+    mrr: round4(hits.reduce((sum, h) => sum + reciprocalRankMulti(h), 0) / hits.length),
+  };
+}
+
+export function groupMetricsMulti(hits: MultiRankedHit[]): Record<string, RetrievalMetrics> {
+  const groups = new Map<string, MultiRankedHit[]>();
+  for (const hit of hits) {
+    const key = hit.group ?? "default";
+    const list = groups.get(key) ?? [];
+    list.push(hit);
+    groups.set(key, list);
+  }
+  const result: Record<string, RetrievalMetrics> = {};
+  for (const [key, list] of groups) {
+    result[key] = computeMetricsMulti(list);
+  }
+  return result;
+}

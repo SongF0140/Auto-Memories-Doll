@@ -171,4 +171,9 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
     responseSchema: "promptDetailResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "NOT_FOUND", "PROMPT_NOT_FOUND", "INTERNAL_ERROR"],
   },
+  "src/app/api/reflect/route.ts": {
+    requestSchema: "reflectRequestSchema",
+    responseSchema: "reflectResponseSchema",
+    errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
+  },
 };

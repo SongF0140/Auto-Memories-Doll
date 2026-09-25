@@ -192,6 +192,8 @@ function createMemoryServiceStub() {
     updateEvent: vi.fn(),
     updateEventCandidate: vi.fn(),
     classifyMemory: vi.fn(),
+    setMemoryEntities: vi.fn(),
+    setMemoryCauses: vi.fn(),
     count: vi.fn(() => 0),
     close: vi.fn(),
   };
@@ -662,6 +664,71 @@ describe("Orchestrator", () => {
       );
       expect(memoryServiceStub.createMemoryRecord).toHaveBeenCalledWith(
         expect.objectContaining({ topic: "meetings", topicZh: "会议记录" }),
+      );
+    });
+
+    it("跨源因果边：抽取 causedByExisting 引用相似条目 → 经 hints 解析为存量 id 合并写边", async () => {
+      const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
+      memoryServiceStub.getPendingEvents.mockReturnValue([event]);
+      // recallSimilarMemories：向量命中 old-1，getMemory 补全 title/summary → hints 带 memoryId
+      memoryServiceStub.getMemory.mockImplementation((id: string) =>
+        id === "old-1"
+          ? ({
+              id,
+              title: "存量卡",
+              summary: "存量摘要",
+              content: "c",
+              tags: [],
+              topic: "t",
+              createdAt: "x",
+              updatedAt: "x",
+              accessedAt: "x",
+              accessCount: 0,
+              heatScore: 0,
+              version: 1,
+              source: "s",
+              sourceType: "ingest",
+              graphLinks: [],
+            } as any)
+          : null,
+      );
+      memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
+      memoryServiceStub.listMemories.mockReturnValue([]);
+      // 0.6 恰达 SIMILAR_HINT_MIN_SIMILARITY，低于向量去重阈值 0.95
+      vectorIndexSearch.mockReturnValue([{ memoryId: "old-1", similarity: 0.6 }]);
+      extractionExtractMock.mockResolvedValue([
+        {
+          title: "卡一",
+          summary: "s",
+          content: "c",
+          tags: [],
+          entities: [],
+          causedBy: [2],
+          causedByExisting: [1],
+        },
+        {
+          title: "卡二",
+          summary: "s",
+          content: "c",
+          tags: [],
+          entities: [],
+          causedBy: [],
+          causedByExisting: [1, 5], // 5 越界（只有 1 条 hint）→ 丢弃
+        },
+      ]);
+
+      await orchestrator.processQueue();
+
+      expect(event.status).toBe("done");
+      // 卡一（锚点 id）：batch 内边（依赖卡二）+ 跨源边（hint 1 → old-1）合并一次写入
+      expect(memoryServiceStub.setMemoryCauses).toHaveBeenCalledWith(
+        "test-id",
+        expect.arrayContaining(["test-id-p2", "old-1"]),
+      );
+      // 卡二：跨源边指向 old-1
+      expect(memoryServiceStub.setMemoryCauses).toHaveBeenCalledWith(
+        "test-id-p2",
+        expect.arrayContaining(["old-1"]),
       );
     });
 

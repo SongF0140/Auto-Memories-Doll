@@ -19,7 +19,9 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "eval": "vitest run src/eval/retrieval-eval.test.ts",
-    "eval:locomo": "vitest run src/eval/locomo-eval.test.ts"
+    "eval:locomo": "vitest run src/eval/locomo-eval.test.ts",
+    "eval:prepare-locomo": "node scripts/prepare-locomo-fixtures.mjs",
+    "eval:locomo:real": "vitest run src/eval/locomo-real-eval.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",
@@ -37,6 +39,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind-merge": "^3.6.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.3.2",
     "zod": "^4.4.3"
   },
@@ -58,6 +61,7 @@
     "vitest": "^3.2.4"
   },
   "optionalDependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "usearch": "2.26.0"
   }
 }

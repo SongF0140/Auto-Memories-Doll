@@ -8,11 +8,13 @@ import { MemoryService } from "../../server/services/memory-service";
 import { VectorRetriever } from "../../lib/vector/retriever";
 import { searchWithExpansion } from "../../lib/vector/query-expansion";
 import { Ranker } from "../../lib/vector/ranker";
+import { CrossEncoderReranker } from "../../lib/vector/reranker";
 import {
   RETRIEVAL_CANDIDATE_LIMIT,
   RETRIEVAL_MAX_INJECTED_MEMORIES,
   RETRIEVAL_CONTENT_BUDGET_CHARS,
   RETRIEVAL_PER_CARD_CONTENT_MAX_CHARS,
+  RERANK_SCORE_WEIGHT,
 } from "../../config/constants";
 import { readProfileTags } from "../../lib/storage/index-writer";
 import { SkillManager } from "../../lib/skills/manager";
@@ -35,6 +37,7 @@ export class ChatHandler {
   private memoryService: MemoryService;
   private vectorRetriever: VectorRetriever;
   private ranker: Ranker;
+  private reranker: CrossEncoderReranker;
   private skillManager: SkillManager;
   private mcpManager: McpManager;
   private wikiGraph: WikiGraph;
@@ -57,6 +60,7 @@ export class ChatHandler {
       topics: this.knownTopics(),
     });
     this.ranker = new Ranker();
+    this.reranker = new CrossEncoderReranker();
     this.skillManager = new SkillManager();
     this.mcpManager = new McpManager();
     this.wikiGraph = new WikiGraph();
@@ -403,9 +407,31 @@ ${blocks.memoryBlock}
     if (injectable.length === 0) return "";
     const memoryMap = new Map(injectable.map((m) => [m.id, m]));
 
+    // Cross-Encoder 精排（对标 Hindsight reranking）：MMR 之前把 rerank 分数与原
+    // 相似度混合后喂给 base score 的 relevance 因子——ranker 与 MMR α=0.7 不动。
+    // 精排不可用（可选依赖缺失 / 模型下载中 / 推理失败）时返回 null，直接用原相似度。
+    const rerankScores = await this.reranker.rerank(
+      lastMessage.content,
+      injectable.map((m) => ({
+        memoryId: m.id,
+        text: `${m.title}\n${m.summary}\n${m.content}`,
+      })),
+    );
+    const rerankedResults = rerankScores
+      ? results.map((r) => {
+          const s = rerankScores.get(r.memoryId);
+          return s === undefined
+            ? r
+            : {
+                ...r,
+                similarity: RERANK_SCORE_WEIGHT * s + (1 - RERANK_SCORE_WEIGHT) * r.similarity,
+              };
+        })
+      : results;
+
     // MMR 重排（相关性与多样性平衡，避免主题重复）
     const profileTags = await readProfileTags();
-    const rankedResults = this.ranker.rankWithMMR(results, memoryMap, profileTags);
+    const rankedResults = this.ranker.rankWithMMR(rerankedResults, memoryMap, profileTags);
 
     const relevantMemories: MemoryRecord[] = [];
 

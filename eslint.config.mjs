@@ -5,7 +5,14 @@ import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
-    ignores: [".next/**", "coverage/**", "node_modules/**", "memory-root/**", "dist/**"],
+    ignores: [
+      ".next/**",
+      "coverage/**",
+      "node_modules/**",
+      "memory-root/**",
+      "dist/**",
+      "参考项目/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -79,9 +86,9 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
-  // Node.js 临时/诊断脚本（CommonJS，需要将结果输出到终端）
+  // Node.js 临时/诊断脚本（CommonJS 或 ESM，需要将结果输出到终端）
   {
-    files: ["scripts/**/*.cjs"],
+    files: ["scripts/**/*.cjs", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         module: "readonly",
@@ -89,6 +96,7 @@ export default tseslint.config(
         process: "readonly",
         __dirname: "readonly",
         console: "readonly",
+        fetch: "readonly",
       },
     },
     rules: {

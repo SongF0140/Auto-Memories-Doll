@@ -27,9 +27,11 @@ describe("RouteStatsService（路由分布统计）", () => {
   });
 
   it("同日同路由重复记录按 count 累加", () => {
-    service.record("temporal", "2026-09-14");
-    service.record("temporal", "2026-09-14");
-    service.record("single-hop", "2026-09-14");
+    // 动态取今天，避免硬编码日期滑出 getStats 的滑动窗口（曾经的定时炸弹）
+    const today = new Date().toISOString().slice(0, 10);
+    service.record("temporal", today);
+    service.record("temporal", today);
+    service.record("single-hop", today);
 
     const stats = service.getStats(7);
     expect(stats.totals).toEqual({ temporal: 2, "single-hop": 1 });

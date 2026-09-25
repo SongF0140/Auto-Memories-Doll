@@ -143,6 +143,38 @@ export class MemoryService {
         updatedAt TEXT
       )
     `);
+
+    // ── 实体层（对标 Hindsight entities / memory_links）──
+    // 实体字典：normalizedName 用于大小写不敏感合并（"Claude Code" 与 "claude code" 同一实体）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS entities (
+        entityId INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        normalizedName TEXT NOT NULL UNIQUE
+      )
+    `);
+    // 记忆-实体关联：实体共现边在检索时动态 JOIN 计算，不物化
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_entities (
+        memoryId TEXT NOT NULL,
+        entityId INTEGER NOT NULL,
+        PRIMARY KEY (memoryId, entityId)
+      )
+    `);
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_memory_entities_entity ON memory_entities(entityId)`,
+    );
+    // 类型化关系边：caused_by 行 from→to 表示 "to 的成立以 from 为前提"
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_relations (
+        fromId TEXT NOT NULL,
+        toId TEXT NOT NULL,
+        relation TEXT NOT NULL,
+        createdAt TEXT,
+        PRIMARY KEY (fromId, toId, relation)
+      )
+    `);
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_memory_relations_to ON memory_relations(toId)`);
   }
 
   async createMemory(
@@ -614,10 +646,147 @@ export class MemoryService {
   }
 
   deleteMemory(id: string): void {
+    // 实体层级联清理：关联行先删，避免悬挂引用；孤立实体随后回收
+    this.db.prepare("DELETE FROM memory_entities WHERE memoryId = ?").run(id);
+    this.db.prepare("DELETE FROM memory_relations WHERE fromId = ? OR toId = ?").run(id, id);
+    this.db
+      .prepare(
+        "DELETE FROM entities WHERE entityId NOT IN (SELECT DISTINCT entityId FROM memory_entities)",
+      )
+      .run();
+
     const stmt = this.db.prepare("DELETE FROM memories WHERE id = ?");
     stmt.run(id);
 
     this.getVectorIndex().delete(id);
+  }
+
+  // ── 实体层（对标 Hindsight entity 抽取 + causal link）──
+
+  /**
+   * 全量替换某记忆的实体关联（先删后插，幂等）。
+   * 实体名大小写不敏感合并：以首次出现的写法为准。
+   * 失败由调用方兜底（不阻塞记忆入库）。
+   */
+  setMemoryEntities(memoryId: string, names: string[]): void {
+    const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+    if (unique.length === 0) return;
+
+    const findEntity = this.db.prepare(
+      "SELECT entityId FROM entities WHERE normalizedName = ?",
+    );
+    const insertEntity = this.db.prepare(
+      "INSERT INTO entities (name, normalizedName) VALUES (?, ?)",
+    );
+    const unlink = this.db.prepare("DELETE FROM memory_entities WHERE memoryId = ?");
+    const link = this.db.prepare(
+      "INSERT OR IGNORE INTO memory_entities (memoryId, entityId) VALUES (?, ?)",
+    );
+
+    const tx = this.db.transaction(() => {
+      unlink.run(memoryId);
+      for (const name of unique.slice(0, 8)) {
+        const normalized = name.toLowerCase();
+        let row = findEntity.get(normalized) as { entityId: number } | undefined;
+        if (!row) {
+          insertEntity.run(name, normalized);
+          row = findEntity.get(normalized) as { entityId: number } | undefined;
+        }
+        if (row) link.run(memoryId, row.entityId);
+      }
+    });
+    tx();
+  }
+
+  /** 某记忆的实体名列表（派生信息，供调试与展示） */
+  getMemoryEntities(memoryId: string): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT e.name FROM entities e
+         JOIN memory_entities me ON me.entityId = e.entityId
+         WHERE me.memoryId = ?`,
+      )
+      .all(memoryId) as { name: string }[];
+    return rows.map((r) => r.name);
+  }
+
+  /**
+   * 实体共现扩展：与任一种子共享实体最多的记忆，按共享实体数降序。
+   * 排除种子自身与已取代（superseded）卡片。
+   */
+  getEntityNeighbors(
+    seedIds: string[],
+    limit: number = 40,
+  ): { memoryId: string; sharedEntities: number }[] {
+    if (seedIds.length === 0) return [];
+    const seedPlaceholders = seedIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT me2.memoryId AS memoryId, COUNT(DISTINCT me1.entityId) AS sharedEntities
+         FROM memory_entities me1
+         JOIN memory_entities me2 ON me1.entityId = me2.entityId
+         JOIN memories m ON m.id = me2.memoryId
+         WHERE me1.memoryId IN (${seedPlaceholders})
+           AND me2.memoryId NOT IN (${seedPlaceholders})
+           AND (m.status IS NULL OR m.status != 'superseded')
+         GROUP BY me2.memoryId
+         ORDER BY sharedEntities DESC
+         LIMIT ?`,
+      )
+      .all(...seedIds, ...seedIds, limit) as {
+      memoryId: string;
+      sharedEntities: number;
+    }[];
+    return rows;
+  }
+
+  /**
+   * 写入因果边：caused_by 语义为 "effectId 的成立以每个 causeId 为前提"。
+   * 先删该 effect 的既有入边再全量重建（幂等，配合卡片重建）。
+   */
+  setMemoryCauses(effectId: string, causeIds: string[]): void {
+    const causes = [...new Set(causeIds.filter((c) => c && c !== effectId))];
+    if (causes.length === 0) return;
+
+    const unlink = this.db.prepare(
+      "DELETE FROM memory_relations WHERE toId = ? AND relation = 'caused_by'",
+    );
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO memory_relations (fromId, toId, relation, createdAt)
+       VALUES (?, ?, 'caused_by', ?)`,
+    );
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      unlink.run(effectId);
+      for (const causeId of causes) insert.run(causeId, effectId, now);
+    });
+    tx();
+  }
+
+  /** 因果边双向扩展：种子导致的后继 + 种子依赖的前因（排除种子与已取代卡片） */
+  getRelationNeighbors(seedIds: string[]): string[] {
+    if (seedIds.length === 0) return [];
+    const seedPlaceholders = seedIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT r.toId AS neighborId
+         FROM memory_relations r
+         JOIN memories m ON m.id = r.toId
+         WHERE r.relation = 'caused_by'
+           AND r.fromId IN (${seedPlaceholders})
+           AND r.toId NOT IN (${seedPlaceholders})
+           AND (m.status IS NULL OR m.status != 'superseded')
+         UNION
+         SELECT DISTINCT r.fromId AS neighborId
+         FROM memory_relations r
+         JOIN memories m ON m.id = r.fromId
+         WHERE r.relation = 'caused_by'
+           AND r.toId IN (${seedPlaceholders})
+           AND r.fromId NOT IN (${seedPlaceholders})
+           AND (m.status IS NULL OR m.status != 'superseded')`,
+      )
+      .all(...seedIds, ...seedIds, ...seedIds, ...seedIds) as { neighborId: string }[];
+    return rows.map((r) => r.neighborId);
   }
 
   /**
