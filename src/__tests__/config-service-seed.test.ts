@@ -40,8 +40,10 @@ function listSources(): Array<{
   topic: string | null;
   description: string | null;
 }> {
-  return dbRef.current!
-    .prepare("SELECT id, enabled, path, filePattern, topic, description FROM tool_watch_sources")
+  return dbRef
+    .current!.prepare(
+      "SELECT id, enabled, path, filePattern, topic, description FROM tool_watch_sources",
+    )
     .all() as Array<{
     id: string;
     enabled: number;
@@ -53,7 +55,9 @@ function listSources(): Array<{
 }
 
 function flagExists(): boolean {
-  return !!dbRef.current!.prepare("SELECT 1 FROM config WHERE key = ?").get("tool_sources_seeded_v3");
+  return !!dbRef
+    .current!.prepare("SELECT 1 FROM config WHERE key = ?")
+    .get("tool_sources_seeded_v3");
 }
 
 beforeEach(() => {
@@ -99,17 +103,26 @@ describe("ConfigService.seedDefaultToolSources（监听源零配置）", () => {
     new ConfigService();
 
     // 把 flag 降级为 v2，模拟 v2 时代装机的存量库（否则第二次初始化会被 v3 flag 短路）
-    dbRef.current!
-      .prepare("UPDATE config SET key = 'tool_sources_seeded_v2' WHERE key = 'tool_sources_seeded_v3'")
+    dbRef
+      .current!.prepare(
+        "UPDATE config SET key = 'tool_sources_seeded_v2' WHERE key = 'tool_sources_seeded_v3'",
+      )
       .run();
 
     // 模拟 v2 时代的 preset-codex：%APPDATA% 误记路径 + 因目录不存在被自动禁用（带标记）
-    dbRef.current!
-      .prepare("UPDATE tool_watch_sources SET path = ?, filePattern = ?, enabled = 0, description = ? WHERE id = ?")
-      .run("%APPDATA%/codex/sessions", "*.jsonl", "首次启动自动添加（本机未检测到该工具目录，装好后启用即可），可删除", "preset-codex");
+    dbRef
+      .current!.prepare(
+        "UPDATE tool_watch_sources SET path = ?, filePattern = ?, enabled = 0, description = ? WHERE id = ?",
+      )
+      .run(
+        "%APPDATA%/codex/sessions",
+        "*.jsonl",
+        "首次启动自动添加（本机未检测到该工具目录，装好后启用即可），可删除",
+        "preset-codex",
+      );
     // 用户手动禁用了 claude-code（描述为"已检测到"文案，无自动禁用标记）
-    dbRef.current!
-      .prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
+    dbRef
+      .current!.prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
       .run("preset-claude-code");
     dbRef
       .current!.prepare(
@@ -149,8 +162,8 @@ describe("ConfigService.seedDefaultToolSources（监听源零配置）", () => {
     existsSyncMock.mockReturnValue(true);
     new ConfigService();
     // 模拟历史版本/拷贝库遗留的错误路径（如 %APPDATA% 误记）
-    dbRef.current!
-      .prepare("UPDATE tool_watch_sources SET path = ? WHERE id = ?")
+    dbRef
+      .current!.prepare("UPDATE tool_watch_sources SET path = ? WHERE id = ?")
       .run("%APPDATA%/codex/sessions", "preset-codex");
 
     new ConfigService();
@@ -161,8 +174,8 @@ describe("ConfigService.seedDefaultToolSources（监听源零配置）", () => {
   it("自愈不越权：用户手动禁用的预设（无标记）不被自动启用", () => {
     existsSyncMock.mockReturnValue(true);
     new ConfigService();
-    dbRef.current!
-      .prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
+    dbRef
+      .current!.prepare("UPDATE tool_watch_sources SET enabled = 0 WHERE id = ?")
       .run("preset-trae");
 
     new ConfigService();

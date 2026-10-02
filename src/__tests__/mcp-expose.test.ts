@@ -131,9 +131,7 @@ describe("MCP 暴露端（expose-server）", () => {
       route: "single-hop",
     });
     const longContent = "长".repeat(500);
-    memoryService.getMemoriesByIds.mockReturnValue([
-      makeCard({ content: longContent }),
-    ]);
+    memoryService.getMemoriesByIds.mockReturnValue([makeCard({ content: longContent })]);
 
     const client = await connect(server);
     const payload = parseResult(
@@ -155,7 +153,9 @@ describe("MCP 暴露端（expose-server）", () => {
     );
 
     const client = await connect(server);
-    const full = parseResult(await client.callTool({ name: "get_memory", arguments: { id: "mem-1" } }));
+    const full = parseResult(
+      await client.callTool({ name: "get_memory", arguments: { id: "mem-1" } }),
+    );
     expect(full.content).toBe("MiniHttp 采用 keep-alive 连接复用，减少握手开销。");
     expect(full.graphLinks).toEqual([]);
     expect(full.status).toBe("active");

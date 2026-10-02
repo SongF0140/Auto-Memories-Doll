@@ -83,7 +83,11 @@ export class MemoryExtractionService {
    * 解析 LLM 输出：{"memories": [{"title","summary","content","tags"}]}
    * 逐卡校验（空标题/空正文丢弃），返回空数组或结构异常时返回 null（由调用方转人工）。
    */
-  private parseCards(text: string, sourceContent: string, similarCount = 0): ExtractedCard[] | null {
+  private parseCards(
+    text: string,
+    sourceContent: string,
+    similarCount = 0,
+  ): ExtractedCard[] | null {
     const json = this.extractJsonObject(text);
     if (!json) return null;
 

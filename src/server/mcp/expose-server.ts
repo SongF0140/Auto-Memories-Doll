@@ -104,9 +104,7 @@ function knownTopics(memoryService: Pick<MemoryService, "listMemories">): string
 }
 
 export function createMemoryServer(deps: MemoryServerDeps = {}): McpServer {
-  const memoryService =
-    deps.memoryService ??
-    new MemoryService();
+  const memoryService = deps.memoryService ?? new MemoryService();
 
   const retriever =
     deps.retriever ??
@@ -178,7 +176,10 @@ export function createMemoryServer(deps: MemoryServerDeps = {}): McpServer {
       description:
         "按 id 读取一条记忆卡片的完整内容（含正文、标签、图谱链接、取代链状态）。只读操作。",
       inputSchema: {
-        id: z.string().min(1).describe("记忆卡片 id（来自 search_memory / list_recent_memories 的结果）"),
+        id: z
+          .string()
+          .min(1)
+          .describe("记忆卡片 id（来自 search_memory / list_recent_memories 的结果）"),
       },
     },
     async ({ id }) => {
@@ -247,7 +248,13 @@ export function createMemoryServer(deps: MemoryServerDeps = {}): McpServer {
           .describe(
             "推理视角：balanced 平衡（默认）/ skeptical 怀疑（审视可信度）/ literal 字面（不引申）/ empathetic 共情（关注意图与偏好）",
           ),
-        limit: z.number().int().min(1).max(12).optional().describe("参与推理的记忆条数上限，默认 6"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(12)
+          .optional()
+          .describe("参与推理的记忆条数上限，默认 6"),
       },
     },
     async ({ query, disposition, limit }) => {

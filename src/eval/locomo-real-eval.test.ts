@@ -78,11 +78,7 @@ vi.mock("../lib/vector/generator", () => ({
 import { MemoryService } from "../server/services/memory-service";
 import { VectorIndex } from "../lib/vector/index";
 import { VectorRetriever } from "../lib/vector/retriever";
-import {
-  computeMetricsMulti,
-  groupMetricsMulti,
-  MultiRankedHit,
-} from "./metrics";
+import { computeMetricsMulti, groupMetricsMulti, MultiRankedHit } from "./metrics";
 
 type RealMemory = {
   id: string;
@@ -292,11 +288,7 @@ describe.skipIf(!fixtureExists)("真实 LoComo 检索评测（Recall@k / MRR，�
       JSON.stringify(report, null, 2),
       "utf-8",
     );
-    writeFileSync(
-      join(reportDir, "locomo-real-eval-report.md"),
-      renderMarkdown(report),
-      "utf-8",
-    );
+    writeFileSync(join(reportDir, "locomo-real-eval-report.md"), renderMarkdown(report), "utf-8");
 
     const saved = JSON.parse(
       readFileSync(join(reportDir, "locomo-real-eval-report.json"), "utf-8"),

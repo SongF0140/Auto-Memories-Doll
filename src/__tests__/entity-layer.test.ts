@@ -184,7 +184,9 @@ describe("MemoryExtractionService 实体/因果字段解析", () => {
 
   it("causedByExisting 上限随 hints 数量收缩：无 hints 时恒为空", async () => {
     adapterMock.response = JSON.stringify({
-      memories: [{ title: "标题", summary: "摘要", content: "正文", tags: [], causedByExisting: [1] }],
+      memories: [
+        { title: "标题", summary: "摘要", content: "正文", tags: [], causedByExisting: [1] },
+      ],
     });
     const cards = await svc.extract(makeCandidate(), []);
     expect(cards![0].causedByExisting).toEqual([]);
@@ -210,9 +212,9 @@ describe("MemoryService 实体与因果边", () => {
     svc.setMemoryEntities(m1, ["Claude Code", "better-sqlite3"]);
     svc.setMemoryEntities(m2, ["claude code"]);
 
-    const count = dbRef.current!
-      .prepare("SELECT COUNT(*) AS n FROM entities")
-      .get() as { n: number };
+    const count = dbRef.current!.prepare("SELECT COUNT(*) AS n FROM entities").get() as {
+      n: number;
+    };
     expect(count.n).toBe(2);
 
     expect(svc.getMemoryEntities(m1)).toEqual(["Claude Code", "better-sqlite3"]);
@@ -224,8 +226,8 @@ describe("MemoryService 实体与因果边", () => {
     svc.setMemoryEntities(m1, ["新实体"]);
     expect(svc.getMemoryEntities(m1)).toEqual(["新实体"]);
     // 旧实体成为孤儿（仅 deleteMemory 时回收），但 m1 不再引用它
-    const linked = dbRef.current!
-      .prepare("SELECT COUNT(*) AS n FROM memory_entities WHERE memoryId = ?")
+    const linked = dbRef
+      .current!.prepare("SELECT COUNT(*) AS n FROM memory_entities WHERE memoryId = ?")
       .get(m1) as { n: number };
     expect(linked.n).toBe(1);
   });
@@ -256,8 +258,8 @@ describe("MemoryService 实体与因果边", () => {
     expect(svc.getRelationNeighbors([m3])).toEqual([m2]);
     expect(svc.getRelationNeighbors([m2]).sort()).toEqual([m1, m3].sort());
 
-    const rows = dbRef.current!
-      .prepare("SELECT fromId FROM memory_relations WHERE toId = ? ORDER BY fromId")
+    const rows = dbRef
+      .current!.prepare("SELECT fromId FROM memory_relations WHERE toId = ? ORDER BY fromId")
       .all(m2) as { fromId: string }[];
     expect(rows.map((r) => r.fromId)).toEqual([m1, m3].sort());
   });
@@ -273,9 +275,7 @@ describe("MemoryService 实体与因果边", () => {
     expect(svc.getMemoryEntities(m2)).toEqual(["共享实体"]);
     expect(svc.getRelationNeighbors([m2])).toEqual([]);
     // 独占实体被回收，共享实体保留
-    const names = dbRef.current!
-      .prepare("SELECT name FROM entities")
-      .all() as { name: string }[];
+    const names = dbRef.current!.prepare("SELECT name FROM entities").all() as { name: string }[];
     expect(names.map((n) => n.name)).toEqual(["共享实体"]);
   });
 });

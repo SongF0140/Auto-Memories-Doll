@@ -407,8 +407,26 @@ describe("ChatHandler", () => {
     });
 
     it("rerank 分数与原相似度混合后喂给 rankWithMMR", async () => {
-      const memoryA = { id: "m1", title: "A", summary: "摘要A", content: "", tags: [], titleZh: "", summaryZh: "", tagsZh: [] };
-      const memoryB = { id: "m2", title: "B", summary: "摘要B", content: "", tags: [], titleZh: "", summaryZh: "", tagsZh: [] };
+      const memoryA = {
+        id: "m1",
+        title: "A",
+        summary: "摘要A",
+        content: "",
+        tags: [],
+        titleZh: "",
+        summaryZh: "",
+        tagsZh: [],
+      };
+      const memoryB = {
+        id: "m2",
+        title: "B",
+        summary: "摘要B",
+        content: "",
+        tags: [],
+        titleZh: "",
+        summaryZh: "",
+        tagsZh: [],
+      };
       mocks.searchWithExpansion.mockResolvedValue([
         { memoryId: "m1", similarity: 0.8 },
         { memoryId: "m2", similarity: 0.6 },

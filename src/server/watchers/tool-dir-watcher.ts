@@ -183,9 +183,12 @@ async function startSingleSource(source: ToolWatchSource): Promise<void> {
 /** 目录未就绪：挂起周期重试（同一源只挂一个定时器，重复启动调用幂等） */
 function scheduleSourceRetry(source: ToolWatchSource): void {
   if (pendingStarts.has(source.id)) return;
-  logger.ingest.info(`[ToolDirWatcher] 监听源 "${source.name}" 目录尚未创建，${DIR_RETRY_MS / 1000}s 后重试`, {
-    path: source.path,
-  });
+  logger.ingest.info(
+    `[ToolDirWatcher] 监听源 "${source.name}" 目录尚未创建，${DIR_RETRY_MS / 1000}s 后重试`,
+    {
+      path: source.path,
+    },
+  );
   const timer = setTimeout(() => {
     pendingStarts.delete(source.id);
     void tryStartSource(source);

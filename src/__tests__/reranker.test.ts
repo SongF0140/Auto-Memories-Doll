@@ -66,13 +66,11 @@ describe("CrossEncoderReranker", () => {
     hf.tokenizer.mockReset().mockImplementation((pairs: [string, string][]) => ({
       input_ids: pairs.map(() => [1, 2, 3]),
     }));
-    hf.model
-      .mockReset()
-      .mockImplementation(async () => {
-        hf.modelCalls += 1;
-        if (hf.inferError) throw hf.inferError;
-        return { logits: { data: [2.0, -2.0], dims: [2, 1] } };
-      });
+    hf.model.mockReset().mockImplementation(async () => {
+      hf.modelCalls += 1;
+      if (hf.inferError) throw hf.inferError;
+      return { logits: { data: [2.0, -2.0], dims: [2, 1] } };
+    });
 
     reranker = new CrossEncoderReranker();
   });

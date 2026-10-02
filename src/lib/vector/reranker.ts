@@ -1,10 +1,7 @@
 import { join, resolve, isAbsolute } from "path";
 import { mkdirSync } from "fs";
 import { env } from "../../config/env";
-import {
-  RERANK_TEXT_MAX_CHARS,
-  RERANK_WAIT_MODEL_MS,
-} from "../../config/constants";
+import { RERANK_TEXT_MAX_CHARS, RERANK_WAIT_MODEL_MS } from "../../config/constants";
 import { logger } from "../logger";
 
 /**
@@ -62,7 +59,11 @@ export class CrossEncoderReranker {
    * @returns memoryId → 相关性分数（0..1）；不可用或超时返回 null，调用方保持原排序
    */
   async rerank(query: string, candidates: RerankCandidate[]): Promise<Map<string, number> | null> {
-    if (candidates.length === 0 || env.RERANK_DISABLED || this.strikes >= RERANK_BREAK_AFTER_STRIKES) {
+    if (
+      candidates.length === 0 ||
+      env.RERANK_DISABLED ||
+      this.strikes >= RERANK_BREAK_AFTER_STRIKES
+    ) {
       return null;
     }
 
@@ -101,8 +102,11 @@ export class CrossEncoderReranker {
    */
   private async load(): Promise<void> {
     try {
-      const { AutoTokenizer, AutoModelForSequenceClassification, env: hfEnv } =
-        (await import("@huggingface/transformers")) as unknown as TransformersLike;
+      const {
+        AutoTokenizer,
+        AutoModelForSequenceClassification,
+        env: hfEnv,
+      } = (await import("@huggingface/transformers")) as unknown as TransformersLike;
 
       hfEnv.cacheDir = this.modelsDir();
       hfEnv.remoteHost = env.RERANK_HF_ENDPOINT;
@@ -121,7 +125,9 @@ export class CrossEncoderReranker {
   }
 
   private modelsDir(): string {
-    const root = isAbsolute(env.MEMORY_ROOT) ? env.MEMORY_ROOT : resolve(process.cwd(), env.MEMORY_ROOT);
+    const root = isAbsolute(env.MEMORY_ROOT)
+      ? env.MEMORY_ROOT
+      : resolve(process.cwd(), env.MEMORY_ROOT);
     const dir = join(root, "models");
     try {
       mkdirSync(dir, { recursive: true });

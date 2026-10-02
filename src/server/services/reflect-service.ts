@@ -62,7 +62,10 @@ export class ReflectService {
     disposition: ReflectDisposition = "balanced",
     limit = 6,
   ): Promise<ReflectResult> {
-    const search = await this.retriever.searchDetailed(query, Math.min(limit, REFLECT_CONTEXT_LIMIT));
+    const search = await this.retriever.searchDetailed(
+      query,
+      Math.min(limit, REFLECT_CONTEXT_LIMIT),
+    );
     const cards = this.memoryService.getMemoriesByIds(search.results.map((r) => r.memoryId));
     const byId = new Map(cards.map((c) => [c.id, c]));
     // 检索命中但已不在库中的 id（竞态删除）静默丢弃

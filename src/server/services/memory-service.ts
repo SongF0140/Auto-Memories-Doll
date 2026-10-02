@@ -672,9 +672,7 @@ export class MemoryService {
     const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
     if (unique.length === 0) return;
 
-    const findEntity = this.db.prepare(
-      "SELECT entityId FROM entities WHERE normalizedName = ?",
-    );
+    const findEntity = this.db.prepare("SELECT entityId FROM entities WHERE normalizedName = ?");
     const insertEntity = this.db.prepare(
       "INSERT INTO entities (name, normalizedName) VALUES (?, ?)",
     );

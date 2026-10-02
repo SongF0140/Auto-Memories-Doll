@@ -34,9 +34,7 @@ export function getToolPresets(): Record<string, ToolPreset> {
     codex: {
       name: "Codex CLI",
       toolType: "codex",
-      path: process.env.CODEX_HOME
-        ? join(process.env.CODEX_HOME, "sessions")
-        : "~/.codex/sessions",
+      path: process.env.CODEX_HOME ? join(process.env.CODEX_HOME, "sessions") : "~/.codex/sessions",
       filePattern: "**/*.jsonl",
       topic: "codex-sessions",
     },

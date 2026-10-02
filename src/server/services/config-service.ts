@@ -211,7 +211,14 @@ export class ConfigService {
           .prepare(
             "UPDATE tool_watch_sources SET name = ?, path = ?, filePattern = ?, topic = ?, updatedAt = ? WHERE id = ?",
           )
-          .run(preset.name, preset.path, preset.filePattern, preset.topic, new Date().toISOString(), row.id);
+          .run(
+            preset.name,
+            preset.path,
+            preset.filePattern,
+            preset.topic,
+            new Date().toISOString(),
+            row.id,
+          );
       }
 
       // 2. 目录就绪自愈（带自动禁用标记才恢复）
