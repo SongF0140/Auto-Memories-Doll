@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Governance gate tests
+        run: npm run test:governance
+
       - name: Format check
         if: matrix.os == 'ubuntu-latest'
         run: npm run format:check

@@ -15,6 +15,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\" \"playwright.config.ts\" \"e2e/**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:governance": "node --test scripts/verify-block.test.mjs",
+    "verify:block": "node scripts/verify-block.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
