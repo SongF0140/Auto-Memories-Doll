@@ -36,12 +36,15 @@ memory-root/
 !/docs/审查记录/01-工程治理/
 !/docs/审查记录/02-验证门禁/
 !/docs/审查记录/03-规则沉淀/
+!/docs/审查记录/04-证据补强/
 /docs/审查记录/01-工程治理/*
 /docs/审查记录/02-验证门禁/*
 /docs/审查记录/03-规则沉淀/*
+/docs/审查记录/04-证据补强/*
 !/docs/审查记录/01-工程治理/设计与审查.md
 !/docs/审查记录/02-验证门禁/设计与审查.md
 !/docs/审查记录/03-规则沉淀/设计与审查.md
+!/docs/审查记录/04-证据补强/设计与审查.md
 notes/
 docs-zh/.obsidian/workspace.json
 *.private.md
