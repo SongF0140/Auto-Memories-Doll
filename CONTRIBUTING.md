@@ -19,29 +19,33 @@
 
 ## 小块开发与人工审查
 
-本轮依据 [工程治理规格](docs/superpowers/specs/2026-10-02-engineering-governance-design.md)，第一块过程见 [设计与审查](docs/审查记录/01-工程治理/设计与审查.md)。这些流程仍待本块人工审查，不代表全部治理门禁已经实施。
+本轮依据 [工程治理规格](docs/superpowers/specs/2026-10-02-engineering-governance-design.md)。[01 工程治理](docs/审查记录/01-工程治理/设计与审查.md)与 [02 验证门禁](docs/审查记录/02-验证门禁/设计与审查.md)均已人工通过并本地提交；[03 规则沉淀](docs/审查记录/03-规则沉淀/设计与审查.md)亦经用户明确“好的，提交吧”人工通过并授权提交。
 
 1. 修改前披露并实际加载最少必要 skills，阅读规范、相关文件、编号需求及验收。
-2. 仅实现当前批准的小块；新功能或修复先写能复现需求的测试，不修改验收来获取绿灯。
-3. 代码修改后运行类型检查、针对性测试与生产构建；提交前运行全量测试、严格 lint、格式检查。失败记录原因并停止，不降低门槛。
+2. 仅实现当前批准的小块；新功能或修复先写能复现需求的测试，不修改验收来获取绿灯。纯文档改动不伪造业务红绿测试。
+3. 代码修改后运行类型检查、针对性测试与生产构建；提交前另跑治理测试，再运行固定五项串行门禁。首个失败立即停止，不降低门槛，不并行运行 build/typecheck；格式失败不得擅自扩大格式修复范围，须另获授权。
 4. 在 `docs/审查记录/<板块>/` 的聚合 Markdown 中记录方案取舍、AI coding 操作、验证环境/退出码/数量、风险与人工意见。不复制私人数据正文。
 5. 状态仅为“待审查 / 需修改 / 通过”。只有用户意见能认定通过；自动检查、AI 自检、计划批准或沉默均不能替代人工审查。
-6. 完成后暂停，人工通过且明确授权提交后才按文件名暂存并小步提交；不自动推送，不暂存无关文件。通过后再进入下一块。
+6. 完成后暂停，人工通过且明确授权提交后才按文件名暂存并小步提交；不自动推送，不暂存无关文件。下一块须另获实施授权，不因上一块通过或提交自动启动。
 
-`docs/` 默认保持私有，只有 `.gitignore` 明确列出的本轮治理 Markdown 可正常跟踪。不要使用强制添加绕过隐私保护。跨平台验证入口和可选 Git hook 将在第二块实现，当前不能声称已启用 Trae 自动 hooks。
+`docs/` 默认保持私有，只有 `.gitignore` 明确列出的本轮治理 Markdown 可正常跟踪。不要使用强制添加绕过隐私保护。第二块已实现 Node 验证入口及可选 Git hook 模板；hook 未安装、未启用，未改 Git 配置，不代表已启用 Trae 自动 hooks。Windows / Node 24 本机实测不证明 Linux、Node 22 或远端 CI 已通过。
 
 ## 检查命令
 
-使用 TypeScript strict mode，新功能附带测试。需要格式化时运行 `npm run format`，审查前使用只读的 `format:check`，不要以全仓自动格式化扩大变更范围。
+使用 TypeScript strict mode，新功能附带测试。需要格式化时仅处理批准范围内的文件，不推荐全仓 `npm run format`；审查前使用只读的 `format:check`。纯文档改动以差异、链接和现有检查证据核对，不制造业务红绿证据。
 
 ```bash
-npm run dev           # 本地开发
-npm run typecheck     # 类型检查
-npm test              # 全量单元/集成测试
-npm run lint          # 严格 lint
-npm run format:check  # 只读格式检查
-npm run build         # 生产构建
+npm run dev              # 本地开发
+npm run typecheck        # 类型检查
+npm test                 # 全量单元/集成测试
+npm run lint             # 严格 lint
+npm run format:check     # 只读格式检查
+npm run build            # 生产构建
+npm run test:governance   # 治理测试，另行运行，不包含在五项门禁中
+npm run verify:block      # 固定串行 typecheck → test → lint → format:check → build
 ```
+
+`verify:block` 首个失败即非零退出并停止后续项；不要与另一个 build/typecheck 并行运行。任何失败均记录并停止，既有格式问题也不能默认豁免或扩大修复范围。
 
 ## 提交 PR
 
