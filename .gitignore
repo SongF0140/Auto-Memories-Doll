@@ -23,8 +23,25 @@ memory-root/
 *.db-wal
 *.db-shm
 
-# 个人文档和笔记
-docs/
+# 个人文档和笔记：默认忽略，只放行本轮明确批准的治理文件
+/docs/*
+!/docs/.gitkeep
+!/docs/superpowers/
+/docs/superpowers/*
+!/docs/superpowers/specs/
+/docs/superpowers/specs/*
+!/docs/superpowers/specs/2026-10-02-engineering-governance-design.md
+!/docs/审查记录/
+/docs/审查记录/*
+!/docs/审查记录/01-工程治理/
+!/docs/审查记录/02-验证门禁/
+!/docs/审查记录/03-规则沉淀/
+/docs/审查记录/01-工程治理/*
+/docs/审查记录/02-验证门禁/*
+/docs/审查记录/03-规则沉淀/*
+!/docs/审查记录/01-工程治理/设计与审查.md
+!/docs/审查记录/02-验证门禁/设计与审查.md
+!/docs/审查记录/03-规则沉淀/设计与审查.md
 notes/
 docs-zh/.obsidian/workspace.json
 *.private.md
