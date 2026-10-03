@@ -1,10 +1,72 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { asSchema, type FlexibleSchema } from "ai";
 import { ToolCaller } from "../lib/ai/tool-caller";
 import { registerDefaultTools } from "../lib/ai/tool-registry";
+import { toolSchemas } from "../lib/ai/tool-schemas";
+
+const schemaCases = [
+  {
+    name: "search_memory",
+    required: ["query"],
+    input: { query: "测试" },
+    output: { query: "测试", limit: 10 },
+  },
+  {
+    name: "create_memory",
+    required: ["title", "content"],
+    input: { title: "标题", content: "正文" },
+    output: { title: "标题", content: "正文", tags: [] },
+  },
+  {
+    name: "update_memory",
+    required: ["id", "updates"],
+    input: { id: "m1", updates: { title: "新标题" } },
+    output: { id: "m1", updates: { title: "新标题" } },
+  },
+  {
+    name: "correct_memory",
+    required: ["instruction"],
+    input: { memoryId: "m1", instruction: "纠错" },
+    output: { memoryId: "m1", instruction: "纠错" },
+  },
+  { name: "delete_memory", required: ["id"], input: { id: "m1" }, output: { id: "m1" } },
+  {
+    name: "query_graph",
+    required: ["memoryId"],
+    input: { memoryId: "m1" },
+    output: { memoryId: "m1", maxDepth: 1 },
+  },
+] as const;
 
 describe("ToolCaller", () => {
   beforeAll(() => {
     registerDefaultTools();
+  });
+
+  it.each(schemaCases)(
+    "$name 描述可由真实 SDK 转换并保留参数校验与默认值",
+    async ({ name, required, input, output }) => {
+      const description = ToolCaller.getToolDescriptions().find((entry) => entry.name === name)!;
+      const sdkSchema = asSchema(description.schema as FlexibleSchema);
+      const jsonSchema = await sdkSchema.jsonSchema;
+      expect(jsonSchema.type).toBe("object");
+      expect(Object.keys(jsonSchema.properties!)).toEqual(
+        Object.keys(toolSchemas[name].shape ?? {}),
+      );
+      expect([...(jsonSchema.required ?? [])].sort()).toEqual([...required].sort());
+      expect(description.schema).toBe(toolSchemas[name]);
+      expect(await sdkSchema.validate!(input)).toEqual({ success: true, value: output });
+    },
+  );
+
+  it.each([
+    { name: "search_memory", input: { query: "" } },
+    { name: "search_memory", input: { query: "测试", limit: 21 } },
+    { name: "correct_memory", input: { instruction: "纠错" } },
+  ])("SDK 校验拒绝 $name 的无效参数 $input", async ({ name, input }) => {
+    const description = ToolCaller.getToolDescriptions().find((entry) => entry.name === name)!;
+    const sdkSchema = asSchema(description.schema as FlexibleSchema);
+    expect((await sdkSchema.validate!(input)).success).toBe(false);
   });
 
   it("validates search_memory params", async () => {

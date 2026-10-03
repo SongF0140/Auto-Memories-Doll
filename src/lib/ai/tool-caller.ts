@@ -38,12 +38,12 @@ export class ToolCaller {
     });
   }
 
-  /** 获取所有已注册工具的描述（用于系统提示） */
-  static getToolDescriptions(): Array<{ name: string; description: string; schema: object }> {
+  /** 获取所有已注册工具的描述与 SDK 可消费的参数 schema */
+  static getToolDescriptions(): Array<{ name: string; description: string; schema: ZodTypeAny }> {
     return Array.from(this.tools.entries()).map(([name, tool]) => ({
       name,
       description: tool.description,
-      schema: (tool.schema._def ?? {}) as unknown as Record<string, unknown>,
+      schema: tool.schema,
     }));
   }
 
