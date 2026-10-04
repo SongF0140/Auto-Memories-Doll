@@ -287,9 +287,10 @@ describe("Orchestrator", () => {
         source: "model",
       }),
     );
-    extractionExtractMock.mockResolvedValue([
-      { title: "抽取卡片", summary: "中文摘要", content: "中文正文", tags: ["中文"] },
-    ]);
+    extractionExtractMock.mockResolvedValue({
+      status: "ok",
+      cards: [{ title: "抽取卡片", summary: "中文摘要", content: "中文正文", tags: ["中文"] }],
+    });
     vectorIndexSearch.mockReturnValue([]);
     auditorProcessMock.mockResolvedValue(null);
     memoryServiceStub.listMemoryContents.mockReturnValue([]);
@@ -696,26 +697,29 @@ describe("Orchestrator", () => {
       memoryServiceStub.listMemories.mockReturnValue([]);
       // 0.6 恰达 SIMILAR_HINT_MIN_SIMILARITY，低于向量去重阈值 0.95
       vectorIndexSearch.mockReturnValue([{ memoryId: "old-1", similarity: 0.6 }]);
-      extractionExtractMock.mockResolvedValue([
-        {
-          title: "卡一",
-          summary: "s",
-          content: "c",
-          tags: [],
-          entities: [],
-          causedBy: [2],
-          causedByExisting: [1],
-        },
-        {
-          title: "卡二",
-          summary: "s",
-          content: "c",
-          tags: [],
-          entities: [],
-          causedBy: [],
-          causedByExisting: [1, 5], // 5 越界（只有 1 条 hint）→ 丢弃
-        },
-      ]);
+      extractionExtractMock.mockResolvedValue({
+        status: "ok",
+        cards: [
+          {
+            title: "卡一",
+            summary: "s",
+            content: "c",
+            tags: [],
+            entities: [],
+            causedBy: [2],
+            causedByExisting: [1],
+          },
+          {
+            title: "卡二",
+            summary: "s",
+            content: "c",
+            tags: [],
+            entities: [],
+            causedBy: [],
+            causedByExisting: [1, 5], // 5 越界（只有 1 条 hint）→ 丢弃
+          },
+        ],
+      });
 
       await orchestrator.processQueue();
 
@@ -835,7 +839,7 @@ describe("Orchestrator", () => {
       expect(memoryServiceStub.createMemoryRecord).not.toHaveBeenCalled();
     });
 
-    it("向量去重：召回相似度 ≥ 0.95 → status=rejected → 不调用质量闸门", async () => {
+    it("第十一块：高相似命中不再直接拒绝 → 作为提示进闸门，由 LLM 判重复", async () => {
       const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockImplementation((id: string) =>
@@ -844,11 +848,14 @@ describe("Orchestrator", () => {
           : null,
       );
       vectorIndexSearch.mockReturnValue([{ memoryId: "existing-mem", similarity: 0.97 }]);
+      qualityFilterMock.mockResolvedValueOnce({ verdict: "reject", reason: "与既有记忆重复" });
+      extractionExtractMock.mockResolvedValue({ status: "ok", cards: [] });
 
       await orchestrator.processQueue();
 
+      // 捷径已移除：相似度只召回，闸门收到高相似提示并判定
+      expect(qualityFilterMock).toHaveBeenCalled();
       expect(event.status).toBe("rejected");
-      expect(qualityFilterMock).not.toHaveBeenCalled();
     });
 
     it("闸门收到相似记忆提示（新颖性上下文注入）", async () => {
@@ -878,11 +885,14 @@ describe("Orchestrator", () => {
       memoryServiceStub.getMemory.mockReturnValue(null);
       memoryServiceStub.createMemoryRecord.mockResolvedValue("test-id");
       memoryServiceStub.listMemories.mockReturnValue([]);
-      extractionExtractMock.mockResolvedValue([
-        { title: "卡一", summary: "摘要一", content: "正文一", tags: ["t1"] },
-        { title: "卡二", summary: "摘要二", content: "正文二", tags: ["t2"] },
-        { title: "卡三", summary: "摘要三", content: "正文三", tags: [] },
-      ]);
+      extractionExtractMock.mockResolvedValue({
+        status: "ok",
+        cards: [
+          { title: "卡一", summary: "摘要一", content: "正文一", tags: ["t1"] },
+          { title: "卡二", summary: "摘要二", content: "正文二", tags: ["t2"] },
+          { title: "卡三", summary: "摘要三", content: "正文三", tags: [] },
+        ],
+      });
 
       await orchestrator.processQueue();
 
@@ -899,7 +909,10 @@ describe("Orchestrator", () => {
       const event = { ...builderMock.pendingEvent, eventType: "ingest", retryCount: 0 };
       memoryServiceStub.getPendingEvents.mockReturnValue([event]);
       memoryServiceStub.getMemory.mockReturnValue(null);
-      extractionExtractMock.mockResolvedValue(null);
+      extractionExtractMock.mockResolvedValue({
+        status: "unavailable",
+        reason: "抽取输出 2 次均无法解析",
+      });
 
       await orchestrator.processQueue();
 

@@ -42,12 +42,10 @@ const QUEUE_BATCH_SIZE = 100;
  * 避免一次性把整库正文塞进内存。
  */
 const DEDUP_SCAN_BATCH_SIZE = 500;
-/** 向量语义去重阈值：cosine 相似度 ≥ 此值视为与现有记忆重复 */
-const VECTOR_DEDUP_SIMILARITY = 0.95;
 /** 相似记忆提示的最低相似度：太远的条目不给闸门看，节省 token */
 const SIMILAR_HINT_MIN_SIMILARITY = 0.6;
-/** 向量召回的 top-K 条数 */
-const RECALL_TOP_K = 3;
+/** 向量召回的 top-K 条数（第十一块：3→5，相似度只召回候选，判定交给 LLM） */
+const RECALL_TOP_K = 5;
 export const FULL_REBUILD_TAG = "全量重建";
 
 /** 来源原文的 sha256：抽取型记忆用它做变更检测与重复入库跳过 */
@@ -306,35 +304,42 @@ export class Orchestrator {
         return;
       }
 
+      // 第十二块·版本保护：update 事件的 candidate 是事件创建时的卡快照。
+      // 若库中卡版本已前移（并发写已完成），机械合并会覆盖他人更新 → 保守转人工裁决，
+      // 不静默覆盖；人工在 review 队列可见双方内容做合并决策。
+      if (
+        typeof candidate.version === "number" &&
+        typeof existing.version === "number" &&
+        candidate.version !== existing.version
+      ) {
+        event.status = "review";
+        this.memoryService.updateEvent(event);
+        await this.recordQualityFailure(
+          event,
+          "version-conflict",
+          new Error(
+            `处理期间记忆已被并发更新（事件快照 v${candidate.version}，库中 v${existing.version}），转人工裁决`,
+          ),
+        );
+        return;
+      }
+
       // 更新路径：content 有实质变更时同样过质量闸门（防止借更新洗入低质内容）。
       // reject 终拒；review 时质量存疑——置标志禁用 auto_merge，审计结果改走逐字段人工冲突裁决。
+      // 第十一块：cosine 直接拒绝捷径已移除——相似度只用于召回提示，重复/冲突由闸门/审计判定。
       let updateQualityReview = false;
       if (event.changedFields.includes("content") && candidate.content) {
         const similarHits = await this.recallSimilarMemories(candidate.content, event.memoryId);
-        let duplicate: SimilarHit | undefined;
         let hints: SimilarMemoryHint[] = [];
         if (similarHits === null) {
-          // embedding 失败：语义去重与相似提示跳过；更新本身有 Auditor diff/冲突审计兜底，继续走审计
-          logger.audit.warn("向量召回不可用，更新跳过语义去重与相似提示", {
+          // embedding 失败：相似提示跳过；更新本身有 Auditor diff/冲突审计兜底，继续走审计
+          logger.audit.warn("向量召回不可用，更新跳过相似提示", {
             memoryId: event.memoryId,
           });
         } else {
-          duplicate = similarHits.find((h) => h.similarity >= VECTOR_DEDUP_SIMILARITY);
           hints = similarHits
             .filter((h) => h.similarity >= SIMILAR_HINT_MIN_SIMILARITY)
             .map((h) => ({ title: h.title, summary: h.summary, similarity: h.similarity }));
-        }
-        if (duplicate) {
-          event.status = "rejected";
-          this.memoryService.updateEvent(event);
-          await this.recordQualityFailure(
-            event,
-            "vector-dedup",
-            new Error(
-              `与现有记忆《${duplicate.title}》高度相似（${(duplicate.similarity * 100).toFixed(1)}%），拒绝入库`,
-            ),
-          );
-          return;
         }
         const filterResult = await this.qualityFilter.filter(candidate, hints);
         if (filterResult.verdict === "reject") {
@@ -570,11 +575,15 @@ export class Orchestrator {
     allowFallback: boolean,
   ): Promise<MemoryRecord[] | null> {
     try {
-      const cards = await this.extraction.extract(existing, []);
-      if (cards?.length)
-        return cards.map((card, index) =>
+      const extractionResult = await this.extraction.extract(existing, []);
+      if (extractionResult.status === "ok" && extractionResult.cards.length)
+        return extractionResult.cards.map((card, index) =>
           this.buildOptimizationCandidate(existing, card, issues, index),
         );
+      logger.audit.warn("旧记忆卡片模型优化未产出（抽取为空或不可用），改用保守清理候选", {
+        memoryId: existing.id,
+        extractionStatus: extractionResult.status,
+      });
     } catch (error) {
       logger.audit.warn("旧记忆卡片模型优化失败，改用保守清理候选", {
         memoryId: existing.id,
@@ -623,10 +632,9 @@ export class Orchestrator {
 
   /**
    * 向量召回 top-K 相似记忆（含标题/摘要），一次调用同时服务：
-   * 1. 向量语义去重（相似度 ≥ VECTOR_DEDUP_SIMILARITY 判重）
-   * 2. 质量闸门的新颖性参考上下文
+   * 1. 质量闸门的新颖性参考上下文（相似度只召回候选，重复/新颖性由 LLM 判定）
    * 返回 null 表示召回不可用（模型降级 / 空内容 / embedding 失败）：
-   * - 新建路径 fail-closed 转人工（防止重复内容绕过语义去重静默入库）
+   * - 新建路径 fail-closed 转人工（防止重复内容绕过语义召回静默入库）
    * - 更新路径记日志后继续走审计（Auditor diff/冲突兜底）
    */
   private async recallSimilarMemories(
@@ -712,37 +720,26 @@ export class Orchestrator {
   }
 
   /**
-   * 采集内容的统一消费链：向量语义去重 → 质量闸门 → 中文抽取拆卡 → 多卡片提交。
+   * 采集内容的统一消费链：向量召回 → 质量闸门 → 中文抽取拆卡 → 多卡片提交。
    * 新建路径与抽取型记忆的更新路径共用。
    * 事件终态（done/rejected/review）与失败归档在本方法内落库；done 时返回首卡 ID。
+   * 第十一块：cosine≥0.95 直接拒绝捷径已移除——相似度只用于召回提示，
+   * 重复/新颖性由质量闸门 LLM 判定（相似但有新信息不得整段拒绝）。
    */
   private async ingestByExtraction(
     event: PendingEvent,
     candidate: MemoryRecord,
   ): Promise<string | undefined> {
-    // 全入口统一的向量语义去重（processIngest 的 Jaccard 是写前快筛，此处兜底改写型重复）
+    // 相似召回：为闸门提供新颖性判定上下文
     const similarHits = await this.recallSimilarMemories(candidate.content, event.memoryId);
     if (similarHits === null) {
-      // fail-closed：embedding 失败时无法做语义去重，重复内容可能绕过保护静默入库 → 转人工
+      // fail-closed：embedding 失败时闸门失去新颖性上下文，重复内容可能绕过保护 → 转人工
       event.status = "review";
       this.memoryService.updateEvent(event);
       await this.recordQualityFailure(
         event,
         "vector-recall",
-        new Error("向量召回不可用，无法进行语义去重，转人工裁决"),
-      );
-      return;
-    }
-    const duplicate = similarHits.find((h) => h.similarity >= VECTOR_DEDUP_SIMILARITY);
-    if (duplicate) {
-      event.status = "rejected";
-      this.memoryService.updateEvent(event);
-      await this.recordQualityFailure(
-        event,
-        "vector-dedup",
-        new Error(
-          `与现有记忆《${duplicate.title}》高度相似（${(duplicate.similarity * 100).toFixed(1)}%），拒绝入库`,
-        ),
+        new Error("向量召回不可用，无法提供新颖性上下文，转人工裁决"),
       );
       return;
     }
@@ -774,20 +771,29 @@ export class Orchestrator {
     this.applyQualityResult(candidate, filterResult);
 
     // 中文抽取拆卡：原文直存会是英文/raw markdown 大杂烩，这里按话题拆分并全文重写为中文。
-    // 抽取失败 fail-closed 转人工，绝不把原文大杂烩静默落盘。
-    const cards = await this.extraction.extract(candidate, hints);
-    if (!cards || cards.length === 0) {
+    // 抽取不可用或为空都 fail-closed 转人工（失败归因可区分），绝不把原文大杂烩静默落盘。
+    const extractionResult = await this.extraction.extract(candidate, hints);
+    if (extractionResult.status !== "ok") {
       event.status = "review";
       this.memoryService.updateEvent(event);
       await this.recordQualityFailure(
         event,
         "memory-extraction",
-        new Error("记忆抽取失败（模型输出异常或降级），转人工裁决"),
+        new Error(
+          extractionResult.status === "empty"
+            ? "模型判定内容中没有可拆的知识卡片，转人工裁决"
+            : `记忆抽取不可用（${extractionResult.reason}），转人工裁决`,
+        ),
       );
       return;
     }
 
-    const anchorId = await this.commitExtractedCards(event, candidate, cards, hints);
+    const anchorId = await this.commitExtractedCards(
+      event,
+      candidate,
+      extractionResult.cards,
+      hints,
+    );
 
     event.status = "done";
     this.memoryService.updateEvent(event);
@@ -992,11 +998,15 @@ export class Orchestrator {
     event.status = "processing";
     this.memoryService.updateEvent(event);
     try {
-      // 人工已放行：仍做中文抽取（保证库内卡片风格一致），抽取不可用时兜底原样落盘
-      const cards = await this.extraction.extract(candidate, []);
-      if (cards && cards.length > 0) {
-        await this.commitExtractedCards(event, candidate, cards);
+      // 人工已放行：仍做中文抽取（保证库内卡片风格一致），抽取不可用/为空时兜底原样落盘
+      const extractionResult = await this.extraction.extract(candidate, []);
+      if (extractionResult.status === "ok") {
+        await this.commitExtractedCards(event, candidate, extractionResult.cards);
       } else {
+        logger.audit.warn("人工放行后抽取不可用，按原样落盘", {
+          eventId: event.eventId,
+          extractionStatus: extractionResult.status,
+        });
         await this.commitNewMemory(event, candidate);
       }
       event.status = "done";

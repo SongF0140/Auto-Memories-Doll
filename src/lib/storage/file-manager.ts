@@ -39,9 +39,25 @@ export const readFile = async (path: string): Promise<string> => {
   }
 };
 
+/**
+ * 原子写：先写同目录临时文件，成功后 rename 替换目标。
+ * 写入中途崩溃/并发失败时旧文件完整保留，不会留下半个派生文件（第 12 块）。
+ */
 export const writeFile = async (path: string, content: string): Promise<void> => {
   await ensureDirectory(dirname(path));
-  await fs.writeFile(path, content, "utf-8");
+  const tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(tmpPath, content, "utf-8");
+    await fs.rename(tmpPath, path);
+  } catch (error) {
+    // 清理临时文件；目标文件保持原样（失败不破坏旧派生文件）
+    try {
+      await fs.unlink(tmpPath);
+    } catch {
+      /* 临时文件不存在时忽略 */
+    }
+    throw error;
+  }
   recordWrite(path);
 };
 
