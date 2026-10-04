@@ -25,7 +25,6 @@ import { registerDefaultTools } from "../../lib/ai/tool-registry";
 import { ProfileUpdater } from "../../server/services/profile-updater";
 import { ControlPlaneService } from "../../server/services/control-plane-service";
 import { WikiGraph } from "../../lib/graph/wiki-graph";
-import { ChatClassifier, IntentResult, ExtractedMemoryEntity } from "./classifier";
 import { logger } from "../../lib/logger";
 import { assembleSystemMessage, SystemBlocks } from "./system-prompt";
 import { compressConversation } from "../../lib/chat/conversation-compressor";
@@ -60,7 +59,6 @@ export class ChatHandler {
   private skillManager: SkillManager;
   private mcpManager: McpManager;
   private wikiGraph: WikiGraph;
-  private classifier: ChatClassifier;
 
   constructor() {
     this.templateManager = new TemplateManager();
@@ -83,7 +81,6 @@ export class ChatHandler {
     this.skillManager = new SkillManager();
     this.mcpManager = new McpManager();
     this.wikiGraph = new WikiGraph();
-    this.classifier = new ChatClassifier();
     registerDefaultTools();
   }
 
@@ -167,29 +164,13 @@ export class ChatHandler {
   ): Promise<ReadableStream<AiEvent>> {
     const processedMessages = compressConversation(await this.applySkills(messages));
 
-    // 意图分类：Layer 1 关键词（<1ms）→ Layer 2 embedding 语义回退（~100ms）
-    // 结果注入 system prompt 引导模型选择工具与回复风格
-    const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
-    const intent = lastUserMsg ? await this.classifier.classifyAsync(lastUserMsg.content) : null;
-
-    // Layer 3: 若意图为记忆创建/更新，用 budget LLM 提取结构化实体
-    let extractedEntity: ExtractedMemoryEntity | null = null;
-    if (
-      intent &&
-      (intent.type === "memory_create" || intent.type === "memory_update") &&
-      lastUserMsg
-    ) {
-      try {
-        extractedEntity = await this.classifier.extractMemoryEntity(lastUserMsg.content);
-      } catch {
-        // 实体提取失败不影响主流程
-      }
-    }
+    // 第九块契约：自然语言不再做意图截获；明确记忆操作只走斜杠命令/UI 结构化
+    // action（由 dispatcher 处理）。到达 handler 的都是对话轮次。
 
     const memoryContent =
       mode === "memory" ? await this.retrieveRelevantMemories(processedMessages, memoryIds) : "";
 
-    const blocks = this.buildSystemBlocks(memoryContent, intent, extractedEntity);
+    const blocks = this.buildSystemBlocks(memoryContent);
     const systemMessage = assembleSystemMessage(blocks);
 
     // 系统消息 + 原始对话角色，保留多轮上下文的 role 结构
@@ -206,6 +187,7 @@ export class ChatHandler {
 
     let completed = false;
     let hasToolErrors = false;
+    const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
     return wrapAiStream(
       () =>
         ModelAdapter.generateStream({
@@ -314,44 +296,16 @@ export class ChatHandler {
   }
 
   /**
-   * 构建系统消息的各个区块：缓存前缀 + 意图 + 动态记忆。
+   * 构建系统消息的各个区块：缓存前缀 + 动态记忆。
    * 返回分块数据，由调用方决定如何组装到 system 消息中。
    *
-   * 意图块仅在分类结果非 chat 时注入，让 LLM 知道用户意图并据此选择工具调用策略与回复风格。
+   * 第九块起不再注入意图块：自然语言不猜测操作意图。
    */
-  private buildSystemBlocks(
-    memoryContent: string,
-    intent?: IntentResult | null,
-    extractedEntity?: ExtractedMemoryEntity | null,
-  ): SystemBlocks {
+  private buildSystemBlocks(memoryContent: string): SystemBlocks {
     const promptCache = PromptCache.getInstance();
     const systemPrefix = promptCache.getSystemPrefix(TEMPLATE_HASH);
     const memoryBlock = promptCache.getMemoryCache(memoryContent);
-
-    let intentBlock = "";
-    if (intent && intent.type !== "chat") {
-      const parts: string[] = [];
-      parts.push(`## 用户意图\n${intent.type} (置信度 ${(intent.confidence * 100).toFixed(0)}%)`);
-      if (intent.matchedKeywords.length > 0) {
-        parts.push(`命中关键词: ${intent.matchedKeywords.join(", ")}`);
-      }
-      if (intent.alternatives && intent.alternatives.length > 0) {
-        const altStr = intent.alternatives
-          .map((a) => `${a.type} (${(a.confidence * 100).toFixed(0)}%)`)
-          .join(", ");
-        parts.push(`备选意图: ${altStr}`);
-      }
-      if (extractedEntity) {
-        parts.push(`\n已提取实体:`);
-        if (extractedEntity.title) parts.push(`- 标题: ${extractedEntity.title}`);
-        if (extractedEntity.tags.length > 0)
-          parts.push(`- 标签: ${extractedEntity.tags.join(", ")}`);
-        if (extractedEntity.topic) parts.push(`- 主题: ${extractedEntity.topic}`);
-        if (extractedEntity.content)
-          parts.push(`- 内容摘要: ${extractedEntity.content.substring(0, 200)}`);
-      }
-      intentBlock = parts.join("\n");
-    }
+    const intentBlock = "";
 
     // I-5：控制面放在记忆块之前，作为模型的第一个导航点（token 预算内截断）
     let controlPlaneBlock = "";

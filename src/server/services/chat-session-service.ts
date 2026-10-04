@@ -143,7 +143,12 @@ export class ChatSessionService {
     sessionId: string;
     mode: ChatMode;
     messages: ChatMessage[];
-    onComplete?: () => void;
+    /** 流终态回调：status 已按 terminal 归一（degraded 映射 failed），assistantContent 为累计文本 */
+    onComplete?: (outcome: {
+      status: AiStreamStatus;
+      hasToolErrors: boolean;
+      assistantContent: string;
+    }) => void;
   }): ReadableStream<AiEvent> {
     let status: AiStreamStatus = "failed";
     let hasToolErrors = false;
@@ -169,7 +174,7 @@ export class ChatSessionService {
           sessionId: input.sessionId,
         });
       } finally {
-        input.onComplete?.();
+        input.onComplete?.({ status, hasToolErrors, assistantContent });
       }
     };
 

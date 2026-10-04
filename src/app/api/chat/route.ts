@@ -5,6 +5,7 @@ import { aiEventStreamToResponse } from "../../../lib/ai";
 import { apiError } from "../../../lib/api-response";
 import { ErrorCode } from "../../../lib/api-errors";
 import { ChatSessionService } from "../../../server/services/chat-session-service";
+import { createTurnLearningHook } from "../../../server/services/conversation-learning-hook";
 import { logger } from "../../../lib/logger";
 
 /**
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, mode, sessionId, memoryIds } = parsed.data;
+    const { messages, mode, sessionId, memoryIds, action } = parsed.data;
 
     try {
       sessionService.appendSnapshot({ sessionId, mode, messages });
@@ -42,7 +43,15 @@ export async function POST(request: NextRequest) {
       logger.chat.warn("会话 JSONL 持久化失败", { error: (error as Error).message });
     }
 
-    const result = await dispatcher.dispatch(messages, mode, sessionId, memoryIds, request.signal);
+    const learningHook = createTurnLearningHook({ sessionId, mode, messages });
+    const result = await dispatcher.dispatch(
+      messages,
+      mode,
+      sessionId,
+      memoryIds,
+      request.signal,
+      action,
+    );
 
     if (result.type === "stream") {
       const persistedStream = sessionService.captureAssistantStream({
@@ -50,7 +59,13 @@ export async function POST(request: NextRequest) {
         sessionId,
         mode,
         messages,
-        onComplete: () => dispatcher.close(),
+        onComplete: (outcome) => {
+          try {
+            learningHook.onComplete(outcome);
+          } finally {
+            dispatcher.close();
+          }
+        },
       });
       closeDispatcherInFinally = false;
       return aiEventStreamToResponse(persistedStream);

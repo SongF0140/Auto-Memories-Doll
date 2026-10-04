@@ -10,10 +10,6 @@ const mocks = vi.hoisted(() => ({
   modelAdapter: {
     generateStream: vi.fn(),
   },
-  classifier: {
-    classifyAsync: vi.fn(),
-    extractMemoryEntity: vi.fn(),
-  },
   skillManager: {
     matchSkill: vi.fn(),
     applySkill: vi.fn(),
@@ -62,7 +58,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/ai/model-adapter", () => ({ ModelAdapter: mocks.modelAdapter }));
-vi.mock("../features/chat/classifier", () => ({ ChatClassifier: vi.fn(() => mocks.classifier) }));
 vi.mock("../lib/prompt/template-manager", () => ({
   TemplateManager: vi.fn(() => ({})),
   initializeTemplates: vi.fn(),
@@ -132,13 +127,6 @@ describe("ChatHandler", () => {
     vi.clearAllMocks();
     // 默认桩值
     mocks.modelAdapter.generateStream.mockReturnValue(makeFakeStream(NORMAL_EVENTS));
-    mocks.classifier.classifyAsync.mockResolvedValue({
-      type: "chat",
-      confidence: 0.4,
-      entities: {},
-      matchedKeywords: [],
-    });
-    mocks.classifier.extractMemoryEntity.mockResolvedValue(null);
     mocks.skillManager.matchSkill.mockReturnValue(null);
     mocks.memoryService.listMemories.mockReturnValue([]);
     mocks.memoryService.getMemoriesByIds.mockReturnValue([]);
@@ -252,53 +240,6 @@ describe("ChatHandler", () => {
       expect(callArgs.readonly).toBe(true);
       // chat 模式不注入内置记忆工具
       expect(callArgs.tools.map((t: any) => t.name)).toEqual(["mcp_read"]);
-    });
-
-    it("memory_create 意图：触发 extractMemoryEntity", async () => {
-      mocks.classifier.classifyAsync.mockResolvedValue({
-        type: "memory_create",
-        confidence: 0.9,
-        entities: {},
-        matchedKeywords: ["记住"],
-      });
-      mocks.classifier.extractMemoryEntity.mockResolvedValue({
-        title: "标题",
-        content: "内容",
-        tags: ["t1"],
-        topic: "ai",
-      });
-
-      await handler.streamResponse(
-        [{ role: "user", content: "记住这个知识点" }],
-        "memory",
-        "sess-1",
-      );
-
-      expect(mocks.classifier.extractMemoryEntity).toHaveBeenCalledWith("记住这个知识点");
-      const callArgs = mocks.modelAdapter.generateStream.mock.calls[0][0];
-      // 实体信息注入 system prompt
-      expect(callArgs.messages[0].content).toContain("标题");
-      expect(callArgs.messages[0].content).toContain("t1");
-      expect(callArgs.messages[0].content).toContain("已提取实体");
-    });
-
-    it("extractMemoryEntity 抛异常时不影响主流程", async () => {
-      mocks.classifier.classifyAsync.mockResolvedValue({
-        type: "memory_create",
-        confidence: 0.9,
-        entities: {},
-        matchedKeywords: ["记住"],
-      });
-      mocks.classifier.extractMemoryEntity.mockRejectedValue(new Error("LLM down"));
-
-      const stream = await handler.streamResponse(
-        [{ role: "user", content: "记住东西" }],
-        "memory",
-        "sess-1",
-      );
-
-      const events = await drainStream(stream);
-      expect(events[events.length - 1].type).toBe("done");
     });
 
     it("Skills 预处理：matchSkill 命中时改写最后一条消息", async () => {
@@ -485,11 +426,10 @@ describe("ChatHandler", () => {
       expect(mocks.profileUpdater.enqueueAnalysis).not.toHaveBeenCalled();
     });
 
-    it("无用户消息时不入队画像分析也不分类", async () => {
+    it("无用户消息时不入队画像分析", async () => {
       await handler.streamResponse([{ role: "assistant", content: "只有助手" }], "chat", "sess-1");
 
       expect(mocks.profileUpdater.enqueueAnalysis).not.toHaveBeenCalled();
-      expect(mocks.classifier.classifyAsync).not.toHaveBeenCalled();
     });
 
     it("会压缩过长对话后再发送给模型", async () => {

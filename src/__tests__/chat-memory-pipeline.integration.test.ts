@@ -50,14 +50,21 @@ vi.mock("../features/chat/handler", () => ({
   ChatHandler: vi.fn(() => ({ close: vi.fn() })),
 }));
 
+// 第九块契约：classifier 只判斜杠命令（与真实实现同构的桩）
 vi.mock("../features/chat/classifier", () => ({
   ChatClassifier: vi.fn(() => ({
-    classify: vi.fn(() => ({
-      type: "memory_create",
-      confidence: 0.95,
-      entities: {},
-      matchedKeywords: ["remember"],
-    })),
+    classify: vi.fn((text: string) => {
+      const trimmed = String(text).trim();
+      if (trimmed.startsWith("/")) {
+        return {
+          type: "system_command",
+          confidence: 0.95,
+          entities: { command: trimmed.substring(1) },
+          matchedKeywords: [],
+        };
+      }
+      return { type: "chat", confidence: 1, entities: {}, matchedKeywords: [] };
+    }),
   })),
 }));
 
@@ -188,8 +195,9 @@ describe("chat to memory writeback pipeline", () => {
   it("routes a memory-create chat message into audit queue and writes Markdown on processing", async () => {
     const dispatcher = new AgentDispatcher();
 
+    // 第九块契约：显式创建只走 /remember 全句命令（自然语言"记住…"不再截获）
     const dispatchResult = await dispatcher.dispatch(
-      [{ role: "user", content: "remember pipeline content" }],
+      [{ role: "user", content: "/remember pipeline content" }],
       "memory",
       "sess-1",
     );

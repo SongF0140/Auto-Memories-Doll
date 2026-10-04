@@ -60,11 +60,29 @@ export const aiConfigSchema = z.object({
   embeddingApiKeyIntent: apiKeyIntentSchema,
 });
 
+/** UI 结构化记忆操作：明确操作只允许来自显式命令或此处结构化 action，不做自然语言猜测 */
+export const chatActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("create"), text: z.string().min(1, "创建内容不能为空") }),
+  z.object({ type: z.literal("query"), text: z.string().min(1, "查询内容不能为空") }),
+  z.object({
+    type: z.literal("update"),
+    memoryId: z.string().min(1, "更新必须提供记忆 ID"),
+    text: z.string().min(1, "更新指令不能为空"),
+  }),
+  z.object({
+    type: z.literal("delete"),
+    memoryId: z.string().min(1, "删除必须提供记忆 ID"),
+  }),
+]);
+
+export type ChatAction = z.infer<typeof chatActionSchema>;
+
 export const chatRequestSchema = z.object({
   messages: z.array(chatMessageSchema).min(1, "messages 至少需要一条消息"),
   mode: z.enum(["chat", "memory", "prompt"]).default("chat"),
   sessionId: chatSessionIdSchema.default("default"),
   memoryIds: z.array(z.string()).optional(),
+  action: chatActionSchema.optional(),
 });
 
 export const memoryCreateSchema = z.object({
