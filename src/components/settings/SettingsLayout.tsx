@@ -143,21 +143,25 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
 
   return (
-    <div className="flex min-h-[calc(100vh-56px)]">
-      {/* 左侧导航 */}
+    <div className="flex min-h-[calc(100vh-56px)] flex-col lg:flex-row">
+      {/* 窄屏：顶部横向可滚动导航；宽屏：左侧固定侧栏（路由不变，仅布局切换） */}
       <aside
-        className="w-64 shrink-0 border-r overflow-y-auto"
+        className="shrink-0 border-b lg:border-b-0 lg:border-r lg:w-64 overflow-y-auto"
         style={{
           background: "var(--color-bg-secondary)",
           borderColor: "var(--color-border-default)",
         }}
       >
-        <div className="p-6">
+        <div className="px-4 pt-4 lg:px-6 lg:pt-6 lg:pb-0 pb-3">
           <h2 className="text-lg font-bold text-[#3E3224] mb-1 font-mono">系统设置</h2>
-          <p className="text-xs text-[#B8AE9A]">配置 AI 模型、技能和个性化选项</p>
+          <p className="text-xs text-[#B8AE9A] hidden lg:block">配置 AI 模型、技能和个性化选项</p>
         </div>
 
-        <nav className="px-3 pb-6 space-y-1">
+        {/* 窄屏横向滚动（隐藏滚动条但保留键盘/触摸滚动），宽屏纵向列表 */}
+        <nav
+          className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible px-3 pb-3 lg:pb-6 pt-1 lg:pt-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="设置导航"
+        >
           {settingsTabs.map((tab) => {
             const isActive =
               pathname === tab.href ||
@@ -167,7 +171,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               <Link
                 key={tab.id}
                 href={tab.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                aria-current={isActive ? "page" : undefined}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-150 ${
                   isActive
                     ? "bg-[#A67C00] text-white shadow-md"
                     : "text-[#5D4E37] hover:bg-[#F0EBE1]"
@@ -182,7 +187,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       </aside>
 
       {/* 右侧内容区 */}
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{children}</main>
     </div>
   );
 }

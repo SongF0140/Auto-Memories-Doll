@@ -13,7 +13,12 @@ interface DragState {
   pointerId: number;
   clientX: number;
   clientY: number;
+  /** 是否已越过 6px 拖动阈值（未越过前不平移，避免手抖误拖） */
+  moved: boolean;
 }
+
+/** 拖动阈值：指针位移超过该值才视为拖动（验收点：6px） */
+const DRAG_THRESHOLD_PX = 6;
 
 const clientToViewPoint = (svg: SVGSVGElement, clientX: number, clientY: number) => {
   const rect = svg.getBoundingClientRect();
@@ -53,6 +58,7 @@ export const useKnowledgeMapViewport = (setView: Dispatch<SetStateAction<ViewSta
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
+      moved: false,
     };
   }, []);
 
@@ -63,7 +69,9 @@ export const useKnowledgeMapViewport = (setView: Dispatch<SetStateAction<ViewSta
       if (!drag || !svg || drag.pointerId !== event.pointerId) return;
       const dx = event.clientX - drag.clientX;
       const dy = event.clientY - drag.clientY;
-      if (Math.abs(dx) + Math.abs(dy) < 1) return;
+      // 6px 阈值：未越过前不更新基准点也不平移，越过后再开始拖动
+      if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
       drag.clientX = event.clientX;
       drag.clientY = event.clientY;
       setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));

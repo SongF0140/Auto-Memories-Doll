@@ -49,12 +49,21 @@ export default function MemoryCard({ memory, compact = false, className = "" }: 
       <div className="mb-3 flex items-start justify-between gap-4">
         <h3 className="text-lg font-semibold leading-tight text-text-primary">{displayTitle}</h3>
         <div className="flex items-center gap-2">
+          {/* kind 语义：推断/假设类对读者明示，防止误当事实（第 15 块验收点） */}
+          {(memory.kind === "inference" || memory.kind === "hypothesis") && (
+            <Badge className="bg-warning-bg text-text-secondary">
+              {memory.kind === "inference" ? "推断" : "假设"}
+            </Badge>
+          )}
           <Badge className="bg-muted text-text-secondary">{displayTopic}</Badge>
           <Badge>{memory.sourceType === "listen" ? "监听导入" : memory.sourceType}</Badge>
         </div>
       </div>
 
-      <p className="mb-4 text-base leading-relaxed text-text-secondary">{displaySummary}</p>
+      {/* 阅读宽度约束：长正文行长控制在 ~65ch，避免满宽扫读困难 */}
+      <p className="mb-4 max-w-prose text-base leading-relaxed text-text-secondary">
+        {displaySummary}
+      </p>
 
       {displayTags.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">

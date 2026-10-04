@@ -25,6 +25,10 @@ export const apiRouteContracts: Record<string, ApiRouteContract> = {
     responseSchema: "chatResponseSchema",
     errorCodes: ["VALIDATION_FAILED", "AI_UNAVAILABLE", "INTERNAL_ERROR"],
   },
+  "src/app/api/chat/learning-tasks/route.ts": {
+    responseSchema: "learningTasksResponseSchema",
+    errorCodes: ["VALIDATION_FAILED", "INTERNAL_ERROR"],
+  },
   "src/app/api/chat/sessions/route.ts": {
     responseSchema: "chatSessionSummaryResponseSchema",
     errorCodes: ["INTERNAL_ERROR"],

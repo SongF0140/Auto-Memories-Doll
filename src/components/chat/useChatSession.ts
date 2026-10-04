@@ -33,6 +33,20 @@ function generateSessionId(): string {
   return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** 会话列表 → 元信息表（标题为空时回退 sessionId，由 UI 决定展示形态） */
+function toSessionMeta(
+  sessions: SessionSummary[],
+): Record<string, { title: string; updatedAt: string }> {
+  const meta: Record<string, { title: string; updatedAt: string }> = {};
+  for (const session of sessions) {
+    meta[session.sessionId] = {
+      title: session.title?.trim() || session.sessionId,
+      updatedAt: session.updatedAt,
+    };
+  }
+  return meta;
+}
+
 async function requestApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const payload = (await response.json()) as ApiEnvelope<T>;
@@ -116,6 +130,8 @@ export interface ChatSessionState {
   hydrating: boolean;
   sessionError: string;
   sessionIds: string[];
+  /** 会话元信息（标题/更新时间）：UI 显示标题与时间，替代纯 ID（第 16 块） */
+  sessionMeta: Record<string, { title: string; updatedAt: string }>;
 }
 
 export function useChatSession() {
@@ -127,6 +143,7 @@ export function useChatSession() {
     hydrating: true,
     sessionError: "",
     sessionIds: [],
+    sessionMeta: {},
   }));
   const sessionRequestRef = useRef(0);
 
@@ -162,6 +179,7 @@ export function useChatSession() {
           hydrating: false,
           sessionError: "",
           sessionIds: sessions.map((item) => item.sessionId),
+          sessionMeta: toSessionMeta(sessions),
         }));
       } catch (error) {
         if (cancelled) return;
@@ -186,6 +204,7 @@ export function useChatSession() {
       setState((previous) => ({
         ...previous,
         sessionIds: sessions.map((item) => item.sessionId),
+        sessionMeta: toSessionMeta(sessions),
         sessionError: "",
       }));
       return sessions;

@@ -16,6 +16,8 @@ import { requestApi } from "../../lib/api-client";
 import { AiEvent } from "../../lib/ai/ai-events";
 import { getMemoryClient } from "../../lib/memory-api-client";
 import { useChatSession } from "./useChatSession";
+import { useLearningTasks } from "./useLearningTasks";
+import LearningStatusBar from "./LearningStatusBar";
 
 type ChatJsonResult = {
   content?: unknown;
@@ -49,6 +51,7 @@ export default function ChatInterface() {
     hydrating,
     sessionError,
     sessionIds,
+    sessionMeta,
     setMessages,
     setMode,
     setLoading,
@@ -57,6 +60,7 @@ export default function ChatInterface() {
     switchSession,
     removeSession,
   } = useChatSession();
+  const learningTasks = useLearningTasks(sessionId || null);
 
   const [relatedMemories, setRelatedMemories] = useState<MemoryRecord[]>([]);
   const [availableMemories, setAvailableMemories] = useState<MemoryRecord[]>([]);
@@ -322,6 +326,9 @@ export default function ChatInterface() {
             <div className="flex items-center gap-1.5 overflow-x-auto border-b border-border/60 px-4 py-2.5 sm:px-6">
               {sessionIds.slice(0, 8).map((id) => {
                 const isActive = id === sessionId;
+                const meta = sessionMeta[id];
+                const label = meta?.title && meta.title !== id ? meta.title : id.slice(5, 13);
+                const updatedAt = meta?.updatedAt ? new Date(meta.updatedAt) : null;
                 return (
                   <div key={id} className="flex items-center gap-0 shrink-0">
                     <button
@@ -332,7 +339,7 @@ export default function ChatInterface() {
                           ? "bg-accent text-accent-text shadow-md shadow-accent/20"
                           : "bg-surface/60 text-text-tertiary hover:text-text-primary hover:bg-surface border border-transparent hover:border-border"
                       }`}
-                      title={id}
+                      title={updatedAt ? `${label} · ${updatedAt.toLocaleString("zh-CN")}` : id}
                     >
                       {isActive && (
                         <span className="relative flex h-1.5 w-1.5">
@@ -340,7 +347,16 @@ export default function ChatInterface() {
                           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent-text" />
                         </span>
                       )}
-                      <span className="truncate max-w-[120px]">{id.slice(5, 13)}</span>
+                      {/* 标题 + 相对时间替代纯 ID（第 16 块）；无标题回退 ID 片段 */}
+                      <span className="truncate max-w-[160px]">{label}</span>
+                      {updatedAt && (
+                        <span className="hidden sm:inline opacity-60">
+                          {updatedAt.toLocaleDateString("zh-CN", {
+                            month: "numeric",
+                            day: "numeric",
+                          })}
+                        </span>
+                      )}
                     </button>
                     <button
                       onClick={(e) => {
@@ -412,6 +428,9 @@ export default function ChatInterface() {
               )}
             </div>
           </div>
+
+          {/* 知识处理状态条：与聊天回复分区，如实反映后台学习任务（第 16 块） */}
+          <LearningStatusBar tasks={learningTasks} />
 
           <ChatInput
             onSend={handleSend}
