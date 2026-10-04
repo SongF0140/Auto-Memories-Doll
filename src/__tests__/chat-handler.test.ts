@@ -328,6 +328,122 @@ describe("ChatHandler", () => {
       expect(callArgs.tools).toBeUndefined();
     });
 
+    it("MCP 工具结果归一化：成功提取文本 content 并保留原始 data", async () => {
+      mocks.toolCaller.getToolDescriptions.mockReturnValue([]);
+      mocks.mcpManager.listAllTools.mockResolvedValue([
+        { serverId: "s1", tools: [{ name: "mcp_tool", description: "d", inputSchema: {} }] },
+      ]);
+      const raw = { content: [{ type: "text", text: "远端结果" }] };
+      mocks.mcpManager.callTool.mockResolvedValue(raw);
+
+      await handler.streamResponse([{ role: "user", content: "hi" }], "chat", "sess-mcp-ok");
+
+      const def = mocks.modelAdapter.generateStream.mock.calls[0][0].tools.find(
+        (t: { name: string }) => t.name === "mcp_tool",
+      );
+      await expect(def.execute({ q: "x" })).resolves.toEqual({
+        success: true,
+        content: "远端结果",
+        data: raw,
+      });
+    });
+
+    it("MCP isError 结果按失败归一化", async () => {
+      mocks.toolCaller.getToolDescriptions.mockReturnValue([]);
+      mocks.mcpManager.listAllTools.mockResolvedValue([
+        { serverId: "s1", tools: [{ name: "mcp_bad", description: "d", inputSchema: {} }] },
+      ]);
+      const raw = { isError: true, content: [{ type: "text", text: "远端失败" }] };
+      mocks.mcpManager.callTool.mockResolvedValue(raw);
+
+      await handler.streamResponse([{ role: "user", content: "hi" }], "chat", "sess-mcp-err");
+
+      const def = mocks.modelAdapter.generateStream.mock.calls[0][0].tools.find(
+        (t: { name: string }) => t.name === "mcp_bad",
+      );
+      await expect(def.execute({})).resolves.toMatchObject({
+        success: false,
+        content: "远端失败",
+        error: "远端失败",
+        data: raw,
+      });
+    });
+
+    it("MCP 抛错返回失败信封而非抛出", async () => {
+      mocks.toolCaller.getToolDescriptions.mockReturnValue([]);
+      mocks.mcpManager.listAllTools.mockResolvedValue([
+        { serverId: "s1", tools: [{ name: "mcp_throw", description: "d", inputSchema: {} }] },
+      ]);
+      mocks.mcpManager.callTool.mockRejectedValue(new Error("连接中断"));
+
+      await handler.streamResponse([{ role: "user", content: "hi" }], "chat", "sess-mcp-throw");
+
+      const def = mocks.modelAdapter.generateStream.mock.calls[0][0].tools.find(
+        (t: { name: string }) => t.name === "mcp_throw",
+      );
+      await expect(def.execute({})).resolves.toMatchObject({
+        success: false,
+        error: expect.stringContaining("连接中断"),
+      });
+    });
+
+    it("内置工具成功返回 content/data 信封而非裸 data", async () => {
+      mocks.toolCaller.getToolDescriptions.mockReturnValue([
+        { name: "create_memory", description: "create", schema: {} },
+      ]);
+      mocks.mcpManager.listAllTools.mockResolvedValue([]);
+      mocks.toolCaller.callTool.mockResolvedValue({
+        toolName: "create_memory",
+        success: true,
+        content: "已创建记忆",
+        data: { id: "m1" },
+      });
+
+      await handler.streamResponse(
+        [{ role: "user", content: "保存这个" }],
+        "memory",
+        "sess-builtin",
+      );
+
+      const def = mocks.modelAdapter.generateStream.mock.calls[0][0].tools.find(
+        (t: { name: string }) => t.name === "create_memory",
+      );
+      await expect(def.execute({ title: "t", content: "c" })).resolves.toEqual({
+        success: true,
+        content: "已创建记忆",
+        data: { id: "m1" },
+      });
+    });
+
+    it("内置工具业务失败保留失败信封", async () => {
+      mocks.toolCaller.getToolDescriptions.mockReturnValue([
+        { name: "delete_memory", description: "delete", schema: {} },
+      ]);
+      mocks.mcpManager.listAllTools.mockResolvedValue([]);
+      mocks.toolCaller.callTool.mockResolvedValue({
+        toolName: "delete_memory",
+        success: false,
+        content: "记忆不存在",
+        error: "not found",
+      });
+
+      await handler.streamResponse(
+        [{ role: "user", content: "删除这个" }],
+        "memory",
+        "sess-builtin-fail",
+      );
+
+      const def = mocks.modelAdapter.generateStream.mock.calls[0][0].tools.find(
+        (t: { name: string }) => t.name === "delete_memory",
+      );
+      await expect(def.execute({ id: "m9" })).resolves.toEqual({
+        success: false,
+        content: "记忆不存在",
+        error: "not found",
+        data: undefined,
+      });
+    });
+
     it("对话结束后入队 ProfileUpdater 画像分析", async () => {
       const stream = await handler.streamResponse(
         [

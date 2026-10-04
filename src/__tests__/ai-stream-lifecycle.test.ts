@@ -45,7 +45,11 @@ function chunks(values: unknown[]) {
   });
 }
 describe("AI stream lifecycle", () => {
-  beforeEach(() => sdk.streamText.mockReset());
+  // 注意：必须用块体避免隐式返回 mock 本身——vitest 会把 beforeEach 返回值
+  // 当 cleanup 函数在测试结束后无参调用，导致 mockImplementation 用例报错
+  beforeEach(() => {
+    sdk.streamText.mockReset();
+  });
   it("maps SDK error and suppresses later success", async () => {
     const source = chunks([
       { type: "error", error: new Error("sdk failed") },
@@ -190,6 +194,31 @@ describe("AI stream lifecycle", () => {
     expect(source.locked).toBe(false);
   });
 
+  it("tool result 事件保留结构化 data 通道并按信封判定成败", async () => {
+    sdk.streamText.mockReturnValue({
+      fullStream: chunks([
+        { type: "tool-call", toolName: "lookup", toolCallId: "c1", input: {} },
+        {
+          type: "tool-result",
+          toolName: "lookup",
+          toolCallId: "c1",
+          output: { success: true, content: "ok", data: { id: "m1" } },
+        },
+        { type: "finish", finishReason: "stop" },
+      ]),
+      finishReason: Promise.resolve("stop"),
+    });
+    const events = await drain(new OpenAIProvider(config).generateStream({ messages: [] }));
+    expect(events[1]).toMatchObject({
+      type: "tool_call_result",
+      callId: "c1",
+      success: true,
+      data: { id: "m1" },
+    });
+    expect(events.at(-1)).toMatchObject({ type: "done", status: "completed" });
+    expect(events.at(-1)).not.toHaveProperty("hasToolErrors");
+  });
+
   it("tool result 事件透传 MCP isError 原始对象为失败", async () => {
     sdk.streamText.mockReturnValue({
       fullStream: chunks([
@@ -211,5 +240,29 @@ describe("AI stream lifecycle", () => {
       success: false,
     });
     expect(events.at(-1)).toMatchObject({ type: "done", status: "completed", hasToolErrors: true });
+  });
+
+  it("MCP 普通 JSON Schema 由 provider 包装后可构建 SDK 工具", async () => {
+    let capturedTools: unknown;
+    sdk.streamText.mockImplementation((options: { tools?: unknown }) => {
+      capturedTools = options.tools;
+      return { fullStream: chunks([{ type: "finish", finishReason: "stop" }]) };
+    });
+    await drain(
+      new OpenAIProvider(config).generateStream({
+        messages: [],
+        tools: [
+          {
+            name: "mcp_tool",
+            description: "d",
+            parameters: { type: "object", properties: { q: { type: "string" } } },
+            execute: async () => ({ success: true, content: "ok" }),
+          },
+        ],
+      }),
+    );
+    expect(capturedTools).toMatchObject({
+      mcp_tool: { description: "d", inputSchema: { jsonSchema: { type: "object" } } },
+    });
   });
 });

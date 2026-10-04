@@ -33,6 +33,24 @@ import { buildBlogTemplateBlock, formatKnowledgeBrief } from "./blog-template";
 
 /** 模板内容哈希，模板变更时缓存自动失效 */
 const TEMPLATE_HASH = "chat-memory-v3";
+
+/** 从 MCP tool-result 的 content 数组提取 text 文本（供模型通道消费） */
+function extractMcpText(result: unknown): string {
+  if (
+    result &&
+    typeof result === "object" &&
+    Array.isArray((result as { content?: unknown }).content)
+  ) {
+    return ((result as { content: unknown[] }).content as Array<Record<string, unknown>>)
+      .map((item) =>
+        item && typeof item === "object" && item.type === "text" ? String(item.text ?? "") : "",
+      )
+      .filter(Boolean)
+      .join("\n");
+  }
+  return "";
+}
+
 export class ChatHandler {
   private templateManager: TemplateManager;
   private memoryService: MemoryService;
@@ -235,7 +253,16 @@ export class ChatHandler {
               toolName: desc.name,
               arguments: args,
             });
-            return result.success ? result.data : { success: false, error: result.error };
+            // 统一信封：content 给模型读，data 给 UI/日志；失败信封由
+            // provider toModelOutput 映射为 error-text 并置 hasToolErrors
+            return result.success
+              ? { success: true, content: result.content, data: result.data }
+              : {
+                  success: false,
+                  content: result.content,
+                  error: result.error,
+                  data: undefined,
+                };
           },
         });
       }
@@ -254,14 +281,26 @@ export class ChatHandler {
             description: t.description || `MCP tool: ${toolName}`,
             parameters: t.inputSchema || {},
             execute: async (args: Record<string, unknown>) => {
+              let raw: unknown;
               try {
-                return await this.mcpManager.callTool(serverId, toolName, args);
+                raw = await this.mcpManager.callTool(serverId, toolName, args);
               } catch (error) {
                 return {
                   success: false,
                   error: `MCP 工具 "${toolName}" 执行失败: ${(error as Error).message}`,
                 };
               }
+              // 统一信封归一化：MCP text content 提为 content（模型通道），
+              // 原始结果整体作为 data（UI/日志通道）；isError 按失败判定
+              const text = extractMcpText(raw);
+              if (
+                raw &&
+                typeof raw === "object" &&
+                (raw as { isError?: unknown }).isError === true
+              ) {
+                return { success: false, content: text, error: text, data: raw };
+              }
+              return { success: true, content: text, data: raw };
             },
           });
         }

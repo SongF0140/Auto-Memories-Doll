@@ -1,4 +1,4 @@
-import { streamText, smoothStream, tool, isStepCount } from "ai";
+import { streamText, smoothStream, tool, isStepCount, jsonSchema } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { AiEvent, AiProvider, AiToolDef } from "./ai-events";
@@ -8,6 +8,61 @@ import type { ModelType } from "./model-adapter";
 /** 指数退避等待 */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * MCP 等外部工具只有普通 JSON Schema 对象；AI SDK 只接受 Schema 实例，
+ * 未包装的普通对象会在 SDK prepare-tools 转换中崩溃。Zod/Schema 实例原样传递。
+ */
+export function toSdkInputSchema(parameters: unknown): unknown {
+  if (
+    parameters !== null &&
+    typeof parameters === "object" &&
+    !("~standard" in (parameters as Record<string, unknown>))
+  ) {
+    return jsonSchema(parameters as Parameters<typeof jsonSchema>[0]);
+  }
+  return parameters;
+}
+
+function isNormalizedEnvelope(
+  output: unknown,
+): output is { success?: unknown; content?: unknown; error?: unknown } {
+  return typeof output === "object" && output !== null && "success" in output;
+}
+
+/** toSdkTool 产出的 SDK 工具结构（收窄类型供测试与调用方直接断言 toModelOutput） */
+export interface SdkTool {
+  description?: string;
+  inputSchema: unknown;
+  execute?: (input: Record<string, unknown>) => Promise<unknown>;
+  toModelOutput: (options: { toolCallId: string; input: unknown; output: unknown }) => {
+    type: "text" | "error-text" | "json";
+    value: unknown;
+  };
+}
+
+/**
+ * 将 AiToolDef 转为 SDK tool：模型只消费文本 content（信封 success 映射
+ * text/error-text），UI/日志侧结构化 data 由 tool_call_result 事件承载。
+ */
+export function toSdkTool(def: AiToolDef): SdkTool {
+  return tool({
+    description: def.description,
+    inputSchema: toSdkInputSchema(def.parameters),
+    ...(def.execute ? { execute: def.execute } : {}),
+    toModelOutput: ({ output }: { output: unknown }) => {
+      if (typeof output === "string") return { type: "text" as const, value: output };
+      if (isNormalizedEnvelope(output)) {
+        const failure = output.success === false;
+        const value = failure
+          ? String(output.error || output.content || "工具执行失败")
+          : String(output.content ?? "");
+        return { type: failure ? ("error-text" as const) : ("text" as const), value };
+      }
+      return { type: "json" as const, value: output ?? null };
+    },
+  } as any) as SdkTool;
 }
 
 /**
@@ -61,14 +116,12 @@ export class OpenAIProvider implements AiProvider {
           const model = this.createModel(modelType);
 
           // 将 AiToolDef 转为 Vercel AI SDK 的 tool 对象
+          // 统一走 toSdkTool：MCP 等普通 JSON Schema 经 toSdkInputSchema 包装，
+          // 模型通道由 toModelOutput 承载（信封 success → text/error-text）
           const sdkTools: Record<string, any> = {};
           if (toolDefs && toolDefs.length > 0) {
             for (const t of toolDefs) {
-              sdkTools[t.name] = tool({
-                description: t.description,
-                inputSchema: t.parameters,
-                ...(t.execute ? { execute: t.execute } : {}),
-              } as any);
+              sdkTools[t.name] = toSdkTool(t);
             }
           }
 
@@ -146,21 +199,24 @@ export class OpenAIProvider implements AiProvider {
                 break;
               }
               case "tool-result": {
+                const output = chunk.output as Record<string, unknown> | string | undefined;
+                const envelope =
+                  output && typeof output === "object"
+                    ? (output as Record<string, unknown>)
+                    : undefined;
                 const failure =
-                  chunk.output &&
-                  typeof chunk.output === "object" &&
-                  (chunk.output.success === false || chunk.output.isError === true);
+                  envelope !== undefined &&
+                  (envelope.success === false || envelope.isError === true);
                 if (failure) hasToolErrors = true;
                 controller.enqueue({
                   type: "tool_call_result",
                   toolName: chunk.toolName,
                   callId: chunk.toolCallId,
                   success: !failure,
-                  ...(failure
-                    ? { error: String(chunk.output.error || "Tool execution failed") }
-                    : {}),
-                  result:
-                    typeof chunk.output === "string" ? chunk.output : JSON.stringify(chunk.output),
+                  // 结构化 data 通道：仅信封输出透传，供 UI/日志侧消费
+                  ...(envelope && envelope.data !== undefined ? { data: envelope.data } : {}),
+                  ...(failure ? { error: String(envelope!.error || "Tool execution failed") } : {}),
+                  result: typeof output === "string" ? output : JSON.stringify(output),
                 });
                 break;
               }
