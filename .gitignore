@@ -54,6 +54,9 @@ memory-root/
 !/docs/审查记录/07-工具双通道/
 /docs/审查记录/07-工具双通道/*
 !/docs/审查记录/07-工具双通道/设计与审查.md
+!/docs/审查记录/08-中转站配置/
+/docs/审查记录/08-中转站配置/*
+!/docs/审查记录/08-中转站配置/设计与审查.md
 notes/
 docs-zh/.obsidian/workspace.json
 *.private.md

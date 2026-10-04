@@ -402,33 +402,36 @@ export class ConfigService {
   }
 
   getDefaultAiConfig(): AiConfig {
+    // 默认值唯一来源：首次 seed 时从 env 取（持久配置优先于 env 的前提——
+    // env 只在库里无配置时生效，之后改动 env 不影响已保存配置）。
+    // 与原 api.config.ts 的 env 字段对齐，凭证/模型名不再有第二份消费点。
     return {
       provider: "openai-compatible",
-      baseURL: "https://api.openai.com/v1",
-      apiKey: "",
+      baseURL: env.MODEL_BASE_URL,
+      apiKey: env.MODEL_API_KEY,
       flagship: {
-        model: "gpt-4o",
+        model: process.env.FLAGSHIP_MODEL || "gpt-4o",
         maxTokens: 8192,
         temperature: 0.3,
         timeout: 60000,
         maxRetries: 3,
       },
       standard: {
-        model: "gpt-4o-mini",
+        model: process.env.STANDARD_MODEL || "gpt-4o-mini",
         maxTokens: 4096,
         temperature: 0.7,
         timeout: 30000,
         maxRetries: 2,
       },
       budget: {
-        model: "gpt-4o-mini",
+        model: process.env.BUDGET_MODEL || "gpt-4o-mini",
         maxTokens: 2048,
         temperature: 0.6,
         timeout: 15000,
         maxRetries: 1,
       },
       embedding: {
-        model: "text-embedding-3-small",
+        model: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
         dimensions: 1536,
         maxConcurrency: 8,
         queueTimeoutMs: 60000,

@@ -44,14 +44,20 @@ const embeddingSchema = z.object({
     .optional(),
 });
 
+/** Key 保存意图：保留库存 / 替换为新值 / 清除。省略时按掩码回填兼容旧客户端 */
+export const apiKeyIntentSchema = z.enum(["keep", "replace", "clear"]).optional();
+
 export const aiConfigSchema = z.object({
   provider: z.string().trim().min(1, "provider 不能为空"),
   baseURL: z.string().url("baseURL 必须是有效的 URL"),
-  apiKey: z.string().min(1, "apiKey 不能为空"),
+  // 是否为空由 route 按 apiKeyIntent 判定（clear 合法，replace/缺省拒绝空）
+  apiKey: z.string(),
+  apiKeyIntent: apiKeyIntentSchema,
   flagship: modelTierSchema,
   standard: modelTierSchema,
   budget: modelTierSchema,
   embedding: embeddingSchema,
+  embeddingApiKeyIntent: apiKeyIntentSchema,
 });
 
 export const chatRequestSchema = z.object({

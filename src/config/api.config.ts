@@ -1,35 +1,13 @@
-import { env } from "./env";
-import { EmbeddingModelConfig } from "../types/memory";
+/**
+ * 运行参数默认值（并发/降级/向量元数据）。
+ *
+ * AI 凭证与模型名的唯一来源是 ConfigService 的持久配置（默认值由
+ * getDefaultAiConfig() 从 env seed）；此处不再保留 baseURL/apiKey/模型名，
+ * 避免 env 凭证出现第二个互不一致的消费点。
+ */
+import type { EmbeddingModelConfig } from "../types/memory";
 
 export const apiConfig = {
-  baseURL: env.MODEL_BASE_URL,
-  apiKey: env.MODEL_API_KEY,
-  timeout: 30000,
-  maxRetries: 2,
-  /** 旗舰模型默认值 — 分流、评估、审计，需要强推理能力 */
-  flagship: {
-    model: process.env.FLAGSHIP_MODEL || "gpt-4o",
-    maxTokens: 8192,
-    temperature: 0.3,
-    timeout: 60000,
-    maxRetries: 3,
-  },
-  /** 普通模型默认值 — 对话、代码生成，平衡质量与成本 */
-  standard: {
-    model: process.env.STANDARD_MODEL || "gpt-4o-mini",
-    maxTokens: 4096,
-    temperature: 0.7,
-    timeout: 30000,
-    maxRetries: 2,
-  },
-  /** 廉价模型默认值 — 测试生成、摘要、简单提取，低成本优先 */
-  budget: {
-    model: process.env.BUDGET_MODEL || "gpt-4o-mini",
-    maxTokens: 2048,
-    temperature: 0.6,
-    timeout: 15000,
-    maxRetries: 1,
-  },
   /** 并发控制 — 防止 API 请求风暴和触发限流 */
   concurrency: {
     flagship: {
