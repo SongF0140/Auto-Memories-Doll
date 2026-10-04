@@ -25,6 +25,7 @@ export class AgentDispatcher {
     mode: ChatMode,
     sessionId: string,
     memoryIds?: string[],
+    signal?: AbortSignal,
   ): Promise<DispatchResult> {
     const lastMessage = messages[messages.length - 1];
     const intent = this.classifier.classify(lastMessage.content);
@@ -43,7 +44,13 @@ export class AgentDispatcher {
           intent.entities.command || lastMessage.content.substring(1),
         );
       default: {
-        const stream = await this.chatHandler.streamResponse(messages, mode, sessionId, memoryIds);
+        const stream = await this.chatHandler.streamResponse(
+          messages,
+          mode,
+          sessionId,
+          memoryIds,
+          signal,
+        );
         return { type: "stream", stream };
       }
     }

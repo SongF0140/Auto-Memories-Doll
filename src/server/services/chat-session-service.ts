@@ -1,7 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { ChatMessage, ChatMode } from "../../types/api";
-import { AiEvent } from "../../lib/ai/ai-events";
+import { AiEvent, AiStreamStatus, terminalStatus } from "../../lib/ai/ai-events";
+import { wrapAiStream } from "../../lib/ai/stream-adapter";
 import { getMemoryRoot } from "../../lib/storage/path-resolver";
 import { logger } from "../../lib/logger";
 
@@ -12,6 +13,8 @@ export type ChatSessionSnapshot = {
   mode: ChatMode;
   messages: ChatMessage[];
   createdAt: string;
+  status?: AiStreamStatus;
+  hasToolErrors?: boolean;
 };
 
 export type ChatSessionDeleted = {
@@ -32,7 +35,13 @@ export type ChatSessionSummary = {
 };
 
 export class ChatSessionService {
-  appendSnapshot(input: { sessionId: string; mode: ChatMode; messages: ChatMessage[] }): boolean {
+  appendSnapshot(input: {
+    sessionId: string;
+    mode: ChatMode;
+    messages: ChatMessage[];
+    status?: AiStreamStatus;
+    hasToolErrors?: boolean;
+  }): boolean {
     const snapshot: ChatSessionSnapshot = {
       schemaVersion: 1,
       type: "snapshot",
@@ -40,12 +49,16 @@ export class ChatSessionService {
       mode: input.mode,
       messages: input.messages.filter((message) => message.role !== "system"),
       createdAt: new Date().toISOString(),
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.hasToolErrors ? { hasToolErrors: true } : {}),
     };
 
     const latest = this.getLatest(input.sessionId);
     if (
       latest &&
       latest.mode === snapshot.mode &&
+      latest.status === snapshot.status &&
+      latest.hasToolErrors === snapshot.hasToolErrors &&
       JSON.stringify(latest.messages) === JSON.stringify(snapshot.messages)
     ) {
       return false;
@@ -132,7 +145,8 @@ export class ChatSessionService {
     messages: ChatMessage[];
     onComplete?: () => void;
   }): ReadableStream<AiEvent> {
-    const reader = input.stream.getReader();
+    let status: AiStreamStatus = "failed";
+    let hasToolErrors = false;
     let assistantContent = "";
     let finalized = false;
 
@@ -145,6 +159,8 @@ export class ChatSessionService {
             sessionId: input.sessionId,
             mode: input.mode,
             messages: [...input.messages, { role: "assistant", content: assistantContent }],
+            status,
+            hasToolErrors,
           });
         }
       } catch (error) {
@@ -157,30 +173,16 @@ export class ChatSessionService {
       }
     };
 
-    return new ReadableStream<AiEvent>({
-      start: async (controller) => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value.type === "text_delta") {
-              assistantContent += value.content;
-            }
-            controller.enqueue(value);
-          }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        } finally {
-          finalize();
-        }
+    return wrapAiStream(() => input.stream, {
+      onEvent(event) {
+        if (event.type === "text_delta") assistantContent += event.content;
+        if (event.type === "tool_call_result" && event.success === false) hasToolErrors = true;
+        if (event.type === "done" && event.hasToolErrors) hasToolErrors = true;
+        status = terminalStatus(event) || status;
       },
-      cancel: async (reason) => {
-        try {
-          await reader.cancel(reason);
-        } finally {
-          finalize();
-        }
+      onFinalize(cancelled) {
+        if (cancelled) status = "aborted";
+        finalize();
       },
     });
   }

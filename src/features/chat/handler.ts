@@ -1,7 +1,8 @@
 import { ChatMessage, ChatMode } from "../../types/api";
 import { MemoryRecord } from "../../types/memory";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
-import { AiEvent, AiToolDef } from "../../lib/ai/ai-events";
+import { AiEvent, AiToolDef, terminalStatus } from "../../lib/ai/ai-events";
+import { wrapAiStream } from "../../lib/ai/stream-adapter";
 import { TemplateManager, initializeTemplates } from "../../lib/prompt/template-manager";
 import { PromptCache } from "../../lib/prompt/cache";
 import { MemoryService } from "../../server/services/memory-service";
@@ -100,18 +101,25 @@ export class ChatHandler {
 
     // 非流式响应：从 ReadableStream 收集完整文本
     let content = "";
-    const reader = response.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value.type === "text_delta" && "content" in value) {
-        content += value.content;
+    const reader = wrapAiStream(() => response).getReader();
+    let completed = false;
+    let hasToolErrors = false;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value.type === "text_delta") content += value.content;
+        if (value.type === "tool_call_result" && value.success === false) hasToolErrors = true;
+        if (value.type === "done" && value.hasToolErrors) hasToolErrors = true;
+        if (terminalStatus(value)) completed = terminalStatus(value) === "completed";
       }
+    } finally {
+      reader.releaseLock();
     }
 
     // 对话结束后入队画像分析
     const lastUserMsg = processedMessages.findLast((m) => m.role === "user");
-    if (lastUserMsg) {
+    if (completed && !hasToolErrors && lastUserMsg) {
       ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
     }
 
@@ -137,6 +145,7 @@ export class ChatHandler {
     mode: ChatMode,
     _sessionId: string,
     memoryIds?: string[],
+    signal?: AbortSignal,
   ): Promise<ReadableStream<AiEvent>> {
     const processedMessages = compressConversation(await this.applySkills(messages));
 
@@ -174,20 +183,36 @@ export class ChatHandler {
       })),
     ];
 
-    // 对话结束后入队画像分析（lastUserMsg 已在意图分类时获取）
-    if (lastUserMsg) {
-      ProfileUpdater.getInstance().enqueueAnalysis(`${lastUserMsg.role}: ${lastUserMsg.content}`);
-    }
-
     // 收集所有可用工具
     const toolDefs = await this.collectToolDefs(mode);
 
-    return ModelAdapter.generateStream({
-      messages: apiMessages,
-      tools: toolDefs.length > 0 ? toolDefs : undefined,
-      readonly: mode !== "memory",
-      modelType: "standard",
-    });
+    let completed = false;
+    let hasToolErrors = false;
+    return wrapAiStream(
+      () =>
+        ModelAdapter.generateStream({
+          messages: apiMessages,
+          tools: toolDefs.length > 0 ? toolDefs : undefined,
+          readonly: mode !== "memory",
+          modelType: "standard",
+          signal,
+        }),
+      {
+        signal,
+        onEvent(event) {
+          if (event.type === "tool_call_result" && event.success === false) hasToolErrors = true;
+          if (event.type === "done" && event.hasToolErrors) hasToolErrors = true;
+          if (terminalStatus(event)) completed = terminalStatus(event) === "completed";
+        },
+        onFinalize(cancelled) {
+          if (completed && !cancelled && !signal?.aborted && !hasToolErrors && lastUserMsg) {
+            ProfileUpdater.getInstance().enqueueAnalysis(
+              `${lastUserMsg.role}: ${lastUserMsg.content}`,
+            );
+          }
+        },
+      },
+    );
   }
 
   /**
@@ -210,7 +235,7 @@ export class ChatHandler {
               toolName: desc.name,
               arguments: args,
             });
-            return result.success ? result.data : `错误: ${result.error}`;
+            return result.success ? result.data : { success: false, error: result.error };
           },
         });
       }
@@ -232,7 +257,10 @@ export class ChatHandler {
               try {
                 return await this.mcpManager.callTool(serverId, toolName, args);
               } catch (error) {
-                return `MCP 工具 "${toolName}" 执行失败: ${(error as Error).message}`;
+                return {
+                  success: false,
+                  error: `MCP 工具 "${toolName}" 执行失败: ${(error as Error).message}`,
+                };
               }
             },
           });

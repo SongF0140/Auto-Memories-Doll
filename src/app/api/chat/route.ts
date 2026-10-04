@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       logger.chat.warn("会话 JSONL 持久化失败", { error: (error as Error).message });
     }
 
-    const result = await dispatcher.dispatch(messages, mode, sessionId, memoryIds);
+    const result = await dispatcher.dispatch(messages, mode, sessionId, memoryIds, request.signal);
 
     if (result.type === "stream") {
       const persistedStream = sessionService.captureAssistantStream({

@@ -106,7 +106,38 @@ describe("ModelAdapter degradation", () => {
       type: "text_delta",
       content: expect.stringContaining("API Key"),
     });
-    expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "error" });
+    expect(events.at(-1)).toMatchObject({ type: "done", finishReason: "error", status: "failed" });
+  });
+
+  it("propagates cancellation and suppresses duplicate terminals", async () => {
+    configMock.config.apiKey = "mock";
+    const cancel = vi.fn();
+    const source = new ReadableStream<AiEvent>({
+      start(controller) {
+        controller.enqueue({ type: "text_delta", content: "partial" });
+      },
+      cancel,
+    });
+    providerMock.generateStream.mockReturnValueOnce(source);
+    const signal = new AbortController().signal;
+    const reader = ModelAdapter.generateStream({ messages: [], signal }).getReader();
+    await reader.read();
+    await reader.cancel("disconnect");
+    expect(providerMock.generateStream.mock.calls.at(-1)?.[0].signal).toBe(signal);
+    expect(cancel).toHaveBeenCalledWith("disconnect");
+    expect(source.locked).toBe(false);
+    providerMock.generateStream.mockReturnValueOnce(
+      new ReadableStream<AiEvent>({
+        start(controller) {
+          controller.enqueue({ type: "error", message: "failed" });
+          controller.enqueue({ type: "done", finishReason: "stop" });
+          controller.close();
+        },
+      }),
+    );
+    expect(await drain(ModelAdapter.generateStream({ messages: [] }))).toEqual([
+      { type: "error", message: "failed" },
+    ]);
   });
 
   it("returns an empty embedding instead of throwing when API key is missing", async () => {

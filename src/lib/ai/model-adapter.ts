@@ -4,6 +4,7 @@ import { getCurrentTime } from "../utils/date";
 import { ConfigService } from "../../server/services/config-service";
 import { OpenAIProvider } from "./openai-provider";
 import { AiProvider, AiEvent } from "./ai-events";
+import { wrapAiStream } from "./stream-adapter";
 import { logger } from "../logger";
 import { apiConfig } from "../../config/api.config";
 import { ModelPool, ConcurrencyTimeoutError } from "./model-pool";
@@ -104,11 +105,14 @@ export class ModelAdapter {
     tools?: import("./ai-events").AiToolDef[];
     readonly?: boolean;
     modelType?: ModelType;
+    signal?: AbortSignal;
   }): ReadableStream<AiEvent> {
     const config = getConfig();
     this.rememberApiKeyStatus(config.apiKey);
     const slot: ModelSlot = options.modelType || "standard";
 
+    if (options.signal?.aborted)
+      return wrapAiStream(() => this.createFallbackStream(""), { signal: options.signal });
     if (!config.apiKey || config.apiKey.trim() === "") {
       return this.createFallbackStream(
         "当前处于离线模式，请前往设置页面配置 AI API Key 和 baseURL。",
@@ -117,38 +121,25 @@ export class ModelAdapter {
 
     // 通过池化调度：流创建本身受并发限制，流消费不受限
     // 创建 ReadableStream 时异步获取槽位，超时则返回降级流
-    return new ReadableStream<AiEvent>({
-      start: async (controller) => {
+    return wrapAiStream(
+      async () => {
         try {
           const provider = getProvider();
-          const stream = await this.pool.execute(slot, () =>
+          return await this.pool.execute(slot, () =>
             Promise.resolve(provider.generateStream(options)),
           );
-
-          // 将池化后的流 pipe 到调用方的 controller
-          const reader = stream.getReader();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(value);
-          }
-          controller.close();
         } catch (error) {
+          this.llmDegraded = true;
           if (error instanceof ConcurrencyTimeoutError) {
-            const msg = `[${slot}] 模型并发已满 (${error.timeoutMs}ms 超时)，请稍后重试。`;
-            this.llmDegraded = true;
-            controller.enqueue({ type: "text_start" });
-            controller.enqueue({ type: "text_delta", content: msg });
-            controller.enqueue({ type: "text_end" });
-            controller.enqueue({ type: "done", finishReason: "error" });
-          } else {
-            this.llmDegraded = true;
-            controller.enqueue({ type: "error", message: (error as Error).message });
+            return this.createFallbackStream(
+              `[${slot}] 模型并发已满 (${error.timeoutMs}ms 超时)，请稍后重试。`,
+            );
           }
-          controller.close();
+          throw error;
         }
       },
-    });
+      { signal: options.signal },
+    );
   }
 
   private static createFallbackStream(message: string): ReadableStream<AiEvent> {
@@ -157,7 +148,7 @@ export class ModelAdapter {
         controller.enqueue({ type: "text_start" });
         controller.enqueue({ type: "text_delta", content: message });
         controller.enqueue({ type: "text_end" });
-        controller.enqueue({ type: "done", finishReason: "error" });
+        controller.enqueue({ type: "done", finishReason: "error", status: "failed" });
         controller.close();
       },
     });

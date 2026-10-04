@@ -329,7 +329,7 @@ describe("ChatHandler", () => {
     });
 
     it("对话结束后入队 ProfileUpdater 画像分析", async () => {
-      await handler.streamResponse(
+      const stream = await handler.streamResponse(
         [
           { role: "assistant", content: "上轮" },
           { role: "user", content: "用户说的" },
@@ -338,8 +338,35 @@ describe("ChatHandler", () => {
         "sess-1",
       );
 
+      expect(mocks.profileUpdater.enqueueAnalysis).not.toHaveBeenCalled();
+      await drainStream(stream);
       expect(mocks.profileUpdater.enqueueAnalysis).toHaveBeenCalledOnce();
       expect(mocks.profileUpdater.enqueueAnalysis.mock.calls[0][0]).toContain("用户说的");
+    });
+
+    it.each([
+      [{ type: "error", message: "failed" }],
+      [{ type: "done", finishReason: "abort", status: "aborted" }],
+      [{ type: "done", finishReason: "error", status: "failed" }],
+      [
+        { type: "tool_call_result", toolName: "lookup", result: "missing", success: false },
+        { type: "done", finishReason: "stop" },
+      ],
+      [],
+    ] as AiEvent[][])("非成功或工具失败不入队画像分析 %#", async (...events) => {
+      mocks.modelAdapter.generateStream.mockReturnValue(makeFakeStream(events));
+      const signal = new AbortController().signal;
+      await drainStream(
+        await handler.streamResponse(
+          [{ role: "user", content: "hello" }],
+          "chat",
+          "sess",
+          undefined,
+          signal,
+        ),
+      );
+      expect(mocks.modelAdapter.generateStream.mock.calls[0][0].signal).toBe(signal);
+      expect(mocks.profileUpdater.enqueueAnalysis).not.toHaveBeenCalled();
     });
 
     it("无用户消息时不入队画像分析也不分类", async () => {

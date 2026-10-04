@@ -27,6 +27,7 @@ export class OpenAIProvider implements AiProvider {
     tools?: AiToolDef[];
     readonly?: boolean;
     modelType?: ModelType;
+    signal?: AbortSignal;
   }): ReadableStream<AiEvent> {
     const { messages, temperature, tools: toolDefs, readonly, modelType } = options;
     const tier = this.getTier(modelType);
@@ -38,9 +39,25 @@ export class OpenAIProvider implements AiProvider {
       .join("\n\n");
     const conversationMessages = messages.filter((message) => message.role !== "system");
 
+    const cancellation = new AbortController();
+    const abortSignal = options.signal
+      ? AbortSignal.any([options.signal, cancellation.signal])
+      : cancellation.signal;
+    let reader: ReadableStreamDefaultReader<any> | undefined;
+    let cancelled = false;
+    let terminal = false;
+    let hasToolErrors = false;
+    const abort = () => {
+      void reader?.cancel(abortSignal.reason).catch(() => undefined);
+    };
     return new ReadableStream<AiEvent>({
       start: async (controller) => {
         try {
+          if (abortSignal.aborted) {
+            controller.enqueue({ type: "done", finishReason: "abort", status: "aborted" });
+            return;
+          }
+          abortSignal.addEventListener("abort", abort, { once: true });
           const model = this.createModel(modelType);
 
           // 将 AiToolDef 转为 Vercel AI SDK 的 tool 对象
@@ -57,6 +74,7 @@ export class OpenAIProvider implements AiProvider {
 
           const result = streamText({
             model,
+            abortSignal,
             instructions: instructions || undefined,
             messages: conversationMessages as any,
             temperature,
@@ -70,8 +88,51 @@ export class OpenAIProvider implements AiProvider {
 
           // 使用 fullStream 获取所有事件（文本 + 工具调用）
           let roundNum = 0;
-          for await (const chunk of result.fullStream) {
+          reader = result.fullStream.getReader();
+          // fullStream is a tee branch; drain the SDK-owned branch so cancel can settle.
+          void result.consumeStream?.({ onError: () => undefined });
+          while (!cancelled && !terminal && !abortSignal.aborted) {
+            const { done, value: chunk } = await reader.read();
+            if (done || cancelled || abortSignal.aborted) break;
             switch (chunk.type) {
+              case "error":
+                controller.enqueue({
+                  type: "error",
+                  message: chunk.error instanceof Error ? chunk.error.message : String(chunk.error),
+                  status: "failed",
+                });
+                terminal = true;
+                cancellation.abort(chunk.error);
+                break;
+              case "abort":
+                controller.enqueue({ type: "done", finishReason: "abort", status: "aborted" });
+                terminal = true;
+                break;
+              case "finish":
+                controller.enqueue({
+                  type: "done",
+                  finishReason: chunk.finishReason,
+                  status: ["error", "unknown"].includes(chunk.finishReason)
+                    ? "failed"
+                    : "completed",
+                  ...(hasToolErrors ? { hasToolErrors: true } : {}),
+                });
+                terminal = true;
+                break;
+              case "tool-error": {
+                hasToolErrors = true;
+                const message =
+                  chunk.error instanceof Error ? chunk.error.message : String(chunk.error);
+                controller.enqueue({
+                  type: "tool_call_result",
+                  toolName: chunk.toolName,
+                  callId: chunk.toolCallId,
+                  result: message,
+                  success: false,
+                  error: message,
+                });
+                break;
+              }
               case "text-delta":
                 controller.enqueue({ type: "text_delta", content: chunk.text });
                 break;
@@ -80,17 +141,29 @@ export class OpenAIProvider implements AiProvider {
                   type: "tool_call_start",
                   toolName: chunk.toolName,
                   args: JSON.stringify(chunk.input),
+                  callId: chunk.toolCallId,
                 });
                 break;
               }
-              case "tool-result":
+              case "tool-result": {
+                const failure =
+                  chunk.output &&
+                  typeof chunk.output === "object" &&
+                  (chunk.output.success === false || chunk.output.isError === true);
+                if (failure) hasToolErrors = true;
                 controller.enqueue({
                   type: "tool_call_result",
                   toolName: chunk.toolName,
+                  callId: chunk.toolCallId,
+                  success: !failure,
+                  ...(failure
+                    ? { error: String(chunk.output.error || "Tool execution failed") }
+                    : {}),
                   result:
                     typeof chunk.output === "string" ? chunk.output : JSON.stringify(chunk.output),
                 });
                 break;
+              }
               case "start-step":
                 if (roundNum > 0) {
                   controller.enqueue({ type: "round_start", round: roundNum });
@@ -100,19 +173,42 @@ export class OpenAIProvider implements AiProvider {
             }
           }
 
-          const finishResult = await result.finishReason;
-          controller.enqueue({
-            type: "done",
-            finishReason: finishResult || "stop",
-          });
-          controller.close();
+          if (!cancelled && !terminal) {
+            controller.enqueue(
+              abortSignal.aborted
+                ? { type: "done", finishReason: "abort", status: "aborted" }
+                : {
+                    type: "error",
+                    message: "SDK stream ended without a finish event",
+                    status: "failed",
+                  },
+            );
+          }
         } catch (error) {
-          controller.enqueue({
-            type: "error",
-            message: (error as Error).message || "Unknown error",
-          });
-          controller.close();
+          if (!cancelled && !terminal)
+            controller.enqueue(
+              abortSignal.aborted
+                ? { type: "done", finishReason: "abort", status: "aborted" }
+                : {
+                    type: "error",
+                    message: error instanceof Error ? error.message : String(error),
+                    status: "failed",
+                  },
+            );
+        } finally {
+          abortSignal.removeEventListener("abort", abort);
+          try {
+            if (terminal) await reader?.cancel("terminal received");
+          } finally {
+            reader?.releaseLock();
+          }
+          if (!cancelled) controller.close();
         }
+      },
+      async cancel(reason) {
+        cancelled = true;
+        cancellation.abort(reason);
+        await reader?.cancel(reason);
       },
     });
   }

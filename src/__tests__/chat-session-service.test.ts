@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "f
 import { join } from "path";
 import { tmpdir } from "os";
 import { ChatSessionService } from "../server/services/chat-session-service";
+import { aiEventStreamToResponse } from "../lib/ai/stream-adapter";
 
 let memoryRoot = "";
 
@@ -193,5 +194,69 @@ describe("ChatSessionService", () => {
       { role: "assistant", content: "hello world" },
     ]);
     expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(source.locked).toBe(false);
+    expect(service.getLatest("sess_stream")).toMatchObject({ status: "completed" });
+  });
+
+  it("persists cancelled partial text as aborted and releases the source", async () => {
+    const service = new ChatSessionService();
+    const cancel = vi.fn();
+    const onComplete = vi.fn();
+    const source = new ReadableStream<import("../lib/ai/ai-events").AiEvent>({
+      start(controller) {
+        controller.enqueue({ type: "text_delta", content: "partial" });
+      },
+      cancel,
+    });
+    const reader = service
+      .captureAssistantStream({
+        stream: source,
+        sessionId: "cancelled",
+        mode: "chat",
+        messages: [],
+        onComplete,
+      })
+      .getReader();
+    await reader.read();
+    await reader.cancel("disconnect");
+    expect(cancel).toHaveBeenCalledWith("disconnect");
+    expect(source.locked).toBe(false);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(service.getLatest("cancelled")).toMatchObject({
+      status: "aborted",
+      messages: [{ role: "assistant", content: "partial" }],
+    });
+  });
+
+  it("keeps a completed session when SSE releases the terminal stream", async () => {
+    const service = new ChatSessionService();
+    const onComplete = vi.fn();
+    const source = new ReadableStream<import("../lib/ai/ai-events").AiEvent>({
+      start(controller) {
+        controller.enqueue({ type: "text_delta", content: "synthetic answer" });
+        controller.enqueue({ type: "done", finishReason: "stop", status: "completed" });
+        controller.close();
+      },
+    });
+    const captured = service.captureAssistantStream({
+      stream: source,
+      sessionId: "completed-sse",
+      mode: "chat",
+      messages: [{ role: "user", content: "synthetic question" }],
+      onComplete,
+    });
+
+    const body = await aiEventStreamToResponse(captured).text();
+
+    expect(body).toContain('"status":"completed"');
+    expect(service.getLatest("completed-sse")).toMatchObject({
+      status: "completed",
+      messages: [
+        { role: "user", content: "synthetic question" },
+        { role: "assistant", content: "synthetic answer" },
+      ],
+    });
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(source.locked).toBe(false);
   });
 });

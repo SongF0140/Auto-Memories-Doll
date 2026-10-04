@@ -7,14 +7,38 @@ export type AiEvent =
   | { type: "thinking_start" }
   | { type: "thinking_delta"; content: string }
   | { type: "thinking_end" }
-  | { type: "tool_call_start"; toolName: string; args: string }
-  | { type: "tool_call_result"; toolName: string; result: string }
+  | { type: "tool_call_start"; toolName: string; args: string; callId?: string }
+  | {
+      type: "tool_call_result";
+      toolName: string;
+      result: string;
+      callId?: string;
+      success?: boolean;
+      error?: string;
+      /** UI/日志侧结构化结果；模型只消费文本 content */
+      data?: unknown;
+    }
   | { type: "text_start" }
   | { type: "text_delta"; content: string }
   | { type: "text_end" }
   | { type: "round_start"; round: number }
-  | { type: "done"; finishReason: string }
-  | { type: "error"; message: string };
+  | { type: "done"; finishReason: string; status?: AiStreamStatus; hasToolErrors?: boolean }
+  | { type: "error"; message: string; status?: AiStreamStatus };
+
+export type AiStreamStatus = "completed" | "failed" | "aborted";
+
+export function terminalStatus(event: AiEvent): AiStreamStatus | undefined {
+  if (event.type === "error") return event.status || "failed";
+  if (event.type !== "done") return undefined;
+  return (
+    event.status ||
+    (event.finishReason === "abort"
+      ? "aborted"
+      : ["error", "degraded", "unknown"].includes(event.finishReason)
+        ? "failed"
+        : "completed")
+  );
+}
 
 /**
  * ChatSessionEvent — 应用层会话事件，包装核心 AiEvent 并追加会话上下文。
@@ -47,6 +71,7 @@ export interface AiProvider {
     temperature?: number;
     tools?: AiToolDef[];
     readonly?: boolean;
+    signal?: AbortSignal;
   }): ReadableStream<AiEvent>;
 
   /** 文本嵌入：将文本转为向量 */

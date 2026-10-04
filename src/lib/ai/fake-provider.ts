@@ -18,11 +18,17 @@ export class FakeProvider implements AiProvider {
     temperature?: number;
     tools?: import("./ai-events").AiToolDef[];
     readonly?: boolean;
+    signal?: AbortSignal;
   }): ReadableStream<AiEvent> {
     const responseText = this.responses[0] || "假回复";
 
     return new ReadableStream<AiEvent>({
       start: (controller) => {
+        if (_options.signal?.aborted) {
+          controller.enqueue({ type: "done", finishReason: "abort", status: "aborted" });
+          controller.close();
+          return;
+        }
         controller.enqueue({ type: "text_start" });
         controller.enqueue({ type: "text_delta", content: responseText });
         controller.enqueue({ type: "text_end" });

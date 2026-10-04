@@ -5,6 +5,7 @@ import { apiError } from "../../../../lib/api-response";
 import { ErrorCode } from "../../../../lib/api-errors";
 import { ChatSessionService } from "../../../../server/services/chat-session-service";
 import { logger } from "../../../../lib/logger";
+import { aiEventStreamToResponse } from "../../../../lib/ai/stream-adapter";
 
 /**
  * POST /api/chat/stream
@@ -42,7 +43,13 @@ export async function POST(request: NextRequest) {
       logger.chat.warn("会话 JSONL 持久化失败", { error: (error as Error).message });
     }
 
-    const result = await handler.streamResponse(messages, mode, sessionId, memoryIds);
+    const result = await handler.streamResponse(
+      messages,
+      mode,
+      sessionId,
+      memoryIds,
+      request.signal,
+    );
     const persistedStream = sessionService.captureAssistantStream({
       stream: result,
       sessionId,
@@ -52,33 +59,7 @@ export async function POST(request: NextRequest) {
     });
     closeHandlerInFinally = false;
 
-    // 将 AiEvent ReadableStream 转为 SSE Response
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = persistedStream.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`));
-          }
-        } catch (err) {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "error", message: String(err) })}\n\n`),
-          );
-        }
-        controller.close();
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
+    return aiEventStreamToResponse(persistedStream, "text/event-stream");
   } catch (error) {
     return NextResponse.json(apiError(ErrorCode.INTERNAL_ERROR, (error as Error).message), {
       status: 500,
