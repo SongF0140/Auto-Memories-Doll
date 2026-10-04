@@ -1,6 +1,9 @@
-import { MemoryRecord } from "../../types/memory";
+import { z } from "zod";
+import { MemoryRecord, MemoryKind } from "../../types/memory";
+import type { ChatMode } from "../../types/api";
 import { ModelAdapter } from "../../lib/ai/model-adapter";
 import { SimilarMemoryHint } from "./quality-filter-service";
+import { TopicClassificationService } from "./topic-classification-service";
 import { logger } from "../../lib/logger";
 
 /** 抽取产出的一张原子记忆卡片（全部为中文人可读内容） */
@@ -42,21 +45,111 @@ const CARD_CONTENT_LIMIT = 20_000;
 /** 非标准输出时的最大重试次数 */
 const MAX_PARSE_ATTEMPTS = 2;
 
+/** 学习分析的单轮输入上限：超限需人工处理，不得截断后分析 */
+const TURN_INPUT_LIMIT = 24_000;
+/** 学习分析的历史消歧上下文上限 */
+const TURN_HISTORY_LIMIT = 2_000;
+
+// ── 第十块：对话轮次分析契约（路线图 3.2 判别联合 skip/knowledge/unavailable） ──
+
+export type TurnEvidenceSourceRole = "user" | "assistant";
+
+/** 逐卡来源证据：模型声称的原文片段 + 是否通过逐字子串校验 */
+export type TurnCardEvidence = {
+  sourceRole: TurnEvidenceSourceRole;
+  text: string;
+  verified: boolean;
+};
+
+/** 分析产出的一张候选知识卡：已做证据校验、来源判定与白名单话题分类 */
+export type TurnAnalysisCard = {
+  title: string;
+  summary: string;
+  content: string;
+  tags: string[];
+  source: "user" | "assistant" | "mixed";
+  kind: MemoryKind;
+  topic: string;
+  evidence: TurnCardEvidence | null;
+  /** auto=证据充分可走自动管线；manual=无证据/伪造证据，强制人工确认 */
+  reviewStatus: "auto" | "manual";
+  reviewReason?: string;
+};
+
+/** 第十一块：worker 接线后附加的逐知识协调摘要（已接受/待确认分开计数） */
+export type TurnReconciliationSummary = {
+  duplicates: number;
+  accepted: number;
+  pending: number;
+  /** 协调不可用时记录原因（决策未产出，候选保留在 items 中） */
+  unavailableReason?: string;
+};
+
+/** 轮次分析判别联合：skip 无知识（必带原因）；knowledge 非空拆卡；unavailable 模型/输入不可用 */
+export type TurnAnalysisResult =
+  | { type: "skip"; reason: string }
+  | { type: "knowledge"; items: TurnAnalysisCard[]; reconciliation?: TurnReconciliationSummary }
+  | { type: "unavailable"; reason: string };
+
+/** 一次学习任务消费的输入：仅本轮 user/assistant 文本 */
+export type TurnAnalysisInput = {
+  turnId: string;
+  sessionId: string;
+  mode: ChatMode;
+  userText: string;
+  assistantText: string;
+};
+
+/** 抽取结果显式三态：空结果与错误不混淆（替代旧 null 的多重含义） */
+export type ExtractionResult =
+  | { status: "ok"; cards: ExtractedCard[] }
+  | { status: "empty"; reason: string }
+  | { status: "unavailable"; reason: string };
+
+/** 模型输出层 schema：逐字段受校验，注入文本无法绕过（缺失字段/越界枚举直接判解析失败） */
+const turnEvidenceSchema = z.object({
+  sourceRole: z.enum(["user", "assistant"]),
+  text: z.string().min(1),
+});
+
+const turnCardSchema = z.object({
+  title: z.string().min(1),
+  summary: z.string(),
+  content: z.string().min(1),
+  tags: z.array(z.string()).default([]),
+  source: z.enum(["user", "assistant", "mixed"]),
+  kind: z.enum(["fact", "inference", "hypothesis", "insight", "synthesis"]),
+  suggestedTopic: z.string().default(""),
+  evidence: turnEvidenceSchema.nullable().default(null),
+});
+
+const turnAnalysisSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("skip"), reason: z.string().min(1) }),
+  z.object({ type: z.literal("knowledge"), cards: z.array(turnCardSchema).min(1) }),
+]);
+
 /**
  * 记忆抽取服务：把采集来的原始内容（英文 / markdown 源码 / 会话日志的混合体）
  * 按"一个话题一张卡片"拆分，并将每张卡片全文重写为简体中文。
  *
  * 这是"原文直存"与"人可读知识卡"的分界线：质量闸门只判断值不值得存，
- * 本服务负责决定"怎么存才易读"。失败时返回 null（fail-closed 转人工），绝不把半成品入库。
+ * 本服务负责决定"怎么存才易读"。失败时返回显式 unavailable（fail-closed 转人工），
+ * 绝不把半成品入库；"无内容可拆"返回显式 empty——空结果与错误不混淆。
  */
 export class MemoryExtractionService {
+  private topicClassifier: TopicClassificationService;
+
+  constructor() {
+    this.topicClassifier = new TopicClassificationService();
+  }
+
   async extract(
     candidate: MemoryRecord,
     similar: SimilarMemoryHint[] = [],
-  ): Promise<ExtractedCard[] | null> {
+  ): Promise<ExtractionResult> {
     // 模型降级时无法改写 → 转人工（与质量闸门同一 fail-closed 策略）
     if (ModelAdapter.isDegradedMode) {
-      return null;
+      return { status: "unavailable", reason: "模型降级或未配置 API Key，无法抽取" };
     }
 
     const prompt = this.buildPrompt(candidate, similar);
@@ -64,36 +157,205 @@ export class MemoryExtractionService {
     for (let attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
       try {
         const response = await ModelAdapter.generate(prompt, "flagship");
-        const cards = this.parseCards(response.content, candidate.content, similar.length);
-        if (cards) return cards;
+        const parsed = this.parseCards(response.content, candidate.content, similar.length);
+        if (parsed.status === "ok") return { status: "ok", cards: parsed.cards };
+        if (parsed.status === "empty") {
+          return { status: "empty", reason: "模型判定内容中没有可拆的知识卡片" };
+        }
         logger.quality.warn("抽取输出非标准 JSON，重试", {
           attempt,
           output: response.content.slice(0, 200),
         });
       } catch (error) {
         logger.quality.warn("记忆抽取调用失败", { error: (error as Error).message });
-        return null;
+        return { status: "unavailable", reason: `抽取模型调用失败：${(error as Error).message}` };
       }
     }
 
-    return null;
+    return { status: "unavailable", reason: `抽取输出 ${MAX_PARSE_ATTEMPTS} 次均无法解析` };
+  }
+
+  /**
+   * 对话轮次价值判断（第十块）：判断本轮对话是否包含长期知识，
+   * 有则拆分为原子知识卡并逐卡做证据校验、来源/kind 判定与白名单话题分类。
+   * 输入超限、降级、调用失败或解析耗尽都显式返回 unavailable——不伪装 skip、不静默截断。
+   */
+  async analyzeTurn(task: TurnAnalysisInput, recentHistory?: string): Promise<TurnAnalysisResult> {
+    if (ModelAdapter.isDegradedMode) {
+      return { type: "unavailable", reason: "模型降级或未配置 API Key，无法进行学习分析" };
+    }
+
+    const inputLength = task.userText.length + task.assistantText.length;
+    if (inputLength > TURN_INPUT_LIMIT) {
+      return {
+        type: "unavailable",
+        reason: `本轮对话输入 ${inputLength} 字符超过 ${TURN_INPUT_LIMIT} 上限，需人工处理，未做部分分析`,
+      };
+    }
+
+    const prompt = this.buildTurnPrompt(task, recentHistory);
+
+    for (let attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
+      let response;
+      try {
+        response = await ModelAdapter.generate(prompt, "flagship");
+      } catch (error) {
+        return {
+          type: "unavailable",
+          reason: `学习分析模型调用失败：${(error as Error).message}`,
+        };
+      }
+
+      const parsed = this.parseTurnAnalysis(response.content);
+      if (!parsed) {
+        logger.quality.warn("对话分析输出无法通过 schema 校验，重试", {
+          attempt,
+          output: response.content.slice(0, 200),
+        });
+        continue;
+      }
+      if (parsed.type === "skip") return parsed;
+
+      // 上限校验：超限不 slice 后静默保存，整轮标明需人工处理
+      if (parsed.cards.length > MAX_CARDS) {
+        return {
+          type: "unavailable",
+          reason: `模型输出 ${parsed.cards.length} 张知识卡超过 ${MAX_CARDS} 张上限，需人工处理，未写入部分结果`,
+        };
+      }
+      const oversized = parsed.cards.find((card) => card.content.length > CARD_CONTENT_LIMIT);
+      if (oversized) {
+        return {
+          type: "unavailable",
+          reason: `知识卡「${oversized.title}」正文 ${oversized.content.length} 字符超过 ${CARD_CONTENT_LIMIT} 上限，需人工处理，未写入部分结果`,
+        };
+      }
+
+      const items: TurnAnalysisCard[] = [];
+      for (const card of parsed.cards) {
+        items.push(await this.buildTurnCard(card, task));
+      }
+      return { type: "knowledge", items };
+    }
+
+    return {
+      type: "unavailable",
+      reason: `模型输出 ${MAX_PARSE_ATTEMPTS} 次均无法通过 schema 校验，学习分析不可用`,
+    };
+  }
+
+  /** 解析模型输出为判别联合；任何结构异常返回 null（由调用方重试后转 unavailable） */
+  private parseTurnAnalysis(text: string): z.infer<typeof turnAnalysisSchema> | null {
+    const json = this.extractJsonObject(text);
+    if (!json) return null;
+    try {
+      const parsed = turnAnalysisSchema.safeParse(JSON.parse(json));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 逐卡构建：证据逐字校验 → 无证据/伪造证据强制 manual + kind 降为 inference → 白名单话题分类 */
+  private async buildTurnCard(
+    card: z.infer<typeof turnCardSchema>,
+    task: TurnAnalysisInput,
+  ): Promise<TurnAnalysisCard> {
+    const evidenceText = card.evidence?.text.trim() ?? "";
+    const sourceText =
+      card.evidence?.sourceRole === "assistant" ? task.assistantText : task.userText;
+    const verified = evidenceText.length > 0 && sourceText.includes(evidenceText);
+
+    const classified = await this.topicClassifier.classify({
+      title: card.title,
+      summary: card.summary,
+      content: card.content,
+      suggestedTopic: card.suggestedTopic,
+    });
+
+    const base = {
+      title: card.title.trim().slice(0, 60),
+      summary: (card.summary.trim() || card.content.slice(0, 80)).slice(0, 160),
+      content: card.content,
+      tags: card.tags.filter((tag) => tag.trim().length > 0).slice(0, 5),
+      source: card.source,
+      topic: classified.topic,
+    };
+
+    if (card.evidence && verified) {
+      return {
+        ...base,
+        kind: card.kind,
+        evidence: { sourceRole: card.evidence.sourceRole, text: evidenceText, verified: true },
+        reviewStatus: "auto",
+      };
+    }
+
+    return {
+      ...base,
+      kind: "inference",
+      evidence: card.evidence
+        ? { sourceRole: card.evidence.sourceRole, text: evidenceText, verified: false }
+        : null,
+      reviewStatus: "manual",
+      reviewReason: card.evidence
+        ? "证据与本轮原文不匹配（疑似伪造），转人工确认"
+        : "无原文证据的模型断言，转人工确认",
+    };
+  }
+
+  private buildTurnPrompt(task: TurnAnalysisInput, recentHistory?: string): string {
+    const historyBlock = recentHistory?.trim()
+      ? `\n历史上下文（仅供消歧，帮助理解本轮指代；严禁从中提取任何知识卡片，知识只能来自本轮对话）：
+${recentHistory.trim().slice(0, TURN_HISTORY_LIMIT)}
+`
+      : "";
+
+    return `你是记忆库的价值判断编辑。判断下面这轮对话是否包含值得长期保存的知识，若有则拆分为原子知识卡片。
+
+判断规则：
+1. 若本轮只是客套寒暄、乱码、纯情绪宣泄或无长期价值的内容，输出 {"type":"skip","reason":"一句中文原因"}，不要输出任何卡片。
+2. 若包含长期知识（事实、偏好、决策、经验教训、配置、方法），输出 {"type":"knowledge","cards":[...]}，每个独立话题一张卡（最多 ${MAX_CARDS} 张）。
+3. 全部用简体中文；专有名词、代码标识符、命令、配置项保留原文照写。
+4. 每张卡字段：
+   - title：20 字以内中文标题
+   - summary：80 字以内中文一句话摘要
+   - content：中文详细正文，保留数字、配置值、结论等细节，不编造原文没有的内容
+   - tags：0-5 个中文标签
+   - source：知识主要来源，"user"（用户自述）/"assistant"（模型解释）/"mixed"
+   - kind：fact（有原文依据的事实）/ inference（推断）/ hypothesis（猜测）/ insight（洞见）/ synthesis（综合结论）
+   - suggestedTopic：话题建议，供白名单分类参考，可为空字符串
+   - evidence：支撑本卡的一句原文片段 {"sourceRole":"user"或"assistant","text":"逐字摘自对应发言"}；没有原文依据就填 null
+5. 证据必须逐字摘自本轮原文（一字不差），禁止改写、拼接或编造证据；无法给出合规证据就填 null。
+6. 模型解释的内容若在原文无依据，kind 填 inference——此类卡片会转人工确认，这是预期行为。
+${historyBlock}
+本轮用户发言：
+${task.userText}
+
+本轮助手发言：
+${task.assistantText}
+
+只回复 JSON，不要多余解释。`;
   }
 
   /**
    * 解析 LLM 输出：{"memories": [{"title","summary","content","tags"}]}
-   * 逐卡校验（空标题/空正文丢弃），返回空数组或结构异常时返回 null（由调用方转人工）。
+   * 逐卡校验（空标题/空正文丢弃）。三态：
+   * - memories 数组存在但为空 → empty（模型明确判定无内容）
+   * - JSON/结构无法解析或有效卡全被丢弃 → invalid（解析失败，由调用方重试）
    */
   private parseCards(
     text: string,
     sourceContent: string,
     similarCount = 0,
-  ): ExtractedCard[] | null {
+  ): { status: "ok"; cards: ExtractedCard[] } | { status: "empty" } | { status: "invalid" } {
     const json = this.extractJsonObject(text);
-    if (!json) return null;
+    if (!json) return { status: "invalid" };
 
     try {
       const parsed = JSON.parse(json) as { memories?: unknown };
-      if (!Array.isArray(parsed.memories) || parsed.memories.length === 0) return null;
+      if (!Array.isArray(parsed.memories)) return { status: "invalid" };
+      if (parsed.memories.length === 0) return { status: "empty" };
 
       const cards: ExtractedCard[] = [];
       for (const raw of parsed.memories.slice(0, MAX_CARDS)) {
@@ -119,9 +381,9 @@ export class MemoryExtractionService {
         });
       }
 
-      return cards.length > 0 ? cards : null;
+      return cards.length > 0 ? { status: "ok", cards } : { status: "invalid" };
     } catch {
-      return null;
+      return { status: "invalid" };
     }
   }
 

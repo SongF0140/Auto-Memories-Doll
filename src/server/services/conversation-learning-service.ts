@@ -1,5 +1,6 @@
 import type { ChatMode } from "../../types/api";
 import { getDatabase } from "../../lib/storage/database";
+import type { TurnAnalysisResult } from "./memory-extraction-service";
 
 /** 学习任务状态机：queued → processing → completed/failed；failed 不自动重试 */
 export type LearningTaskStatus = "queued" | "processing" | "completed" | "failed";
@@ -12,6 +13,8 @@ export type LearningTask = {
   assistantText: string;
   status: LearningTaskStatus;
   resultSummary: string | null;
+  /** 第十块：结构化分析结果（判别联合 JSON），skip/unavailable/损坏时为 null */
+  resultJson: unknown;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,8 +28,8 @@ export type ProcessResult =
 
 /**
  * 任务处理器：消费一轮完整对话（仅本轮 user/assistant）。
- * 返回结果摘要（如"无新增知识"）；抛错则任务置 failed。
- * 第十块接入真实价值判断（skip/knowledge/unavailable）前，路由层不注入处理器。
+ * 返回判别联合（skip→completed；knowledge→completed+result_json；unavailable→failed）
+ * 或字符串摘要（第十块前的兼容语义，视为 completed）；抛错则任务置 failed。
  */
 export type LearningTaskProcessor = (task: {
   turnId: string;
@@ -34,7 +37,7 @@ export type LearningTaskProcessor = (task: {
   mode: ChatMode;
   userText: string;
   assistantText: string;
-}) => Promise<string> | string;
+}) => Promise<TurnAnalysisResult | string> | TurnAnalysisResult | string;
 
 /**
  * ConversationLearningService — 对话增量学习任务
@@ -62,6 +65,12 @@ export class ConversationLearningService {
         updated_at TEXT NOT NULL
       )
     `);
+    // 第十块加法迁移：结构化分析结果列（旧库缺列时补齐，已存在则跳过）
+    try {
+      this.db.exec("ALTER TABLE conversation_learning_tasks ADD COLUMN result_json TEXT");
+    } catch {
+      // 列已存在
+    }
   }
 
   /** 注入任务处理器（第十块接入真实分析）；传 null 恢复无处理器状态 */
@@ -146,18 +155,38 @@ export class ConversationLearningService {
       .run(now, row.turn_id);
 
     try {
-      const summary = await this.processor({
+      const outcome = await this.processor({
         turnId: row.turn_id,
         sessionId: row.session_id,
         mode: row.mode,
         userText: row.user_text,
         assistantText: row.assistant_text,
       });
-      this.db
-        .prepare(
-          `UPDATE conversation_learning_tasks SET status = 'completed', result_summary = ?, updated_at = ? WHERE turn_id = ?`,
-        )
-        .run(summary, new Date().toISOString(), row.turn_id);
+
+      // 字符串摘要：第十块前的兼容语义，直接视为 completed
+      if (typeof outcome === "string") {
+        this.finishTask(row.turn_id, "completed", outcome, null);
+        return { processed: true, turnId: row.turn_id, status: "completed" };
+      }
+
+      // 判别联合：skip → completed（无知识，不产生候选）；unavailable → failed；knowledge → completed + result_json
+      if (outcome.type === "skip") {
+        this.finishTask(row.turn_id, "completed", `无新增知识：${outcome.reason}`, null);
+        return { processed: true, turnId: row.turn_id, status: "completed" };
+      }
+      if (outcome.type === "unavailable") {
+        this.finishTask(row.turn_id, "failed", outcome.reason, null);
+        return { processed: true, turnId: row.turn_id, status: "failed" };
+      }
+
+      const autoCount = outcome.items.filter((item) => item.reviewStatus === "auto").length;
+      const manualCount = outcome.items.length - autoCount;
+      this.finishTask(
+        row.turn_id,
+        "completed",
+        `产出 ${outcome.items.length} 张知识卡（自动 ${autoCount} / 人工 ${manualCount}）`,
+        JSON.stringify(outcome),
+      );
       return { processed: true, turnId: row.turn_id, status: "completed" };
     } catch (error) {
       this.db
@@ -167,6 +196,21 @@ export class ConversationLearningService {
         .run(`分析失败: ${(error as Error).message}`, new Date().toISOString(), row.turn_id);
       return { processed: true, turnId: row.turn_id, status: "failed" };
     }
+  }
+
+  /** 任务终态回写：status + result_summary + result_json 同步更新 */
+  private finishTask(
+    turnId: string,
+    status: LearningTaskStatus,
+    summary: string,
+    resultJson: string | null,
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE conversation_learning_tasks
+         SET status = ?, result_summary = ?, result_json = ?, updated_at = ? WHERE turn_id = ?`,
+      )
+      .run(status, summary, resultJson, new Date().toISOString(), turnId);
   }
 
   /** 启动恢复：仅把被中断的 processing 任务放回 queued（completed/failed 不动） */
@@ -201,6 +245,15 @@ export class ConversationLearningService {
   }
 
   private mapRow(row: Record<string, string>): LearningTask {
+    // result_json 由本服务写入，损坏时不谎报结果（诚实返回 null，摘要仍在）
+    let resultJson: unknown = null;
+    if (row.result_json) {
+      try {
+        resultJson = JSON.parse(row.result_json);
+      } catch {
+        resultJson = null;
+      }
+    }
     return {
       turnId: row.turn_id,
       sessionId: row.session_id,
@@ -209,6 +262,7 @@ export class ConversationLearningService {
       assistantText: row.assistant_text,
       status: row.status as LearningTaskStatus,
       resultSummary: row.result_summary ?? null,
+      resultJson,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

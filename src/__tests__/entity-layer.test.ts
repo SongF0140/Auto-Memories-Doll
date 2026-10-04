@@ -115,6 +115,16 @@ function makeCandidate(): MemoryRecord {
 describe("MemoryExtractionService 实体/因果字段解析", () => {
   const svc = new MemoryExtractionService();
 
+  /** 新契约下抽取成功的解包 helper：非 ok 状态直接失败 */
+  async function extractOk(
+    candidate: MemoryRecord,
+    similar: Array<{ memoryId: string; title: string; summary: string; similarity: number }> = [],
+  ) {
+    const result = await svc.extract(candidate, similar);
+    if (result.status !== "ok") throw new Error(`期望抽取成功，实际 ${result.status}`);
+    return result.cards;
+  }
+
   it("解析 entities 与 causedBy，过滤非法值", async () => {
     adapterMock.response = JSON.stringify({
       memories: [
@@ -129,21 +139,19 @@ describe("MemoryExtractionService 实体/因果字段解析", () => {
         { title: "标题二", summary: "摘要二", content: "正文二", tags: [] },
       ],
     });
-    const cards = await svc.extract(makeCandidate(), []);
-    expect(cards).not.toBeNull();
-    expect(cards![0].entities).toEqual(["Claude Code", "claude code", "better-sqlite3"]);
+    const cards = await extractOk(makeCandidate());
+    expect(cards[0].entities).toEqual(["Claude Code", "claude code", "better-sqlite3"]);
     // 0 与 9 越界丢弃；重复的 2 去重；"3" 字符串转数字；1.5 非整数丢弃
-    expect(cards![0].causedBy).toEqual([2, 3]);
+    expect(cards[0].causedBy).toEqual([2, 3]);
   });
 
   it("旧格式输出（无 entities/causedBy）容错为空数组", async () => {
     adapterMock.response = JSON.stringify({
       memories: [{ title: "标题", summary: "摘要", content: "正文", tags: ["t"] }],
     });
-    const cards = await svc.extract(makeCandidate(), []);
-    expect(cards).not.toBeNull();
-    expect(cards![0].entities).toEqual([]);
-    expect(cards![0].causedBy).toEqual([]);
+    const cards = await extractOk(makeCandidate());
+    expect(cards[0].entities).toEqual([]);
+    expect(cards[0].causedBy).toEqual([]);
   });
 
   it("entities 超过 8 个时截断", async () => {
@@ -158,8 +166,8 @@ describe("MemoryExtractionService 实体/因果字段解析", () => {
         },
       ],
     });
-    const cards = await svc.extract(makeCandidate(), []);
-    expect(cards![0].entities).toHaveLength(8);
+    const cards = await extractOk(makeCandidate());
+    expect(cards[0].entities).toHaveLength(8);
   });
 
   it("causedByExisting 引用相似条目编号，越界过滤", async () => {
@@ -175,11 +183,11 @@ describe("MemoryExtractionService 实体/因果字段解析", () => {
       ],
     });
     // 2 条 hints：编号 3 越界丢弃，"2" 字符串转数字，0/99/2.5 非法丢弃
-    const cards = await svc.extract(makeCandidate(), [
+    const cards = await extractOk(makeCandidate(), [
       { memoryId: "old-1", title: "旧卡一", summary: "s", similarity: 0.5 },
       { memoryId: "old-2", title: "旧卡二", summary: "s", similarity: 0.4 },
     ]);
-    expect(cards![0].causedByExisting).toEqual([1, 2]);
+    expect(cards[0].causedByExisting).toEqual([1, 2]);
   });
 
   it("causedByExisting 上限随 hints 数量收缩：无 hints 时恒为空", async () => {
@@ -188,8 +196,8 @@ describe("MemoryExtractionService 实体/因果字段解析", () => {
         { title: "标题", summary: "摘要", content: "正文", tags: [], causedByExisting: [1] },
       ],
     });
-    const cards = await svc.extract(makeCandidate(), []);
-    expect(cards![0].causedByExisting).toEqual([]);
+    const cards = await extractOk(makeCandidate());
+    expect(cards[0].causedByExisting).toEqual([]);
   });
 });
 

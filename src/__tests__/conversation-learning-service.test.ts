@@ -212,4 +212,141 @@ describe("ConversationLearningService — 增量学习任务", () => {
       service.close();
     }
   });
+
+  // ── 第十块：处理器显式判别联合（skip/knowledge/unavailable） ──
+
+  it("处理器返回 skip 判别结果 → completed，摘要含原因", async () => {
+    const service = new ConversationLearningService();
+    try {
+      service.enqueueCompletedTurn(taskInput);
+      service.setProcessor(() => ({ type: "skip", reason: "日常寒暄，无长期知识" }));
+
+      const result = await service.processNextLearningTask();
+
+      expect(result).toEqual({ processed: true, turnId: "turn-1", status: "completed" });
+      const task = service.getTask("turn-1")!;
+      expect(task.status).toBe("completed");
+      expect(task.resultSummary).toContain("无新增知识");
+      expect(task.resultSummary).toContain("日常寒暄");
+    } finally {
+      service.close();
+    }
+  });
+
+  it("处理器返回 knowledge 判别结果 → completed + result_json 持久化且可读回", async () => {
+    const service = new ConversationLearningService();
+    try {
+      service.enqueueCompletedTurn(taskInput);
+      service.setProcessor(() => ({
+        type: "knowledge",
+        items: [
+          {
+            title: "卡 A",
+            summary: "摘要 A",
+            content: "内容 A",
+            tags: ["t"],
+            source: "user",
+            kind: "fact",
+            topic: "tech",
+            evidence: { sourceRole: "user", text: "watchEffect 用法", verified: true },
+            reviewStatus: "auto",
+          },
+          {
+            title: "卡 B",
+            summary: "摘要 B",
+            content: "内容 B",
+            tags: [],
+            source: "assistant",
+            kind: "inference",
+            topic: "uncategorized",
+            evidence: null,
+            reviewStatus: "manual",
+            reviewReason: "无原文证据",
+          },
+        ],
+      }));
+
+      const result = await service.processNextLearningTask();
+
+      expect(result).toEqual({ processed: true, turnId: "turn-1", status: "completed" });
+      const task = service.getTask("turn-1")!;
+      expect(task.status).toBe("completed");
+      // 摘要人可读：卡数与人工/自动分布
+      expect(task.resultSummary).toContain("2 张知识卡");
+      expect(task.resultSummary).toContain("1");
+      // 逐卡结果持久化：getTask 读回结构化结果
+      expect(task.resultJson).not.toBeNull();
+      const parsed = task.resultJson as { type: string; items: Array<{ title: string }> };
+      expect(parsed.type).toBe("knowledge");
+      expect(parsed.items).toHaveLength(2);
+      expect(parsed.items[0].title).toBe("卡 A");
+      // listTasksBySession 同样能读回
+      const listed = service.listTasksBySession("sess-1");
+      expect((listed[0].resultJson as { type: string }).type).toBe("knowledge");
+    } finally {
+      service.close();
+    }
+  });
+
+  it("处理器返回 unavailable 判别结果 → failed + 摘要含原因，不再被取出", async () => {
+    const service = new ConversationLearningService();
+    try {
+      service.enqueueCompletedTurn(taskInput);
+      let calls = 0;
+      service.setProcessor(() => {
+        calls += 1;
+        return { type: "unavailable", reason: "模型降级，无法分析" };
+      });
+
+      const result = await service.processNextLearningTask();
+
+      expect(result).toEqual({ processed: true, turnId: "turn-1", status: "failed" });
+      const task = service.getTask("turn-1")!;
+      expect(task.status).toBe("failed");
+      expect(task.resultSummary).toContain("模型降级");
+      // unavailable 不伪装 skip：result_json 不含知识
+      expect(task.resultJson).toBeNull();
+      // 失败不自动重试
+      const second = await service.processNextLearningTask();
+      expect(second).toEqual({ processed: false, reason: "no-task" });
+      expect(calls).toBe(1);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("result_json 损坏时 getTask 诚实返回 null（不谎报结果）", async () => {
+    const service = new ConversationLearningService();
+    try {
+      service.enqueueCompletedTurn(taskInput);
+      service.setProcessor(() => ({
+        type: "knowledge",
+        items: [
+          {
+            title: "卡 A",
+            summary: "摘要 A",
+            content: "内容 A",
+            tags: [],
+            source: "user",
+            kind: "fact",
+            topic: "tech",
+            evidence: null,
+            reviewStatus: "manual",
+          },
+        ],
+      }));
+      await service.processNextLearningTask();
+
+      // 模拟存储层损坏
+      getDatabase()
+        .prepare("UPDATE conversation_learning_tasks SET result_json = '{broken' WHERE turn_id = ?")
+        .run("turn-1");
+
+      const task = service.getTask("turn-1")!;
+      expect(task.resultJson).toBeNull();
+      expect(task.resultSummary).toBeTruthy();
+    } finally {
+      service.close();
+    }
+  });
 });
